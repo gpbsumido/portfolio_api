@@ -11,6 +11,7 @@ app.use(cors());
 // NBA API Proxy endpoint
 app.get("/api/nba/teams", async (req, res) => {
     try {
+        console.log('Starting function');
         return res.status(200).json({ data: 'Hi' });
     } catch (error) {
         return res.status(500).json({ error: "Failed to fetch teams", details: error.message });
