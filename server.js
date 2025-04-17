@@ -71,7 +71,7 @@ app.get("/api/nba/teams", async (req, res) => {
 });
 
 // Team players endpoint
-app.get("/api/nba/teams/players/:teamId", async (req, res) => {
+app.get("/api/nba/players/:teamId", async (req, res) => {
     try {
         const teamId = parseInt(req.params.teamId);
         
