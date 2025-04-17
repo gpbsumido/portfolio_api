@@ -14,19 +14,64 @@ app.use(cors());
 // NBA API Proxy endpoint
 app.get("/api/nba/teams", async (req, res) => {
     try {
+        const startTime = Date.now();
         const url = "https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=2024-25&SeasonType=Regular+Season";
         const response = await fetch(url, {
             headers: NBA_API.HEADERS
         });
+        
+        console.log('Parsing NBA API response');
+        const parseStartTime = Date.now();
         const data = await response.json();
-        return res.status(200).json({ data: data });
+        const parseDuration = Date.now() - parseStartTime;
+        console.log('Response parsed', { duration: `${parseDuration}ms` });
+
+        if (!data.resultSets?.[0]?.rowSet) {
+            throw new Error("Invalid response format from NBA API [Teams]");
+        }
+
+        console.log('Transforming team data');
+        const transformStartTime = Date.now();
+        const teams = data.resultSets[0].rowSet.map((row) => ({
+            id: parseInt(row[2]),
+            name: row[4],
+            full_name: `${row[3]} ${row[4]}`,
+            abbreviation: row[5],
+            city: row[3],
+            conference: row[6],
+            division: row[10],
+        }));
+        const transformDuration = Date.now() - transformStartTime;
+        console.log('Team data transformed', { 
+            teamCount: teams.length,
+            duration: `${transformDuration}ms`
+        });
+
+        const totalDuration = Date.now() - startTime;
+        console.log('Teams fetch process completed', { 
+            totalDuration: `${totalDuration}ms`,
+            teamCount: teams.length
+        });
+
+        const dataResponse = {
+            data: teams,
+            meta: {
+                total_pages: 1,
+                current_page: 1,
+                next_page: null,
+                per_page: teams.length,
+                total_count: teams.length,
+            },
+        };
+
+        return res.status(200).json({ data: dataResponse });
     } catch (error) {
         return res.status(500).json({ error: "Failed to fetch teams", details: error.message });
     }
 });
 
 // Team players endpoint
-app.get("/api/nba/teams/:teamId/players", async (req, res) => {
+app.get("/api/nba/teams/players/:teamId", async (req, res) => {
     try {
         const teamId = parseInt(req.params.teamId);
         
@@ -63,52 +108,54 @@ app.get("/api/nba/teams/:teamId/players", async (req, res) => {
         };
 
         const players = data.resultSets[0].rowSet
-            .map((row) => {
-                try {
-                    const playerId = row[getColumnIndex("PLAYER_ID")];
-                    const playerName = row[getColumnIndex("PLAYER")];
-                    const position = row[getColumnIndex("POSITION")];
-                    const height = row[getColumnIndex("HEIGHT")];
-                    const teamId = row[getColumnIndex("TeamID")];
+        .map((row) => {
+            try {
+                const playerId = row[getColumnIndex("PLAYER_ID")];
+                const playerName = row[getColumnIndex("PLAYER")];
+                const position = row[getColumnIndex("POSITION")];
+                const height = row[getColumnIndex("HEIGHT")];
+                const teamId = row[getColumnIndex("TeamID")];
 
-                    if (!playerName) {
-                        throw new Error("Player name is missing");
-                    }
-
-                    return {
-                        id: playerId,
-                        first_name: playerName.split(" ")[0],
-                        last_name: playerName.split(" ").slice(1).join(" "),
-                        position: position || "N/A",
-                        height_feet: height ? parseInt(height.split("-")[0]) : null,
-                        height_inches: height ? parseInt(height.split("-")[1]) : null,
-                        team: {
-                            id: teamId,
-                            name: "Unknown",
-                            full_name: "Unknown",
-                            abbreviation: "Unknown",
-                            city: "Unknown",
-                            conference: "Unknown",
-                            division: "Unknown",
-                        },
-                    };
-                } catch (error) {
-                    console.error("Error processing player row:", error);
-                    return null;
+                if (!playerName) {
+                    throw new Error("Player name is missing");
                 }
-            })
-            .filter((player) => player !== null);
+
+                return {
+                    id: playerId,
+                    first_name: playerName.split(" ")[0],
+                    last_name: playerName.split(" ").slice(1).join(" "),
+                    position: position || "N/A",
+                    height_feet: height ? parseInt(height.split("-")[0]) : null,
+                    height_inches: height
+                        ? parseInt(height.split("-")[1])
+                        : null,
+                    team: {
+                        id: teamId,
+                        name: "Unknown",
+                        full_name: "Unknown",
+                        abbreviation: "Unknown",
+                        city: "Unknown",
+                        conference: "Unknown",
+                        division: "Unknown",
+                    },
+                };
+            } catch (error) {
+                console.error("Error processing player row:", error);
+                return null;
+            }
+        })
+        .filter( player => player !== null);
 
         const responseData = {
             data: players,
             meta: {
                 total_pages: 1,
-                current_page: 1,
-                next_page: null,
-                per_page: players.length,
-                total_count: players.length,
-            }
-        };
+            current_page: 1,
+            next_page: null,
+            per_page: players.length,
+            total_count: players.length,
+        },
+    }
 
         res.status(200).json(responseData);
     } catch (error) {
@@ -176,7 +223,7 @@ app.get("/api/nba/stats/:playerId", async (req, res) => {
         if (!data.resultSets?.[0]?.rowSet?.[0]) {
             throw new Error("Invalid response format from NBA API [Stats]");
         }
-
+    
         const seasonStats = data.resultSets[0].rowSet[0];
         const pts = parseFloat(seasonStats[26]) || 0;
         const reb = parseFloat(seasonStats[18]) || 0;
@@ -184,7 +231,7 @@ app.get("/api/nba/stats/:playerId", async (req, res) => {
         const stl = parseFloat(seasonStats[20]) || 0;
         const blk = parseFloat(seasonStats[21]) || 0;
         const fantasyPoints = pts * 1 + reb * 1.2 + ast * 1.5 + stl * 3 + blk * 3;
-
+    
         const responseData = {
             data: [
                 {
@@ -211,7 +258,7 @@ app.get("/api/nba/stats/:playerId", async (req, res) => {
                     pf: parseFloat(seasonStats[24]) || 0,
                     pts,
                     fantasy_points: fantasyPoints,
-                }
+                },
             ],
             meta: {
                 total_pages: 1,
@@ -219,8 +266,8 @@ app.get("/api/nba/stats/:playerId", async (req, res) => {
                 next_page: null,
                 per_page: 1,
                 total_count: 1,
-            }
-        };
+            },
+        }
 
         res.status(200).json(responseData);
     } catch (error) {
