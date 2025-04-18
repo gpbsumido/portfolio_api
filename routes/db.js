@@ -47,28 +47,79 @@ router.get("/table/:tableName", async (req, res, next) => {
 // Postforum endpoints
 router.get("/postforum", async (req, res, next) => {
     try {
+        console.log('POSTFORUM GET: Attempting to fetch posts...');
         const result = await pool.query('SELECT * FROM postforum ORDER BY id DESC');
+        console.log('POSTFORUM GET: Successfully fetched', result.rows.length, 'posts');
         res.status(200).json(result.rows);
     } catch (error) {
+        console.error('POSTFORUM GET ERROR:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+        
+        // Handle specific database errors
+        if (error.code === '42P01') { // Table does not exist
+            return res.status(500).json({ 
+                error: 'Database table not found',
+                details: 'The postforum table does not exist in the database'
+            });
+        }
+        
+        if (error.code === '28P01') { // Authentication failed
+            return res.status(500).json({ 
+                error: 'Database authentication failed',
+                details: 'Invalid database credentials'
+            });
+        }
+        
         next(error);
     }
 });
 
 router.post("/postforum", async (req, res, next) => {
     try {
+        console.log('POSTFORUM POST: Received request with body:', req.body);
         const { title, text, username } = req.body;
+        
         if (!title || !text || !username) {
+            console.log('POSTFORUM POST: Missing required fields');
             return res.status(400).json({ 
                 error: "Missing required fields",
                 required: ["title", "text", "username"]
             });
         }
+
+        console.log('POSTFORUM POST: Attempting to insert new post');
         const result = await pool.query(
             'INSERT INTO postforum (title, text, username) VALUES ($1, $2, $3) RETURNING *',
             [title, text, username]
         );
+        
+        console.log('POSTFORUM POST: Successfully created post with ID:', result.rows[0].id);
         res.status(201).json(result.rows[0]);
     } catch (error) {
+        console.error('POSTFORUM POST ERROR:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+        
+        // Handle specific database errors
+        if (error.code === '42P01') { // Table does not exist
+            return res.status(500).json({ 
+                error: 'Database table not found',
+                details: 'The postforum table does not exist in the database'
+            });
+        }
+        
+        if (error.code === '28P01') { // Authentication failed
+            return res.status(500).json({ 
+                error: 'Database authentication failed',
+                details: 'Invalid database credentials'
+            });
+        }
+        
         next(error);
     }
 });

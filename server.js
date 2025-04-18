@@ -39,8 +39,20 @@ app.use('/api', dbRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something went wrong!' });
+    console.error('ERROR DETAILS:', {
+        message: err.message,
+        stack: err.stack,
+        code: err.code,
+        path: req.path,
+        method: req.method,
+        body: req.body,
+        query: req.query
+    });
+    
+    res.status(500).json({ 
+        error: 'Something went wrong!',
+        details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
 // 404 handler
