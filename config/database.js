@@ -10,7 +10,8 @@ console.log('Environment:', {
     DB_USER: process.env.DB_USER,
     DB_NAME: process.env.DB_NAME,
     HAS_DATABASE_URL: !!process.env.DATABASE_URL,
-    HAS_DATABASE_PUBLIC_URL: !!process.env.DATABASE_PUBLIC_URL
+    HAS_DATABASE_PUBLIC_URL: !!process.env.DATABASE_PUBLIC_URL,
+    ENV: process.env.ENV
 });
 
 // Use individual connection parameters if available, otherwise use connection string
