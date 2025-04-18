@@ -1,41 +1,12 @@
-require('dotenv').config();
+const express = require('express');
+const fetch = require('node-fetch');
+const { NBA_API } = require('../constants/nba');
+const { getCachedData } = require('../utils/cache');
+const { rateLimit } = require('../utils/rateLimiter');
 
-const express = require("express");
-const fetch = require("node-fetch");
-const cors = require("cors");
-const path = require("path");
-const compression = require("compression");
-const helmet = require("helmet");
-const morgan = require("morgan");
-const { NBA_API } = require("./constants/nba");
-const { getCachedData } = require("./utils/cache");
-const { rateLimit } = require("./utils/rateLimiter");
-const { pool } = require("./config/database");
-const nbaRoutes = require('./routes/nba');
-const dbRoutes = require('./routes/db');
+const router = express.Router();
 
-const app = express();
-const port = process.env.PORT || 3001;
-
-// Middleware
-app.use(helmet()); // Security headers
-app.use(compression()); // Compress responses
-app.use(cors());
-app.use(express.json());
-app.use(morgan('dev')); // Request logging
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Routes
-app.use('/api/nba', nbaRoutes);
-app.use('/api/db', dbRoutes);
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something went wrong!' });
-});
-
-// API rate limiting middleware (only for NBA API routes)
+// API rate limiting middleware
 const nbaApiLimiter = (req, res, next) => {
     rateLimit()
         .then(() => next())
@@ -45,8 +16,8 @@ const nbaApiLimiter = (req, res, next) => {
         });
 };
 
-// NBA API Proxy endpoint (with rate limiting)
-app.get("/api/nba/teams", nbaApiLimiter, async (req, res, next) => {
+// NBA API Proxy endpoint
+router.get("/teams", nbaApiLimiter, async (req, res, next) => {
     try {
         const data = await getCachedData("teams", async () => {
             const startTime = Date.now();
@@ -106,8 +77,8 @@ app.get("/api/nba/teams", nbaApiLimiter, async (req, res, next) => {
     }
 });
 
-// Team players endpoint (with rate limiting)
-app.get("/api/nba/players/:teamId", nbaApiLimiter, async (req, res, next) => {
+// Team players endpoint
+router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
     try {
         const teamId = parseInt(req.params.teamId);
         
@@ -197,16 +168,12 @@ app.get("/api/nba/players/:teamId", nbaApiLimiter, async (req, res, next) => {
 
         res.status(200).json(data);
     } catch (error) {
-        console.error("Error fetching team players:", error);
-        res.status(500).json({
-            error: "Failed to fetch team players",
-            details: error.message
-        });
+        next(error);
     }
 });
 
-// Player stats endpoint (with rate limiting)
-app.get("/api/nba/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
+// Player stats endpoint
+router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
     try {
         const playerId = parseInt(req.params.playerId);
         
@@ -311,91 +278,8 @@ app.get("/api/nba/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
 
         res.status(200).json(data);
     } catch (error) {
-        console.error("Error fetching player stats:", error);
-        res.status(500).json({
-            error: "Failed to fetch player stats",
-            details: error.message
-        });
-    }
-});
-
-// Database routes (without rate limiting or caching)
-app.post("/api/db/query", async (req, res, next) => {
-    try {
-        const { query, params } = req.body;
-        if (!query) {
-            return res.status(400).json({ error: "Query is required" });
-        }
-        const result = await pool.query(query, params || []);
-        res.status(200).json(result.rows);
-    } catch (error) {
         next(error);
     }
 });
 
-app.get("/api/db/tables", async (req, res, next) => {
-    try {
-        const result = await pool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public'
-        `);
-        res.status(200).json(result.rows.map(row => row.table_name));
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.get("/api/db/table/:tableName", async (req, res, next) => {
-    try {
-        const { tableName } = req.params;
-        const result = await pool.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = $1
-        `, [tableName]);
-        res.status(200).json(result.rows);
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Postmedical routes (without rate limiting or caching)
-app.get("/api/postmedical", async (req, res, next) => {
-    try {
-        const result = await pool.query('SELECT * FROM postmedical ORDER BY id DESC');
-        res.status(200).json(result.rows);
-    } catch (error) {
-        next(error);
-    }
-});
-
-app.post("/api/postmedical", async (req, res, next) => {
-    try {
-        const { title, text, username } = req.body;
-        if (!title || !text || !username) {
-            return res.status(400).json({ 
-                error: "Missing required fields",
-                required: ["title", "text", "username"]
-            });
-        }
-        const result = await pool.query(
-            'INSERT INTO postmedical (title, text, username) VALUES ($1, $2, $3) RETURNING *',
-            [title, text, username]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (error) {
-        next(error);
-    }
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({ error: "Not Found" });
-});
-
-// Start the Express server
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+module.exports = router; 
