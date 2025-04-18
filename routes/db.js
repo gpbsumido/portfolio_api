@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 
 const router = express.Router();
 
-// Database query endpoint
+// Database query endpoints
 router.post("/query", async (req, res, next) => {
     try {
         const { query, params } = req.body;
@@ -17,7 +17,6 @@ router.post("/query", async (req, res, next) => {
     }
 });
 
-// Get all tables endpoint
 router.get("/tables", async (req, res, next) => {
     try {
         const result = await pool.query(`
@@ -31,7 +30,6 @@ router.get("/tables", async (req, res, next) => {
     }
 });
 
-// Get table schema endpoint
 router.get("/table/:tableName", async (req, res, next) => {
     try {
         const { tableName } = req.params;
@@ -46,7 +44,7 @@ router.get("/table/:tableName", async (req, res, next) => {
     }
 });
 
-// Postforum routes
+// Postforum endpoints
 router.get("/postforum", async (req, res, next) => {
     try {
         const result = await pool.query('SELECT * FROM postforum ORDER BY id DESC');
