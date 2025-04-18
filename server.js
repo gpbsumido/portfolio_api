@@ -50,7 +50,7 @@ app.use((err, req, res, next) => {
     });
     
     res.status(500).json({ 
-        error: 'Something went wrong!',
+        error: `Oops! Something went wrong! ${err.message}`,
         details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
 });
