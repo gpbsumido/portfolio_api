@@ -33,8 +33,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Logging middleware
 app.use(morgan('dev'));
 
+// Log all registered routes
+app.use((req, res, next) => {
+    console.log(`Route accessed: ${req.method} ${req.path}`);
+    next();
+});
+
 // Routes
+console.log('Mounting NBA routes at /api/nba');
 app.use('/api/nba', nbaRoutes);
+
+console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);
 
 // Error handling middleware
@@ -57,6 +66,7 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
+    console.log('404 - Route not found:', req.method, req.path);
     res.status(404).json({ error: "Not Found" });
 });
 

@@ -2,17 +2,14 @@ require('dotenv').config();
 
 const { Pool } = require('pg');
 
-console.log(process.env.DB_HOST);
+// Log the database URL (without password) for debugging
+const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+console.log('Database URL:', dbUrl ? dbUrl.replace(/\/\/[^@]+@/, '//****:****@') : 'Not set');
 
 const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    connectionString: process.env.DATABASE_PUBLIC_URL,
+    connectionString: process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL,
     ssl: {
-        rejectUnauthorized: false // This allows self-signed certificates
+        rejectUnauthorized: false
     }
 });
 

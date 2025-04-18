@@ -3,6 +3,14 @@ const { pool } = require('../config/database');
 
 const router = express.Router();
 
+// Log route registration
+console.log('Registering DB routes:');
+console.log('  GET /postforum');
+console.log('  POST /postforum');
+console.log('  POST /query');
+console.log('  GET /tables');
+console.log('  GET /table/:tableName');
+
 // Database query endpoints
 router.post("/query", async (req, res, next) => {
     try {
