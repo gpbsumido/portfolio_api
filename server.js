@@ -360,17 +360,17 @@ app.get("/api/db/table/:tableName", async (req, res, next) => {
     }
 });
 
-// Postmedical routes (without rate limiting or caching)
-app.get("/api/postmedical", async (req, res, next) => {
+// Postforum routes (without rate limiting or caching)
+app.get("/api/postforum", async (req, res, next) => {
     try {
-        const result = await pool.query('SELECT * FROM postmedical ORDER BY id DESC');
+        const result = await pool.query('SELECT * FROM postforum ORDER BY id DESC');
         res.status(200).json(result.rows);
     } catch (error) {
         next(error);
     }
 });
 
-app.post("/api/postmedical", async (req, res, next) => {
+app.post("/api/postforum", async (req, res, next) => {
     try {
         const { title, text, username } = req.body;
         if (!title || !text || !username) {
@@ -380,7 +380,7 @@ app.post("/api/postmedical", async (req, res, next) => {
             });
         }
         const result = await pool.query(
-            'INSERT INTO postmedical (title, text, username) VALUES ($1, $2, $3) RETURNING *',
+            'INSERT INTO postforum (title, text, username) VALUES ($1, $2, $3) RETURNING *',
             [title, text, username]
         );
         res.status(201).json(result.rows[0]);
