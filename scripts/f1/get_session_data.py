@@ -3,7 +3,11 @@ import json
 import fastf1
 import pandas as pd
 import warnings
+import logging
 from typing import Any, Optional
+
+# Suppress FastF1 warnings about incomplete data
+logging.getLogger('fastf1').setLevel(logging.ERROR)
 
 # Configure warnings to be captured instead of printed
 warnings.filterwarnings("error", category=UserWarning)
@@ -57,7 +61,13 @@ def get_session_data(
             response["results"] = clean_data(session.results)
 
         elif data_type == "telemetry" and driver and lap:
+            if driver not in session.drivers:
+                print(json.dumps({"error": f"Driver {driver} not found in session."}), file=sys.stderr)
+                sys.exit(1)
             laps = session.laps.pick_driver(driver)
+            if laps.empty:
+                print(json.dumps({"error": f"No lap data available for driver {driver}."}), file=sys.stderr)
+                sys.exit(1)
             lap_data = laps.pick_lap(lap)
             response["telemetry"] = clean_data(lap_data.get_telemetry())
             response["lap_data"] = clean_data(lap_data.to_frame().to_dict("records"))
@@ -66,7 +76,13 @@ def get_session_data(
             response["fastest_laps"] = clean_data(session.laps.pick_fastest())
 
         elif data_type == "driver_best_lap" and driver:
+            if driver not in session.drivers:
+                print(json.dumps({"error": f"Driver {driver} not found in session."}), file=sys.stderr)
+                sys.exit(1)
             driver_laps = session.laps.pick_driver(driver)
+            if driver_laps.empty:
+                print(json.dumps({"error": f"No lap data available for driver {driver}."}), file=sys.stderr)
+                sys.exit(1)
             best_lap = driver_laps.pick_fastest()
             response["best_lap"] = clean_data(best_lap.to_frame().to_dict("records"))
             response["telemetry"] = clean_data(best_lap.get_telemetry())
