@@ -15,6 +15,9 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)  # Ensure logs go to 
 # Disable FastF1 logging
 logging.getLogger('fastf1').setLevel(logging.CRITICAL)
 
+# Enable FastF1 cache with a relative path
+fastf1.Cache.enable_cache('./cache')
+
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
 
