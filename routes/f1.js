@@ -20,10 +20,11 @@ const runPythonScript = (scriptName, args = []) => {
 
         process.stderr.on('data', (chunk) => {
             error += chunk.toString();
+            console.log("PYTHON OUTPUT:", text); // 👈 log this
             // Try to parse warnings from stderr
             try {
                 const warningData = JSON.parse(error);
-                if (warningData.warnings) {
+                if (warningData.warnings || error.includes('No race results available')) {
                     console.warn('FastF1 Warnings:', warningData.warnings);
                     // Don't treat warnings as errors
                     error = '';
@@ -39,6 +40,7 @@ const runPythonScript = (scriptName, args = []) => {
                 reject(new Error(error));
                 return;
             }
+            console.log("Python script output: ", data);  // Log raw Python output for debugging
             try {
                 const jsonData = JSON.parse(data);
                 resolve(jsonData);

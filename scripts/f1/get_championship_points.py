@@ -44,7 +44,7 @@ def load_race_results(year, event_round):
     try:
         race.load()
         if race.results is None or race.results.empty:
-            logging.warning(f"No race results available for round {event_round}.")
+            # logging.warning(f"No race results available for round {event_round}.")
             return None
         return race.results
     except Exception as e:
