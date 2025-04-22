@@ -22,19 +22,6 @@ logging.getLogger('fastf1').setLevel(logging.CRITICAL)
 # Enable FastF1 cache with a relative path
 fastf1.Cache.enable_cache('./cache')
 
-import requests
-try:
-    res = requests.get("https://www.formula1.com")
-    print("DEBUG: F1 site response:", res.status_code, file=sys.stderr)
-except Exception as net_err:
-    print("DEBUG: Network test failed:", net_err, file=sys.stderr)
-
-session = fastf1.get_session(2023, 15, 'R')
-print("DEBUG: Session initialized", file=sys.stderr)
-
-session.load()
-print("DEBUG: Session loaded", file=sys.stderr)
-
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
 
