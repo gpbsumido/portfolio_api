@@ -4,6 +4,7 @@ import warnings
 import sys
 import logging
 import numpy as np
+import pandas as pd
 from datetime import datetime, timezone
 
 # Redirect FastF1 logs to stderr or suppress them completely
@@ -13,9 +14,6 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)  # Ensure logs go to 
 
 # Disable FastF1 logging
 logging.getLogger('fastf1').setLevel(logging.CRITICAL)
-
-# Enable caching
-fastf1.Cache.enable_cache('cache/fastf1')
 
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
