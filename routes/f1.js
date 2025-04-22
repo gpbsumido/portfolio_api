@@ -1,6 +1,7 @@
 const express = require('express');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const cache = require('apicache').middleware; // Add apicache for caching
 
@@ -299,5 +300,43 @@ router.get('/constructor-points-per-race/:year/:round', (req, res) => {
     });
 });
 
+// Route to clear the FastF1 cache
+router.get('/clear-cache', (req, res) => {
+    const cachePath = path.join(__dirname, '..', 'cache', 'fastf1');
+
+    // Read the contents of the cache directory
+    fs.readdir(cachePath, (err, files) => {
+        if (err) {
+            console.error('Failed to read cache directory:', err);
+            return res.status(500).json({ error: `Failed to read cache directory. ${err}` });
+        }
+
+        // Delete each file in the directory
+        let deletePromises = files.map((file) => {
+            return new Promise((resolve, reject) => {
+                const filePath = path.join(cachePath, file);
+                fs.rm(filePath, { recursive: true, force: true }, (err) => {
+                    if (err) {
+                        console.error(`Failed to delete file: ${filePath}`, err);
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+        });
+
+        // Wait for all files to be deleted
+        Promise.all(deletePromises)
+            .then(() => {
+                console.log('Cache cleared successfully.');
+                res.json({ message: 'Cache cleared successfully' });
+            })
+            .catch((err) => {
+                console.error('Failed to clear some cache files:', err);
+                res.status(500).json({ error: `Failed to clear some cache files. ${err}` });
+            });
+    });
+});
 
 module.exports = router;
