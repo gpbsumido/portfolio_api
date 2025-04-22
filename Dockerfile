@@ -36,5 +36,7 @@ RUN chmod +x /wait-for-it.sh
 # Expose app port
 EXPOSE ${PORT:-3001}
 
-# Start command that waits for database
-CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- npm start"] 
+# # Start command that waits for database
+# CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- npm start"] 
+
+CMD ["python", "get_championship_points.py", "2023", "1", "driver"]
