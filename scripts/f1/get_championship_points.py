@@ -26,9 +26,13 @@ def load_race_results(year, event_round):
     race = fastf1.get_session(year, event_round, 'R')
     try:
         race.load()
+        if race.laps.empty:
+            print(f"Warning: No lap data available for round {event_round}.", file=sys.stderr)
+            return None
         return race.results
     except Exception as e:
-        raise RuntimeError(f"Race session load failed for round {event_round}: {str(e)}")
+        print(f"Warning: Race session load failed for round {event_round}. Details: {str(e)}", file=sys.stderr)
+        return None
 
 def get_championship_points(year, round_number=None, points_type="driver"):
     try:
@@ -39,42 +43,40 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         if points_type == "per_race":
             results_per_race = []
             for _, event in event_schedule.iterrows():
-                try:
-                    race_results = load_race_results(year, event['RoundNumber'])
-                    race_points = [
-                        {
-                            'driver': driver.get('Abbreviation', 'N/A'),
-                            'name': driver.get('FullName', 'N/A'),
-                            'points': driver.get('Points', 0)
-                        }
-                        for _, driver in race_results.iterrows()
-                    ]
-                    results_per_race.append({
-                        'round': event['RoundNumber'],
-                        'race_name': event['EventName'],
-                        'results': race_points
-                    })
-                except Exception as e:
-                    print(f"Warning: Failed to load session for round {event['RoundNumber']}. Details: {e}", file=sys.stderr)
+                race_results = load_race_results(year, event['RoundNumber'])
+                if race_results is None:
+                    continue  # Skip if no race results are available
+                race_points = [
+                    {
+                        'driver': driver.get('Abbreviation', 'N/A'),
+                        'name': driver.get('FullName', 'N/A'),
+                        'points': driver.get('Points', 0)
+                    }
+                    for _, driver in race_results.iterrows()
+                ]
+                results_per_race.append({
+                    'round': event['RoundNumber'],
+                    'race_name': event['EventName'],
+                    'results': race_points
+                })
             return json.dumps({'year': year, 'points_type': points_type, 'results': results_per_race}, indent=4)
 
         standings = {}
         for _, event in event_schedule.iterrows():
-            try:
-                race_results = load_race_results(year, event['RoundNumber'])
-                for _, driver in race_results.iterrows():
-                    if points_type == "driver":
-                        key = driver.get('Abbreviation', 'N/A')
-                        name = driver.get('FullName', 'N/A')
-                    elif points_type == "constructor":
-                        key = driver.get('TeamName', 'N/A')
-                        name = None
-                    else:
-                        raise ValueError(f"Invalid points type: {points_type}. Must be 'driver' or 'constructor'.")
-                    standings.setdefault(key, {'points': 0, 'name': name})
-                    standings[key]['points'] += driver.get('Points', 0)
-            except Exception as e:
-                print(f"Warning: Failed to load session for round {event['RoundNumber']}. Details: {e}", file=sys.stderr)
+            race_results = load_race_results(year, event['RoundNumber'])
+            if race_results is None:
+                continue  # Skip if no race results are available
+            for _, driver in race_results.iterrows():
+                if points_type == "driver":
+                    key = driver.get('Abbreviation', 'N/A')
+                    name = driver.get('FullName', 'N/A')
+                elif points_type == "constructor":
+                    key = driver.get('TeamName', 'N/A')
+                    name = None
+                else:
+                    raise ValueError(f"Invalid points type: {points_type}. Must be 'driver' or 'constructor'.")
+                standings.setdefault(key, {'points': 0, 'name': name})
+                standings[key]['points'] += driver.get('Points', 0)
 
         if round_number is None:
             results = [
@@ -87,6 +89,9 @@ def get_championship_points(year, round_number=None, points_type="driver"):
             raise ValueError(f"No race found with round number '{round_number}' in {year}.")
 
         race_results = load_race_results(year, round_number)
+        if race_results is None:
+            return json.dumps({'year': year, 'round': round_number, 'points_type': points_type, 'results': []}, indent=4)
+
         if points_type == "driver":
             position_col = 'PositionText' if 'PositionText' in race_results.columns else 'Position'
             championship_points = [
@@ -114,6 +119,8 @@ def get_championship_points(year, round_number=None, points_type="driver"):
     except fastf1.core.DataNotLoadedError as e:
         json_error('Failed to load data.', str(e))
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Log the full traceback for debugging
         json_error('An unexpected error occurred.', str(e))
 
 def main():
@@ -130,6 +137,8 @@ def main():
         result = get_championship_points(year, round_number, points_type)
         print(result)
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Log the full traceback for debugging
         json_error("Failed to generate championship points", str(e))
 
 if __name__ == "__main__":
