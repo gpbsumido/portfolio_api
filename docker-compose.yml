@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-3001}:${PORT:-3001}"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3001}
+      - DATABASE_URL=postgresql://postgres:LyITZLNOLAlkIUMPbgsxxayZUEZkQeth@switchyard.proxy.rlwy.net:59323/railway
+    volumes:
+      - ./cache/fastf1:/app/cache/fastf1
+
+volumes:
+  cache_data: 

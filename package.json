@@ -1,21 +1,28 @@
 {
-  "name": "nba-proxy",
+  "name": "potfolio_api",
   "version": "1.0.0",
-  "description": "NBA API proxy using Express",
+  "description": "Portfolio API with Node.js and Python",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "NODE_ENV=development node server.js",
-    "prod": "NODE_ENV=production node server.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
+    "apicache": "^1.6.3",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
-    "dotenv": "^16.5.0",
-    "express": "^4.17.1",
-    "helmet": "^7.1.0",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "helmet": "^7.0.0",
     "morgan": "^1.10.0",
-    "node-fetch": "^2.6.1",
-    "pg": "^8.14.1"
+    "node-fetch": "2",
+    "pg": "^8.14.1",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
