@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
 import os
+import requests  # Import requests for network testing
 
 # Ensure the cache directory exists
 os.makedirs('./cache', exist_ok=True)
@@ -25,11 +26,21 @@ fastf1.Cache.enable_cache('./cache')
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
 
+def test_outbound_network():
+    """Test outbound networking access."""
+    try:
+        r = requests.get("https://ergast.com/api/f1/2023.json")
+        print("✅ Outbound test succeeded:", r.status_code, file=sys.stderr)
+    except Exception as e:
+        print("❌ Outbound test failed:", str(e), file=sys.stderr)
+
 def json_error(message, details=None):
-    """Return a JSON error response and exit."""
+    """Return a JSON error response and log it."""
+    error_response = {'error': message, 'details': details}
     print(f"Error: {message}\nDetails: {details}", file=sys.stderr)  # Log error to stderr
-    print(json.dumps({'error': message, 'details': details}, indent=4))
-    sys.exit(1)
+    print(json.dumps(error_response, indent=4))  # Print JSON to stdout
+    # Temporarily avoid exiting for debugging
+    return error_response
 
 def safe_get(series, key, default='N/A'):
     """Safely get a value from a Pandas Series."""
@@ -59,6 +70,9 @@ def load_race_results(year, event_round):
 
 def get_championship_points(year, round_number=None, points_type="driver"):
     try:
+        # Log arguments for debugging
+        print(f"DEBUG: Args received - year={year}, round={round_number}, type={points_type}", file=sys.stderr)
+
         # Get the event schedule for the year
         event_schedule = fastf1.get_event_schedule(year)
         event_schedule = event_schedule[event_schedule['RoundNumber'] > 0]  # Filter valid rounds
@@ -147,6 +161,9 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         json_error('An unexpected error occurred.', str(e))
 
 def main():
+    # Test outbound networking before running the main logic
+    test_outbound_network()
+
     try:
         if len(sys.argv) < 2 or len(sys.argv) > 4:
             json_error(
