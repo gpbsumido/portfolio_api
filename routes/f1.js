@@ -8,7 +8,7 @@ const cache = require('apicache').middleware; // Add apicache for caching
 // Ensure Python dependencies are installed
 const installPythonDeps = () => {
     const requirementsPath = path.join(__dirname, '..', 'requirements.txt');
-    
+
     // Check if requirements.txt exists
     if (!fs.existsSync(requirementsPath)) {
         console.error('requirements.txt not found at:', requirementsPath);
@@ -42,18 +42,7 @@ const runPythonScript = (scriptName, args = []) => {
 
         process.stderr.on('data', (chunk) => {
             error += chunk.toString();
-            console.log("PYTHON OUTPUT:", text); // 👈 log this
-            // Try to parse warnings from stderr
-            try {
-                const warningData = JSON.parse(error);
-                if (warningData.warnings || error.includes('No race results available')) {
-                    console.warn('FastF1 Warnings:', warningData.warnings);
-                    // Don't treat warnings as errors
-                    error = '';
-                }
-            } catch (e) {
-                // Not a JSON warning, treat as regular error
-            }
+            console.error('PYTHON STDERR:', error); // Always log stderr
         });
 
         process.on('close', (code) => {
@@ -76,6 +65,32 @@ const runPythonScript = (scriptName, args = []) => {
 
 // Apply caching middleware for all routes in this file (cache for 1 day)
 router.use(cache('1 day'));
+
+// Debug route to test Python setup
+router.get('/debug-python', (req, res) => {
+    const py = spawn('python3', ['-c', 'import json; print(json.dumps({"status": "ok"}))']);
+    let output = '';
+    let error = '';
+
+    py.stdout.on('data', (chunk) => {
+        output += chunk.toString();
+    });
+
+    py.stderr.on('data', (chunk) => {
+        error += chunk.toString();
+        console.error('PYTHON STDERR (debug):', error);
+    });
+
+    py.on('close', (code) => {
+        if (code !== 0) {
+            return res.status(500).json({
+                error: 'Python debug script failed',
+                stderr: error
+            });
+        }
+        res.json({ message: 'Python debug successful', output: JSON.parse(output) });
+    });
+});
 
 // Get race schedule for a specific season
 router.get('/schedule/:year', async (req, res, next) => {
