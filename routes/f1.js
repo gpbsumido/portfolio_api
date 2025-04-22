@@ -15,7 +15,7 @@ const MEMORY_ERROR_MESSAGES = {
 };
 
 // Queue configuration
-const QUEUE_TIMEOUT = 300000; // 5 mins timeout for queued requests
+const QUEUE_TIMEOUT = 600000; // 10 mins timeout for queued requests
 
 // Helper function to handle memory errors
 const handleMemoryError = (error, res) => {
