@@ -154,7 +154,7 @@ def main():
         round_number = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
         points_type = sys.argv[3] if len(sys.argv) == 4 else "driver"
         result = get_championship_points(year, round_number, points_type)
-        print(json.dumps(result, default=safe_json))  # Ensure only JSON is printed to stdout
+        print(result)  # Ensure only JSON is printed to stdout
     except Exception as e:
         import traceback
         traceback.print_exc()  # Log the full traceback for debugging
