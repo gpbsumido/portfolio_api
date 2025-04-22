@@ -5,10 +5,42 @@ const fs = require('fs');
 const router = express.Router();
 const cache = require('apicache').middleware; // Add apicache for caching
 
+// Ensure cache directory exists
+const setupCacheDirectory = () => {
+    let cacheDir;
+    
+    // Check if we're in Railway environment
+    if (process.env.RAILWAY_ENVIRONMENT) {
+        cacheDir = '/tmp/fastf1_cache';
+    } else {
+        cacheDir = path.join(__dirname, '..', 'cache', 'fastf1');
+    }
+
+    if (!fs.existsSync(cacheDir)) {
+        try {
+            fs.mkdirSync(cacheDir, { recursive: true });
+            console.log('FastF1 cache directory created at:', cacheDir);
+        } catch (err) {
+            console.error('Failed to create FastF1 cache directory:', err);
+        }
+    }
+
+    // Set appropriate permissions for the cache directory
+    try {
+        fs.chmodSync(cacheDir, '777');
+        console.log('Cache directory permissions updated');
+    } catch (err) {
+        console.error('Failed to update cache directory permissions:', err);
+    }
+};
+
+// Setup cache directory
+setupCacheDirectory();
+
 // Ensure Python dependencies are installed
 const installPythonDeps = () => {
     const requirementsPath = path.join(__dirname, '..', 'requirements.txt');
-
+    
     // Check if requirements.txt exists
     if (!fs.existsSync(requirementsPath)) {
         console.error('requirements.txt not found at:', requirementsPath);

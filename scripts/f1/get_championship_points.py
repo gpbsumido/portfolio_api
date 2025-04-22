@@ -18,6 +18,17 @@ logging.getLogger('fastf1').setLevel(logging.CRITICAL)
 # Enable FastF1 cache with a relative path
 fastf1.Cache.enable_cache('./cache')
 
+print("DEBUG: Imported FastF1", file=sys.stderr)
+
+fastf1.Cache.enable_cache('./cache')
+print("DEBUG: Cache enabled", file=sys.stderr)
+
+session = fastf1.get_session(2023, 'Monza', 'R')
+print("DEBUG: Session initialized", file=sys.stderr)
+
+session.load()
+print("DEBUG: Session loaded", file=sys.stderr)
+
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
 

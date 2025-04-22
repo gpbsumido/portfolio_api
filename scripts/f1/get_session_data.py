@@ -4,13 +4,29 @@ import fastf1
 import pandas as pd
 import warnings
 import logging
+import os
+from pathlib import Path
 from typing import Any, Optional
 
 # Suppress FastF1 warnings about incomplete data
-logging.getLogger('fastf1').setLevel(logging.ERROR)
+logging.getLogger("fastf1").setLevel(logging.ERROR)
 
 # Configure warnings to be captured instead of printed
 warnings.filterwarnings("error", category=UserWarning)
+
+
+def get_cache_dir() -> str:
+    """Get the absolute path to the FastF1 cache directory."""
+    # Check if we're in Railway environment
+    if os.environ.get("RAILWAY_ENVIRONMENT"):
+        # Use /tmp for Railway's ephemeral storage
+        cache_dir = Path("/tmp/fastf1_cache")
+    else:
+        # Use project directory for local development
+        script_dir = Path(__file__).resolve().parent
+        cache_dir = script_dir.parent.parent / "cache" / "fastf1"
+
+    return str(cache_dir)
 
 
 def clean_data(data: Any) -> Any:
@@ -40,11 +56,18 @@ def get_session_data(
         try:
             import fastf1
         except ImportError:
-            print(json.dumps({"error": "FastF1 is not installed. Run 'pip install fastf1'."}), file=sys.stderr)
+            print(
+                json.dumps(
+                    {"error": "FastF1 is not installed. Run 'pip install fastf1'."}
+                ),
+                file=sys.stderr,
+            )
             sys.exit(1)
 
-        # Enable caching
-        fastf1.Cache.enable_cache("cache/fastf1")
+        # Enable caching with the correct path
+        cache_dir = get_cache_dir()
+        os.makedirs(cache_dir, exist_ok=True)
+        fastf1.Cache.enable_cache(cache_dir)
 
         # Load session
         session = fastf1.get_session(year, round, session_type)
@@ -68,11 +91,19 @@ def get_session_data(
 
         elif data_type == "telemetry" and driver and lap:
             if driver not in session.drivers:
-                print(json.dumps({"error": f"Driver {driver} not found in session."}), file=sys.stderr)
+                print(
+                    json.dumps({"error": f"Driver {driver} not found in session."}),
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             laps = session.laps.pick_driver(driver)
             if laps.empty:
-                print(json.dumps({"error": f"No lap data available for driver {driver}."}), file=sys.stderr)
+                print(
+                    json.dumps(
+                        {"error": f"No lap data available for driver {driver}."}
+                    ),
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             lap_data = laps.pick_lap(lap)
             response["telemetry"] = clean_data(lap_data.get_telemetry())
@@ -83,11 +114,19 @@ def get_session_data(
 
         elif data_type == "driver_best_lap" and driver:
             if driver not in session.drivers:
-                print(json.dumps({"error": f"Driver {driver} not found in session."}), file=sys.stderr)
+                print(
+                    json.dumps({"error": f"Driver {driver} not found in session."}),
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             driver_laps = session.laps.pick_driver(driver)
             if driver_laps.empty:
-                print(json.dumps({"error": f"No lap data available for driver {driver}."}), file=sys.stderr)
+                print(
+                    json.dumps(
+                        {"error": f"No lap data available for driver {driver}."}
+                    ),
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             best_lap = driver_laps.pick_fastest()
             response["best_lap"] = clean_data(best_lap.to_frame().to_dict("records"))
@@ -101,6 +140,7 @@ def get_session_data(
             "round": round,
             "session_type": session_type,
             "track": session.event.Circuit.circuitName,
+            "cache_dir": cache_dir,  # Add cache directory to response for debugging
         }
 
         print(json.dumps(response))
