@@ -215,7 +215,7 @@ router.get('/driver-points-per-race/:year/:round', (req, res) => {
         stdoutData += chunk.toString();
     });
 
-    // Collect stderr data (but don't treat it as an error automatically)
+    // Collect stderr data
     py.stderr.on('data', (chunk) => {
         stderrData += chunk.toString();
     });
@@ -223,17 +223,17 @@ router.get('/driver-points-per-race/:year/:round', (req, res) => {
     // Handle process close
     py.on('close', (code) => {
         try {
-            // Parse and return JSON response
-            const result = JSON.parse(stdoutData);
-            if (result.error) {
-                // If the result itself has an error field
-                return res.status(500).json({
-                    error: result.error,
-                    details: result.details || null,
-                    context: { year, round }
-                });
+            // Extract JSON from stdoutData
+            const jsonStart = stdoutData.indexOf('{');
+            const jsonEnd = stdoutData.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+                const jsonStr = stdoutData.slice(jsonStart, jsonEnd + 1);
+                const result = JSON.parse(jsonStr);
+                return res.json(result);
+            } else {
+                console.error('No valid JSON found in output:', stdoutData);
+                return res.status(500).json({ error: 'Malformed response from Python script.' });
             }
-            return res.json(result);
         } catch (e) {
             // Handle JSON parsing errors or unexpected output
             console.error('Failed to parse Python output:', stdoutData);

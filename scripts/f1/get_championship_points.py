@@ -5,10 +5,10 @@ import sys
 import logging
 from datetime import datetime, timezone
 
-# Redirect FastF1 logs to stderr
+# Redirect FastF1 logs to stderr or suppress them completely
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+logging.basicConfig(level=logging.CRITICAL)  # Suppress all logs
 
 # Enable caching
 fastf1.Cache.enable_cache('cache/fastf1')
