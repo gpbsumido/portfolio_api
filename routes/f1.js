@@ -15,14 +15,14 @@ const MEMORY_ERROR_MESSAGES = {
 };
 
 // Queue configuration
-const QUEUE_TIMEOUT = 30000; // 30 seconds timeout for queued requests
+const QUEUE_TIMEOUT = 300000; // 5 mins timeout for queued requests
 
 // Helper function to handle memory errors
 const handleMemoryError = (error, res) => {
     if (error.includes(MEMORY_ERROR_MESSAGES.THRESHOLD_EXCEEDED) ||
         error.includes(MEMORY_ERROR_MESSAGES.LOADING_ERROR) ||
         error.includes(MEMORY_ERROR_MESSAGES.PROCESSING_ERROR)) {
-        
+
         return res.status(503).json({
             error: 'Service temporarily unavailable',
             details: 'The request requires more memory than currently available. Try again later or with a smaller data request.',
@@ -35,7 +35,7 @@ const handleMemoryError = (error, res) => {
 // Ensure cache directory exists
 const setupCacheDirectory = () => {
     let cacheDir;
-    
+
     // Check if we're in Railway environment
     if (process.env.RAILWAY_ENVIRONMENT) {
         cacheDir = '/tmp/fastf1_cache';
@@ -67,7 +67,7 @@ setupCacheDirectory();
 // Ensure Python dependencies are installed
 const installPythonDeps = () => {
     const requirementsPath = path.join(__dirname, '..', 'requirements.txt');
-    
+
     // Check if requirements.txt exists
     if (!fs.existsSync(requirementsPath)) {
         console.error('requirements.txt not found at:', requirementsPath);
@@ -111,7 +111,7 @@ const runPythonScriptQueued = async (scriptName, args = []) => {
 
         process.on('close', (code) => {
             clearTimeout(timeout);
-            
+
             if (code !== 0 && error) {
                 try {
                     const errorData = JSON.parse(error);
@@ -128,7 +128,7 @@ const runPythonScriptQueued = async (scriptName, args = []) => {
 
             try {
                 const jsonData = JSON.parse(data);
-                
+
                 if (jsonData.memory_stats) {
                     console.log('Memory usage stats:', {
                         current: `${(jsonData.memory_stats.current / 1024 / 1024).toFixed(2)}MB`,
@@ -136,7 +136,7 @@ const runPythonScriptQueued = async (scriptName, args = []) => {
                     });
                     delete jsonData.memory_stats;
                 }
-                
+
                 resolve(jsonData);
             } catch (err) {
                 console.error(`JSON parse error (${scriptName}):`, err);
