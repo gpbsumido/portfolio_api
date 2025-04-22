@@ -1,6 +1,5 @@
 import fastf1
 import json
-import pandas as pd
 import warnings
 import sys
 from datetime import datetime, timezone
@@ -15,6 +14,10 @@ def get_championship_points(year, round_number=None, points_type="driver"):
     try:
         # Get the event schedule for the year
         event_schedule = fastf1.get_event_schedule(year)
+
+        # Filter out invalid rounds (e.g., testing events with RoundNumber == 0)
+        event_schedule = event_schedule[event_schedule['RoundNumber'] > 0]
+
         if points_type == "per_race":
             # Calculate points per race
             results_per_race = []
