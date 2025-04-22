@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 # Redirect FastF1 logs to stderr or suppress them completely
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
-logging.basicConfig(level=logging.CRITICAL)  # Suppress all logs
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)  # Ensure logs go to stderr
+
+# Disable FastF1 logging for production
+fastf1.logging.disable_logging()
 
 # Enable caching
 fastf1.Cache.enable_cache('cache/fastf1')
@@ -43,11 +46,11 @@ def load_race_results(year, event_round):
     try:
         race.load()
         if race.results is None or race.results.empty:
-            print(f"Warning: No race results available for round {event_round}.", file=sys.stderr)
+            logging.warning(f"No race results available for round {event_round}.")
             return None
         return race.results
     except Exception as e:
-        print(f"Warning: Race session load failed for round {event_round}. Details: {str(e)}", file=sys.stderr)
+        logging.error(f"Race session load failed for round {event_round}. Details: {str(e)}")
         return None
 
 def get_championship_points(year, round_number=None, points_type="driver"):
@@ -151,7 +154,7 @@ def main():
         round_number = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
         points_type = sys.argv[3] if len(sys.argv) == 4 else "driver"
         result = get_championship_points(year, round_number, points_type)
-        print(result)
+        print(json.dumps(result, default=safe_json))  # Ensure only JSON is printed to stdout
     except Exception as e:
         import traceback
         traceback.print_exc()  # Log the full traceback for debugging
