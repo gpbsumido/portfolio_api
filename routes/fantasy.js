@@ -238,8 +238,6 @@ try:
     quali = fastf1.get_session(${req.params.year}, ${req.params.round}, 'Q')
     race = fastf1.get_session(${req.params.year}, ${req.params.round}, 'R')
 
-    print(f"Loading data for {race.event['EventName']} ${req.params.year}, Round ${req.params.round}")
-
     # Load the data
     quali.load()
     race.load()
@@ -248,11 +246,9 @@ try:
     quali_results = quali.results
     quali_data = []
     
-    print("\\nQualifying Results:")
     for _, driver in quali_results.iterrows():
         position = int(driver['Position'])
         driver_code = driver['Abbreviation']
-        print(f"{position}. {driver_code}")
         quali_data.append({
             'driver': driver_code,
             'position': position,
@@ -264,12 +260,10 @@ try:
     race_results = race.results
     race_data = []
 
-    print("\\nRace Results:")
     for _, driver in race_results.iterrows():
         position = int(driver['Position']) if not pd.isna(driver['Position']) else None
         driver_code = driver['Abbreviation']
         status = driver['Status']
-        print(f"{position}. {driver_code} - {status}")
 
         # Determine if the driver DNFed
         dnf = status not in ['Finished'] and not status.startswith('+')
@@ -287,7 +281,6 @@ try:
     laps = race.laps
     fastest_lap = laps.pick_fastest()
     fastest_lap_driver = fastest_lap['Driver']
-    print(f"\\nFastest Lap: {fastest_lap_driver}")
 
     # Update fastest lap info
     for race_entry in race_data:
@@ -319,7 +312,6 @@ try:
         }
     }
 
-    print("\\nData processing complete")
     print(json.dumps(output))
 except Exception as e:
     error_output = {
