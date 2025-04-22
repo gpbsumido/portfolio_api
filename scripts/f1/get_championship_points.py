@@ -2,8 +2,13 @@ import fastf1
 import json
 import warnings
 import sys
-
+import logging
 from datetime import datetime, timezone
+
+# Redirect FastF1 logs to stderr
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 # Enable caching
 fastf1.Cache.enable_cache('cache/fastf1')
@@ -11,6 +16,19 @@ fastf1.Cache.enable_cache('cache/fastf1')
 # Suppress warnings from FastF1
 warnings.filterwarnings("ignore", category=UserWarning, module="fastf1")
 
+def json_error(message, details=None):
+    """Return a JSON error response and exit."""
+    print(json.dumps({'error': message, 'details': details}, indent=4))
+    sys.exit(1)
+
+def load_race_results(year, event_round):
+    """Load race results for a specific round."""
+    race = fastf1.get_session(year, event_round, 'R')
+    try:
+        race.load()
+        return race.results
+    except Exception as e:
+        raise RuntimeError(f"Race session load failed for round {event_round}: {str(e)}")
 
 def get_championship_points(year, round_number=None, points_type="driver"):
     try:
@@ -18,16 +36,11 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         event_schedule = fastf1.get_event_schedule(year)
         event_schedule = event_schedule[event_schedule['RoundNumber'] > 0]  # Filter valid rounds
 
-        def load_race_results(event_round):
-            race = fastf1.get_session(year, event_round, 'R')
-            race.load()
-            return race.results
-
         if points_type == "per_race":
             results_per_race = []
             for _, event in event_schedule.iterrows():
                 try:
-                    race_results = load_race_results(event['RoundNumber'])
+                    race_results = load_race_results(year, event['RoundNumber'])
                     race_points = [
                         {
                             'driver': driver.get('Abbreviation', 'N/A'),
@@ -48,7 +61,7 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         standings = {}
         for _, event in event_schedule.iterrows():
             try:
-                race_results = load_race_results(event['RoundNumber'])
+                race_results = load_race_results(year, event['RoundNumber'])
                 for _, driver in race_results.iterrows():
                     if points_type == "driver":
                         key = driver.get('Abbreviation', 'N/A')
@@ -73,7 +86,7 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         if round_number not in event_schedule['RoundNumber'].values:
             raise ValueError(f"No race found with round number '{round_number}' in {year}.")
 
-        race_results = load_race_results(round_number)
+        race_results = load_race_results(year, round_number)
         if points_type == "driver":
             position_col = 'PositionText' if 'PositionText' in race_results.columns else 'Position'
             championship_points = [
@@ -99,24 +112,25 @@ def get_championship_points(year, round_number=None, points_type="driver"):
         return json.dumps({'year': year, 'round': round_number, 'points_type': points_type, 'results': championship_points}, indent=4)
 
     except fastf1.core.DataNotLoadedError as e:
-        return json.dumps({'error': 'Failed to load data.', 'details': str(e), 'year': year, 'round': round_number}, indent=4)
+        json_error('Failed to load data.', str(e))
     except Exception as e:
-        return json.dumps({'error': 'An unexpected error occurred.', 'details': str(e), 'year': year, 'round': round_number}, indent=4)
+        json_error('An unexpected error occurred.', str(e))
 
-
-if __name__ == "__main__":
+def main():
     try:
         if len(sys.argv) < 2 or len(sys.argv) > 4:
-            print(json.dumps({
-                'error': 'Invalid arguments. Usage: python get_championship_points.py <year> [<round_number>] [<points_type>]',
-                'details': 'Provide at least one argument: <year> (e.g., 2023). Optionally, provide <round_number> (e.g., 1) and <points_type> (e.g., "driver" or "constructor").'
-            }, indent=4))
-            sys.exit(1)
+            json_error(
+                'Invalid arguments. Usage: python get_championship_points.py <year> [<round_number>] [<points_type>]',
+                'Provide at least one argument: <year> (e.g., 2023). Optionally, provide <round_number> (e.g., 1) and <points_type> (e.g., "driver" or "constructor").'
+            )
 
         year = int(sys.argv[1])
         round_number = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
         points_type = sys.argv[3] if len(sys.argv) == 4 else "driver"
-        print(get_championship_points(year, round_number, points_type))
+        result = get_championship_points(year, round_number, points_type)
+        print(result)
     except Exception as e:
-        print(json.dumps({'error': 'Unexpected error in main.', 'details': str(e)}, indent=4))
-        sys.exit(1)
+        json_error("Failed to generate championship points", str(e))
+
+if __name__ == "__main__":
+    main()
