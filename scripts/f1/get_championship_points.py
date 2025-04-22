@@ -11,8 +11,8 @@ for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)  # Ensure logs go to stderr
 
-# Disable FastF1 logging for production
-fastf1.logging.disable_logging()
+# Disable FastF1 logging
+logging.getLogger('fastf1').setLevel(logging.CRITICAL)
 
 # Enable caching
 fastf1.Cache.enable_cache('cache/fastf1')
