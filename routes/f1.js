@@ -20,10 +20,21 @@ const runPythonScript = (scriptName, args = []) => {
 
         process.stderr.on('data', (chunk) => {
             error += chunk.toString();
+            // Try to parse warnings from stderr
+            try {
+                const warningData = JSON.parse(error);
+                if (warningData.warnings) {
+                    console.warn('FastF1 Warnings:', warningData.warnings);
+                    // Don't treat warnings as errors
+                    error = '';
+                }
+            } catch (e) {
+                // Not a JSON warning, treat as regular error
+            }
         });
 
         process.on('close', (code) => {
-            if (code !== 0) {
+            if (code !== 0 && error) {
                 console.error(`Python script error (${scriptName}):`, error);
                 reject(new Error(error));
                 return;

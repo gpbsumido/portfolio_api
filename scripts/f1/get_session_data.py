@@ -2,7 +2,11 @@ import sys
 import json
 import fastf1
 import pandas as pd
+import warnings
 from typing import Any, Optional
+
+# Configure warnings to be captured instead of printed
+warnings.filterwarnings("error", category=UserWarning)
 
 
 def clean_data(data: Any) -> Any:
@@ -34,7 +38,18 @@ def get_session_data(
 
         # Load session
         session = fastf1.get_session(year, round, session_type)
-        session.load()
+
+        # Capture warnings during session load
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            session.load()
+
+            # Log warnings but don't treat them as errors
+            if w:
+                print(
+                    json.dumps({"warnings": [str(warning.message) for warning in w]}),
+                    file=sys.stderr,
+                )
 
         response = {}
 
