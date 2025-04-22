@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 # Redirect FastF1 logs to stderr or suppress them completely
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)  # Ensure logs go to stderr
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)  # Ensure logs go to stderr
 
 # Disable FastF1 logging
 logging.getLogger('fastf1').setLevel(logging.CRITICAL)
@@ -23,7 +23,15 @@ print("DEBUG: Imported FastF1", file=sys.stderr)
 fastf1.Cache.enable_cache('./cache')
 print("DEBUG: Cache enabled", file=sys.stderr)
 
-session = fastf1.get_session(2023, 'Monza', 'R')
+import requests
+try:
+    res = requests.get("https://www.formula1.com")
+    print("DEBUG: F1 site response:", res.status_code, file=sys.stderr)
+except Exception as net_err:
+    print("DEBUG: Network test failed:", net_err, file=sys.stderr)
+
+
+session = fastf1.get_session(2023, 15, 'R')
 print("DEBUG: Session initialized", file=sys.stderr)
 
 session.load()
