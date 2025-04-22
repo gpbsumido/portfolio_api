@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const express = require("express");
-const fetch = require("node-fetch");
 const cors = require("cors");
 const path = require("path");
 const compression = require("compression");
@@ -9,12 +8,11 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 // Local imports
-const { NBA_API } = require("./constants/nba");
-const { getCachedData } = require("./utils/cache");
-const { rateLimit } = require("./utils/rateLimiter");
-const { pool } = require("./config/database");
 const nbaRoutes = require('./routes/nba');
 const dbRoutes = require('./routes/db');
+const youtubeRoutes = require('./routes/youtube');
+const f1Routes = require('./routes/f1');
+const fantasyRoutes = require('./routes/fantasy');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -43,6 +41,15 @@ app.use((req, res, next) => {
 console.log('Mounting NBA routes at /api/nba');
 app.use('/api/nba', nbaRoutes);
 
+console.log('Mounting YouTube routes at /api/youtube');
+app.use('/api/youtube', youtubeRoutes);
+
+console.log('Mounting F1 routes at /api/f1');
+app.use('/api/f1', f1Routes);
+
+console.log('Mounting Fantasy F1 routes at /api/fantasy');
+app.use('/api/fantasy', fantasyRoutes);
+
 console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);
 
@@ -57,8 +64,8 @@ app.use((err, req, res, next) => {
         body: req.body,
         query: req.query
     });
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
         error: `Oops! Something went wrong! ${err.message}`,
         details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
