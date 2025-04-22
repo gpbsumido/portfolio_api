@@ -2,9 +2,11 @@ import sys
 import json
 import fastf1
 import pandas as pd
+from typing import Any, Optional
 
 
-def clean_data(data):
+def clean_data(data: Any) -> Any:
+    """Cleans data by converting NaN to None and timestamps to ISO format."""
     if isinstance(data, pd.DataFrame):
         data_dict = data.to_dict(orient="records")
         for item in data_dict:
@@ -18,14 +20,20 @@ def clean_data(data):
 
 
 def get_session_data(
-    year, round, session_type, data_type="results", driver=None, lap=None
-):
+    year: int,
+    round: int,
+    session_type: str,
+    data_type: str = "results",
+    driver: Optional[str] = None,
+    lap: Optional[int] = None,
+) -> None:
+    """Fetches and processes session data based on the specified parameters."""
     try:
         # Enable caching
         fastf1.Cache.enable_cache("cache/fastf1")
 
         # Load session
-        session = fastf1.get_session(int(year), int(round), session_type)
+        session = fastf1.get_session(year, round, session_type)
         session.load()
 
         response = {}
@@ -35,21 +43,18 @@ def get_session_data(
 
         elif data_type == "telemetry" and driver and lap:
             laps = session.laps.pick_driver(driver)
-            lap_data = laps.pick_lap(int(lap))
-            telemetry = lap_data.get_telemetry()
-            response["telemetry"] = clean_data(telemetry)
+            lap_data = laps.pick_lap(lap)
+            response["telemetry"] = clean_data(lap_data.get_telemetry())
             response["lap_data"] = clean_data(lap_data.to_frame().to_dict("records"))
 
         elif data_type == "fastest_laps":
-            fastest_laps = session.laps.pick_fastest()
-            response["fastest_laps"] = clean_data(fastest_laps)
+            response["fastest_laps"] = clean_data(session.laps.pick_fastest())
 
         elif data_type == "driver_best_lap" and driver:
             driver_laps = session.laps.pick_driver(driver)
             best_lap = driver_laps.pick_fastest()
-            telemetry = best_lap.get_telemetry()
             response["best_lap"] = clean_data(best_lap.to_frame().to_dict("records"))
-            response["telemetry"] = clean_data(telemetry)
+            response["telemetry"] = clean_data(best_lap.get_telemetry())
 
         elif data_type == "weather":
             response["weather"] = clean_data(session.weather_data)
@@ -73,11 +78,15 @@ if __name__ == "__main__":
         print(json.dumps({"error": "Not enough arguments"}), file=sys.stderr)
         sys.exit(1)
 
-    year = sys.argv[1]
-    round = sys.argv[2]
-    session_type = sys.argv[3]
-    data_type = sys.argv[4] if len(sys.argv) > 4 else "results"
-    driver = sys.argv[5] if len(sys.argv) > 5 else None
-    lap = sys.argv[6] if len(sys.argv) > 6 else None
+    try:
+        year = int(sys.argv[1])
+        round = int(sys.argv[2])
+        session_type = sys.argv[3]
+        data_type = sys.argv[4] if len(sys.argv) > 4 else "results"
+        driver = sys.argv[5] if len(sys.argv) > 5 else None
+        lap = int(sys.argv[6]) if len(sys.argv) > 6 else None
 
-    get_session_data(year, round, session_type, data_type, driver, lap)
+        get_session_data(year, round, session_type, data_type, driver, lap)
+    except ValueError as e:
+        print(json.dumps({"error": f"Invalid argument: {e}"}), file=sys.stderr)
+        sys.exit(1)
