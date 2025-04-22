@@ -1,9 +1,18 @@
 const express = require('express');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 const cache = require('apicache').middleware; // Add apicache for caching
+
+// Ensure Python dependencies are installed
+exec('pip install -r requirements.txt', { cwd: path.join(__dirname, '..', 'scripts', 'f1') }, (err, stdout, stderr) => {
+    if (err) {
+        console.error('Failed to install Python dependencies:', stderr);
+    } else {
+        console.log('Python dependencies installed successfully:', stdout);
+    }
+});
 
 // Helper function to run Python scripts
 const runPythonScript = (scriptName, args = []) => {

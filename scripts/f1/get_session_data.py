@@ -35,8 +35,14 @@ def get_session_data(
     driver: Optional[str] = None,
     lap: Optional[int] = None,
 ) -> None:
-    """Fetches and processes session data based on the specified parameters."""
     try:
+        # Ensure FastF1 dependencies are installed
+        try:
+            import fastf1
+        except ImportError:
+            print(json.dumps({"error": "FastF1 is not installed. Run 'pip install fastf1'."}), file=sys.stderr)
+            sys.exit(1)
+
         # Enable caching
         fastf1.Cache.enable_cache("cache/fastf1")
 
