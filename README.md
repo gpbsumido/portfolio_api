@@ -1,6 +1,6 @@
 # F1 API
 
-A hybrid Node.js + Python API for Formula 1 data using FastF1.
+Trial F1 used for implementing/testing Portfolio site. (located currently at paulsumido.com)
 
 ## Features
 

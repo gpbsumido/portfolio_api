@@ -6,6 +6,7 @@ const path = require("path");
 const compression = require("compression");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const apicache = require("apicache"); // Add apicache for caching
 
 // Local imports
 const nbaRoutes = require('./routes/nba');
@@ -23,6 +24,10 @@ app.use(cors());
 
 // Performance middleware
 app.use(compression());
+
+// Caching middleware
+const cache = apicache.middleware;
+app.use(cache('1 hour')); // Cache all responses for 1 hour
 
 // Request parsing middleware
 app.use(express.json());

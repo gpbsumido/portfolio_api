@@ -3,7 +3,6 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
-const cache = require('apicache').middleware; // Add apicache for caching
 const requestQueue = require('../utils/queue');
 
 // Memory error messages
@@ -156,9 +155,6 @@ router.use((req, res, next) => {
     });
     next();
 });
-
-// Apply caching middleware for all routes in this file (cache for 1 day)
-router.use(cache('1 day'));
 
 // Debug route to test Python setup
 router.get('/debug-python', (req, res) => {
