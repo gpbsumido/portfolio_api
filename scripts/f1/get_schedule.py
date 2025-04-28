@@ -7,13 +7,7 @@ import pandas as pd
 def get_schedule(year):
     try:
         schedule = fastf1.get_event_schedule(int(year))
-        # Convert to dict and handle NaN/datetime values
-        schedule_dict = schedule.fillna(None).to_dict(orient="records")
-        for event in schedule_dict:
-            for key, value in event.items():
-                if isinstance(value, pd.Timestamp):
-                    event[key] = value.isoformat()
-        print(json.dumps(schedule_dict, ensure_ascii=False))
+        print(schedule.where(pd.notna(schedule), None).to_json(orient="records", date_format="iso"))
     except Exception as e:
         print(json.dumps({"error": str(e)}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
