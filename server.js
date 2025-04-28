@@ -27,7 +27,12 @@ app.use(compression());
 
 // Caching middleware
 const cache = apicache.middleware;
-app.use(cache('1 hour')); // Cache all responses for 1 hour
+const oneHourCache = cache('1 hour');
+
+// Apply 1-hour cache to specific API routes
+app.use('/api/nba', oneHourCache);
+app.use('/api/f1', oneHourCache);
+app.use('/api/fantasy', oneHourCache);
 
 // Request parsing middleware
 app.use(express.json());
