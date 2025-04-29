@@ -52,9 +52,8 @@ router.get("/postforum", async (req, res, next) => {
 router.post("/postforum", async (req, res, next) => {
   try {
     const { title, text, username } = req.body;
-    
     if (!title || !text || !username) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Missing required fields",
         required: ["title", "text", "username"]
       });
@@ -64,7 +63,7 @@ router.post("/postforum", async (req, res, next) => {
       'INSERT INTO postforum (title, text, username) VALUES ($1, $2, $3) RETURNING *',
       [title, text, username]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('POSTFORUM POST ERROR:', error);
@@ -75,65 +74,65 @@ router.post("/postforum", async (req, res, next) => {
 // Markers endpoints
 router.post("/markers", async (req, res, next) => {
   try {
-      const { latitude, longitude, text } = req.body;
-      
-      if (!latitude || !longitude || !text) {
-          return res.status(400).json({ 
-              error: "Missing required fields",
-              required: ["latitude", "longitude", "text"]
-          });
-      }
+    const { latitude, longitude, text } = req.body;
 
-      const result = await pool.query(
-          'INSERT INTO locations (latitude, longitude, text) VALUES ($1, $2, $3) RETURNING *',
-          [latitude, longitude, text]
-      );
-      
-      res.status(201).json(result.rows[0]);
+    if (!latitude || !longitude || !text) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        required: ["latitude", "longitude", "text"]
+      });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO locations (latitude, longitude, text) VALUES ($1, $2, $3) RETURNING *',
+      [latitude, longitude, text]
+    );
+
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-      console.error('Error saving marker:', error.message);
-      next(error);
+    console.error('Error saving marker:', error.message);
+    next(error);
   }
 });
 
 router.get("/markers", async (req, res, next) => {
   try {
-      const result = await pool.query('SELECT * FROM locations ORDER BY id DESC');
-      res.status(200).json(result.rows);
+    const result = await pool.query('SELECT * FROM locations ORDER BY id DESC');
+    res.status(200).json(result.rows);
   } catch (error) {
-      console.error('Error fetching markers:', error.message);
-      next(error);
+    console.error('Error fetching markers:', error.message);
+    next(error);
   }
 });
 
 router.delete("/markers/:id", async (req, res, next) => {
   try {
-      const { id } = req.params;
-      
-      if (!id) {
-          return res.status(400).json({ 
-              error: "Marker ID is required"
-          });
-      }
+    const { id } = req.params;
 
-      const result = await pool.query(
-          'DELETE FROM locations WHERE id = $1 RETURNING *',
-          [id]
-      );
-      
-      if (result.rows.length === 0) {
-          return res.status(404).json({ 
-              error: "Marker not found"
-          });
-      }
-      
-      res.status(200).json({ 
-          message: "Marker deleted successfully",
-          deleted: result.rows[0]
+    if (!id) {
+      return res.status(400).json({
+        error: "Marker ID is required"
       });
+    }
+
+    const result = await pool.query(
+      'DELETE FROM locations WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Marker not found"
+      });
+    }
+
+    res.status(200).json({
+      message: "Marker deleted successfully",
+      deleted: result.rows[0]
+    });
   } catch (error) {
-      console.error('Error deleting marker:', error.message);
-      next(error);
+    console.error('Error deleting marker:', error.message);
+    next(error);
   }
 });
 

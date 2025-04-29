@@ -14,6 +14,7 @@ const dbRoutes = require('./routes/db');
 const youtubeRoutes = require('./routes/youtube');
 const f1Routes = require('./routes/f1');
 const fantasyRoutes = require('./routes/fantasy');
+const galleryRoutes = require('./routes/gallery');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -59,6 +60,9 @@ app.use('/api/f1', f1Routes);
 
 console.log('Mounting Fantasy F1 routes at /api/fantasy');
 app.use('/api/fantasy', fantasyRoutes);
+
+console.log('Mounting Gallery routes at /api/gallery');
+app.use('/api/gallery', galleryRoutes);
 
 console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);
