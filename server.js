@@ -7,6 +7,7 @@ const compression = require("compression");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const apicache = require("apicache"); // Add apicache for caching
+const { checkJwt } = require('./middleware/auth');
 
 // Local imports
 const nbaRoutes = require('./routes/nba');
@@ -71,8 +72,17 @@ app.use('/api/med-journal', medJournalRoutes);
 console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);
 
+// Protected routes
+app.use('/api/med-journal', medJournalRoutes);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
+    if (err.name === 'UnauthorizedError') {
+        return res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Invalid or missing token'
+        });
+    }
     console.error('ERROR DETAILS:', {
         message: err.message,
         stack: err.stack,
