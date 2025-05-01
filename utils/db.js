@@ -64,7 +64,7 @@ async function saveOrUpdateMedJournalEntry(entry, userSub) {
             [
                 entry.patientsetting,
                 entry.interaction,
-                JSON.stringify(entry.canmedsRoles),
+                JSON.stringify(entry.canmedsroles),
                 JSON.stringify(entry.learningObjectives),
                 entry.rotation,
                 entry.date,
@@ -86,7 +86,7 @@ async function saveOrUpdateMedJournalEntry(entry, userSub) {
                 newId,
                 entry.patientsetting,
                 entry.interaction,
-                JSON.stringify(entry.canmedsRoles),
+                JSON.stringify(entry.canmedsroles),
                 JSON.stringify(entry.learningObjectives),
                 entry.rotation,
                 entry.date,
