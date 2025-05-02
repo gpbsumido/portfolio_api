@@ -167,7 +167,7 @@ async function getMedJournalEntryById(id, userSub) {
 }
 
 // Function to fetch med journal entries with pagination
-async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userSub, searchTerm) {
+async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userSub, searchTerm, rotation) {
     if (!userSub) {
         throw new Error("Missing user sub for fetching entries");
     }
@@ -194,6 +194,12 @@ async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userS
         WHERE mj.user_sub = $3
     `;
     const values = [limitNumber, offset, userSub];
+
+    // Add rotation filter if provided
+    if (rotation) {
+        query += ` AND mj."rotation" = $${values.length + 1}`;
+        values.push(rotation);
+    }
 
     // Add search conditions if searchTerm is provided
     if (searchTerm) {
