@@ -13,6 +13,14 @@ router.post('/save-entry', async (req, res) => {
     const userSub = req.auth.payload.sub; // Updated to use payload.sub
 
     try {
+        // If feedback text is provided, ensure it's in the correct format
+        if (entry.feedbackText) {
+            entry.feedback = [{
+                text: entry.feedbackText,
+                rotation: entry.rotation
+            }];
+        }
+        
         const savedEntry = await db.saveOrUpdateMedJournalEntry(entry, userSub);
         res.status(200).json({ success: true, entry: savedEntry });
     } catch (error) {

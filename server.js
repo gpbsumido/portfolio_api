@@ -17,6 +17,7 @@ const f1Routes = require('./routes/f1');
 const fantasyRoutes = require('./routes/fantasy');
 const galleryRoutes = require('./routes/gallery');
 const medJournalRoutes = require('./routes/med-journal');
+const feedbackRoutes = require('./routes/feedback');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -68,6 +69,9 @@ app.use('/api/gallery', galleryRoutes);
 
 console.log('Mounting Med Journal routes at /api/gallery');
 app.use('/api/med-journal', medJournalRoutes);
+
+console.log('Mounting Feedback routes at /api/feedback');
+app.use('/api/feedback', feedbackRoutes);
 
 console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);

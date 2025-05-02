@@ -3,8 +3,6 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-console.log('process.env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL:', process.env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL);
-
 // Create middleware for checking the JWT
 const checkJwt = auth({
   audience: process.env.NEXT_PUBLIC_AUTH0_AUDIENCE,
