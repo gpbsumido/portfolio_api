@@ -167,43 +167,66 @@ async function getMedJournalEntryById(id, userSub) {
 }
 
 // Function to fetch med journal entries with pagination
-async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userSub) {
+async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userSub, searchTerm) {
     if (!userSub) {
         throw new Error("Missing user sub for fetching entries");
     }
 
     const offset = (pageNumber - 1) * limitNumber;
 
-    const query = `
+    // Base query with search conditions
+    let query = `
         SELECT 
             mj.*,
-            f.text as feedback_text,
-            f.rotation as feedback_rotation
+            json_agg(
+                CASE 
+                    WHEN f.id IS NOT NULL THEN 
+                        json_build_object(
+                            'id', f.id,
+                            'text', f.text,
+                            'rotation', f.rotation
+                        )
+                    ELSE NULL
+                END
+            ) FILTER (WHERE f.id IS NOT NULL) as feedback_array
         FROM med_journal mj
         LEFT JOIN feedback f ON f.journal_entry_id = mj.id
         WHERE mj.user_sub = $3
+    `;
+    const values = [limitNumber, offset, userSub];
+
+    // Add search conditions if searchTerm is provided
+    if (searchTerm) {
+        query += `
+            AND (
+                LOWER(mj."rotation") LIKE LOWER($${values.length + 1})
+                OR LOWER(mj."hospital") LIKE LOWER($${values.length + 1})
+                OR LOWER(mj."doctor") LIKE LOWER($${values.length + 1})
+                OR LOWER(mj."location") LIKE LOWER($${values.length + 1})
+                OR LOWER(mj."canmedsRoles"::text) LIKE LOWER($${values.length + 1})
+                OR LOWER(mj."learningObjectives"::text) LIKE LOWER($${values.length + 1})
+            )
+        `;
+        values.push(`%${searchTerm}%`);
+    }
+
+    query += `
+        GROUP BY mj.id
         ORDER BY mj.date DESC
         LIMIT $1 OFFSET $2;
     `;
-    const values = [limitNumber, offset, userSub];
 
     const { rows } = await pool.query(query, values);
     
     // Format the entries with feedback
-    return rows.map(row => {
-        const { feedback_text, feedback_rotation, ...entry } = row;
-        return {
-            ...entry,
-            feedback: feedback_text ? [{
-                text: feedback_text,
-                rotation: feedback_rotation
-            }] : []
-        };
-    });
+    return rows.map(row => ({
+        ...row,
+        feedback: row.feedback_array || []
+    }));
 }
 
 // Function to fetch feedback with pagination and optional rotation filter
-async function getFeedbackWithPagination(pageNumber, limitNumber, rotation, userSub) {
+async function getFeedbackWithPagination(pageNumber, limitNumber, rotation, userSub, searchTerm) {
     if (!userSub) {
         throw new Error("Missing user sub for fetching feedback");
     }
@@ -220,6 +243,13 @@ async function getFeedbackWithPagination(pageNumber, limitNumber, rotation, user
     if (rotation) {
         countQuery += ` AND rotation = $2`;
         countValues.push(rotation);
+    }
+    if (searchTerm) {
+        countQuery += ` AND (
+            LOWER(text) LIKE LOWER($${countValues.length + 1})
+            OR LOWER(rotation) LIKE LOWER($${countValues.length + 1})
+        )`;
+        countValues.push(`%${searchTerm}%`);
     }
     const { rows: countRows } = await pool.query(countQuery, countValues);
     const totalCount = parseInt(countRows[0].total);
@@ -249,6 +279,13 @@ async function getFeedbackWithPagination(pageNumber, limitNumber, rotation, user
     if (rotation) {
         query += ` AND f.rotation = $2`;
         values.push(rotation);
+    }
+    if (searchTerm) {
+        query += ` AND (
+            LOWER(f.text) LIKE LOWER($${values.length + 1})
+            OR LOWER(f.rotation) LIKE LOWER($${values.length + 1})
+        )`;
+        values.push(`%${searchTerm}%`);
     }
 
     query += `

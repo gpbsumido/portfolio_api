@@ -10,12 +10,12 @@ router.use(checkJwt);
 // Get feedback with pagination and optional rotation filter
 router.get('/', async (req, res) => {
     try {
-        const { page = 1, limit = 10, rotation } = req.query;
-        const userSub = req.auth.payload.sub; // Get user_sub from auth payload
+        const { page = 1, limit = 10, rotation, searchTerm } = req.query;
+        const userSub = req.auth.payload.sub;
         if (!userSub) {
             return res.status(401).json({ error: 'Unauthorized: No user sub found' });
         }
-        const { feedback, totalCount } = await getFeedbackWithPagination(Number(page), Number(limit), rotation, userSub);
+        const { feedback, totalCount } = await getFeedbackWithPagination(Number(page), Number(limit), rotation, userSub, searchTerm);
         res.status(200).json({ success: true, feedback, totalCount });
     } catch (error) {
         console.error('Error fetching feedback:', error);

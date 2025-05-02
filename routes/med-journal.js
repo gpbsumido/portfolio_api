@@ -62,11 +62,11 @@ router.get('/edit-entry/:id', async (req, res) => {
 
 // Fetch entries with pagination
 router.get('/entries', async (req, res) => {
-    const { page = 1, limit = 10 } = req.query;
-    const userSub = req.auth.payload.sub; // Updated to use payload.sub
+    const { page = 1, limit = 10, searchTerm } = req.query;
+    const userSub = req.auth.payload.sub;
 
     try {
-        const entries = await db.getMedJournalEntriesWithPagination(Number(page), Number(limit), userSub);
+        const entries = await db.getMedJournalEntriesWithPagination(Number(page), Number(limit), userSub, searchTerm);
         res.status(200).json({ success: true, entries });
     } catch (error) {
         console.error(error);
