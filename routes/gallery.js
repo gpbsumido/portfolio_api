@@ -5,6 +5,7 @@ const { addGalleryItem, deleteGalleryItem, getGalleryItems } = require('../utils
 const multer = require("multer");
 const AWS = require("aws-sdk");
 const sharp = require('sharp'); // Add sharp for image processing
+const { checkJwt } = require('../middleware/auth');
 
 // Validate required environment variables
 const requiredEnvVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_S3_BUCKET_NAME'];
@@ -22,9 +23,10 @@ const s3 = new AWS.S3({
     region: process.env.AWS_REGION,
 });
 
+router.use(checkJwt);
+
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
-
 router.post("/", upload.single("file"), async (req, res) => {
     if (!req.is("multipart/form-data")) {
         return res.status(400).json({ error: "Content-Type must be multipart/form-data." });
@@ -42,6 +44,8 @@ router.post("/", upload.single("file"), async (req, res) => {
     }
 
     try {
+        const userSub = req.auth?.payload?.sub ? req.auth?.payload?.sub : undefined;
+
         const inputBuffer = req.file.buffer;
         const mimetype = req.file.mimetype;
         const originalExt = req.file.originalname.split('.').pop().toLowerCase();
@@ -91,6 +95,7 @@ router.post("/", upload.single("file"), async (req, res) => {
             description,
             imageUrl,
             date: parsedDate, // Use validated and parsed date
+            user_sub: userSub, // Save the user_sub with the record
         });
 
         res.status(201).json(savedData);
@@ -119,6 +124,7 @@ router.get("/", async (req, res) => {
             description: item.description,
             imageUrl: item.image_url,
             date: item.date,
+            user_sub: item.user_sub,
         }));
 
         res.status(200).json(images);
@@ -140,6 +146,11 @@ router.delete("/:id", async (req, res) => {
         const record = await deleteGalleryItem(id);
         if (!record) {
             return res.status(404).json({ error: "Record not found." });
+        }
+
+        const userSub = req.auth?.payload?.sub ? req.auth?.payload?.sub : undefined;
+        if (!userSub || record.user_sub !== userSub) {
+            return res.status(403).json({ error: "Unauthorized to delete this record." });
         }
 
         const image_url = record.image_url;

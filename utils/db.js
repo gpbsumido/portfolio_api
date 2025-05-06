@@ -2,14 +2,14 @@ const { pool } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 
 // Function to add a gallery item
-async function addGalleryItem({ text, description, imageUrl, date }) {
+async function addGalleryItem({ text, description, imageUrl, date, user_sub }) {
     if (!text || !description || !imageUrl || !date) {
         throw new Error("Missing required fields: title, description, imageUrl, date");
     }
 
     const result = await pool.query(
-        'INSERT INTO gallery (title, description, image_url, date) VALUES ($1, $2, $3, $4) RETURNING *',
-        [text, description, imageUrl, date]
+        'INSERT INTO gallery (title, description, image_url, date, user_sub) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [text, description, imageUrl, date, user_sub]
     );
 
     return result.rows[0];
@@ -130,7 +130,7 @@ async function deleteMedJournalEntry(id, userSub) {
 
     // First delete any associated feedback entries
     await pool.query('DELETE FROM feedback WHERE journal_entry_id = $1', [id]);
-    
+
     // Then delete the journal entry
     await pool.query('DELETE FROM med_journal WHERE id = $1 AND user_sub = $2', [id, userSub]);
 }
@@ -223,7 +223,7 @@ async function getMedJournalEntriesWithPagination(pageNumber, limitNumber, userS
     `;
 
     const { rows } = await pool.query(query, values);
-    
+
     // Format the entries with feedback
     return rows.map(row => ({
         ...row,
@@ -301,7 +301,7 @@ async function getFeedbackWithPagination(pageNumber, limitNumber, rotation, user
     values.push(limitNumber, offset);
 
     const { rows } = await pool.query(query, values);
-    
+
     // Format the feedback entries
     return {
         feedback: rows.map(row => ({
