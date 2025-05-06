@@ -23,11 +23,9 @@ const s3 = new AWS.S3({
     region: process.env.AWS_REGION,
 });
 
-router.use(checkJwt);
-
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
-router.post("/", upload.single("file"), async (req, res) => {
+router.post("/", checkJwt, upload.single("file"), async (req, res) => {
     if (!req.is("multipart/form-data")) {
         return res.status(400).json({ error: "Content-Type must be multipart/form-data." });
     }
@@ -134,7 +132,7 @@ router.get("/", async (req, res) => {
     }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", checkJwt, async (req, res) => {
     const { id } = req.params;
 
     try {
