@@ -4,5 +4,6 @@ pandas>=1.5.0
 numpy>=1.21.0
 requests>=2.28.0
 matplotlib>=3.5.0
+openai>=0.27.0
 
 # Node.js dependencies are managed in package.json 

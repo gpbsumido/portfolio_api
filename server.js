@@ -8,6 +8,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const apicache = require("apicache"); // Add apicache for caching
 const { checkJwt } = require('./middleware/auth');
+const chatgptRoutes = require('./routes/chat-gpt');
 
 // Local imports
 const nbaRoutes = require('./routes/nba');
@@ -75,6 +76,9 @@ app.use('/api/feedback', feedbackRoutes);
 
 console.log('Mounting DB routes at /api');
 app.use('/api', dbRoutes);
+
+console.log('Mounting ChatGPT routes at /api/chatgpt');
+app.use('/api/chatgpt', chatgptRoutes);
 
 // Protected routes
 app.use('/api/med-journal', medJournalRoutes);
