@@ -1,10 +1,22 @@
 const express = require("express");
 const fetch = require("node-fetch");
+const { NBA_API } = require("../constants/nba");
 const { getCachedData } = require("../utils/cache");
 const { rateLimit } = require("../utils/rateLimiter");
 
 const router = express.Router();
 
+// Get current NBA season
+function getCurrentSeason() {
+  const now = new Date();
+  const year = now.getFullYear();
+
+  // If Oct or later → new season
+  const seasonStartYear = now.getMonth() >= 9 ? year : year - 1;
+  const seasonEndYear = seasonStartYear + 1;
+
+  return `${seasonStartYear}-${seasonEndYear.toString().slice(-2)}`;
+}
 // Get current NBA season year
 function getCurrentSeasonYear() {
   const now = new Date();
@@ -15,70 +27,57 @@ function getCurrentSeasonYear() {
 
 // API rate limiting middleware
 const nbaApiLimiter = (req, res, next) => {
-    rateLimit()
-        .then(() => next())
-        .catch(err => {
-            console.error('Rate limit error:', err);
-            res.status(429).json({ error: "Too many requests" });
-        });
+  rateLimit()
+    .then(() => next())
+    .catch((err) => {
+      console.error("Rate limit error:", err);
+      res.status(429).json({ error: "Too many requests" });
+    });
 };
 
 // NBA API Proxy endpoint
 router.get("/teams", nbaApiLimiter, async (req, res, next) => {
   try {
     const data = await getCachedData("teams", async () => {
-      const year = getCurrentSeasonYear() + 1;
-      const url = `https://nba-api-free-data.p.rapidapi.com/nba-league-standings?year=${year}`;
-
-      console.log("[teams] Calling RapidAPI", { url });
-      const fetchStart = Date.now();
-
+      const startTime = Date.now();
+      const url =
+        "https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=2024-25&SeasonType=Regular+Season";
       const response = await fetch(url, {
-        headers: {
-          "x-rapidapi-host": "nba-api-free-data.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
-        },
+        headers: NBA_API.HEADERS,
       });
 
-      console.log("[teams] RapidAPI responded", {
-        status: response.status,
-        statusText: response.statusText,
-        duration: `${Date.now() - fetchStart}ms`,
-      });
-
-      if (!response.ok) {
-        const body = await response.text();
-        console.error("[teams] Non-OK response body:", body.slice(0, 500));
-        throw new Error(`RapidAPI request failed: ${response.status} ${response.statusText}`);
-      }
-
+      console.log("Parsing NBA API response");
+      const parseStartTime = Date.now();
       const data = await response.json();
+      const parseDuration = Date.now() - parseStartTime;
+      console.log("Response parsed", { duration: `${parseDuration}ms` });
 
-      if (data.status !== "success") {
-        console.error("[teams] RapidAPI returned non-success status:", data.status, JSON.stringify(data).slice(0, 300));
-        throw new Error(`RapidAPI error: ${data.status}`);
+      if (!data.resultSets?.[0]?.rowSet) {
+        throw new Error("Invalid response format from NBA API [Teams]");
       }
 
-      const entries = data.response?.standings?.entries;
-      if (!Array.isArray(entries)) {
-        console.error("[teams] Unexpected response shape:", JSON.stringify(data).slice(0, 500));
-        throw new Error("Invalid response format from RapidAPI [Teams]");
-      }
-
-      console.log("[teams] Raw entry count:", entries.length);
-
-      const teams = entries.map((entry) => ({
-        id: entry.team.id,
-        name: entry.team.name,
-        full_name: entry.team.displayName,
-        abbreviation: entry.team.abbreviation,
-        city: entry.team.location,
-        conference: "Unknown",
-        division: "Unknown",
-        logo: entry.team.logos?.[0]?.href ?? null,
+      console.log("Transforming team data");
+      const transformStartTime = Date.now();
+      const teams = data.resultSets[0].rowSet.map((row) => ({
+        id: parseInt(row[2]),
+        name: row[4],
+        full_name: `${row[3]} ${row[4]}`,
+        abbreviation: row[5],
+        city: row[3],
+        conference: row[6],
+        division: row[10],
       }));
+      const transformDuration = Date.now() - transformStartTime;
+      console.log("Team data transformed", {
+        teamCount: teams.length,
+        duration: `${transformDuration}ms`,
+      });
 
-      console.log("[teams] Teams mapped", { count: teams.length });
+      const totalDuration = Date.now() - startTime;
+      console.log("Teams fetch process completed", {
+        totalDuration: `${totalDuration}ms`,
+        teamCount: teams.length,
+      });
 
       return {
         data: teams,
@@ -94,10 +93,6 @@ router.get("/teams", nbaApiLimiter, async (req, res, next) => {
 
     res.status(200).json({ data: data });
   } catch (error) {
-    console.error("[teams] Route error:", {
-      message: error.message,
-      stack: error.stack,
-    });
     next(error);
   }
 });
@@ -105,84 +100,79 @@ router.get("/teams", nbaApiLimiter, async (req, res, next) => {
 // Team players endpoint
 router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
   try {
-    const { teamId } = req.params;
+    const teamId = parseInt(req.params.teamId);
 
-    if (!teamId) {
-      console.warn("[players] Missing teamId param");
+    if (isNaN(teamId)) {
       return res.status(400).json({ error: "Invalid team ID" });
     }
 
-    console.log("[players] Fetching roster", { teamId });
-
     const data = await getCachedData(`team-players-${teamId}`, async () => {
-      const url = `https://nba-api-free-data.p.rapidapi.com/nba-player-list?teamid=${teamId}`;
+      const url = new URL(`${NBA_API.BASE_URL}/commonteamroster`);
+      url.searchParams.append("LeagueID", "00");
+      url.searchParams.append("Season", "2024-25");
+      url.searchParams.append("TeamID", teamId.toString());
 
-      console.log("[players] Calling RapidAPI", { url });
-      const fetchStart = Date.now();
-
-      const response = await fetch(url, {
-        headers: {
-          "x-rapidapi-host": "nba-api-free-data.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
-        },
-      });
-
-      console.log("[players] RapidAPI responded", {
-        status: response.status,
-        statusText: response.statusText,
-        duration: `${Date.now() - fetchStart}ms`,
+      const response = await fetch(url.toString(), {
+        headers: NBA_API.HEADERS,
       });
 
       if (!response.ok) {
-        const body = await response.text();
-        console.error("[players] Non-OK response body:", body.slice(0, 500));
-        throw new Error(`RapidAPI request failed: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch team players: ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
 
-      if (data.status !== "success") {
-        console.error("[players] RapidAPI returned non-success status:", data.status, JSON.stringify(data).slice(0, 300));
-        throw new Error(`RapidAPI error: ${data.status}`);
+      if (!data.resultSets?.[0]?.rowSet || !data.resultSets[0].headers) {
+        throw new Error("Invalid response format from NBA API [Players]");
       }
 
-      const playerList = data.response?.PlayerList;
-      if (!Array.isArray(playerList)) {
-        console.error("[players] Unexpected response shape:", JSON.stringify(data).slice(0, 500));
-        throw new Error("Invalid response format from RapidAPI [Players]");
-      }
+      const headers = data.resultSets[0].headers;
+      const getColumnIndex = (name) => {
+        const index = headers.indexOf(name);
+        if (index === -1) {
+          throw new Error(`Column '${name}' not found in API response`);
+        }
+        return index;
+      };
 
-      console.log("[players] Raw player count:", playerList.length);
+      const players = data.resultSets[0].rowSet
+        .map((row) => {
+          try {
+            const playerId = row[getColumnIndex("PLAYER_ID")];
+            const playerName = row[getColumnIndex("PLAYER")];
+            const position = row[getColumnIndex("POSITION")];
+            const height = row[getColumnIndex("HEIGHT")];
+            const teamId = row[getColumnIndex("TeamID")];
 
-      const players = playerList.map((p) => {
-        // Parse "7' 0\"" → feet=7, inches=0
-        const heightParts = p.displayHeight?.split("'") ?? [];
-        const height_feet = heightParts[0] ? parseInt(heightParts[0]) : null;
-        const height_inches = heightParts[1] ? parseInt(heightParts[1]) : null;
+            if (!playerName) {
+              throw new Error("Player name is missing");
+            }
 
-        return {
-          id: p.id,
-          first_name: p.firstName,
-          last_name: p.lastName,
-          position: "N/A",
-          height_feet,
-          height_inches,
-          age: p.age ?? null,
-          salary: p.salary ?? null,
-          image: p.image ?? null,
-          team: {
-            id: teamId,
-            name: "Unknown",
-            full_name: "Unknown",
-            abbreviation: "Unknown",
-            city: "Unknown",
-            conference: "Unknown",
-            division: "Unknown",
-          },
-        };
-      });
-
-      console.log("[players] Players mapped", { count: players.length });
+            return {
+              id: playerId,
+              first_name: playerName.split(" ")[0],
+              last_name: playerName.split(" ").slice(1).join(" "),
+              position: position || "N/A",
+              height_feet: height ? parseInt(height.split("-")[0]) : null,
+              height_inches: height ? parseInt(height.split("-")[1]) : null,
+              team: {
+                id: teamId,
+                name: "Unknown",
+                full_name: "Unknown",
+                abbreviation: "Unknown",
+                city: "Unknown",
+                conference: "Unknown",
+                division: "Unknown",
+              },
+            };
+          } catch (error) {
+            console.error("Error processing player row:", error);
+            return null;
+          }
+        })
+        .filter((player) => player !== null);
 
       return {
         data: players,
@@ -198,11 +188,6 @@ router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
 
     res.status(200).json(data);
   } catch (error) {
-    console.error("[players] Route error:", {
-      teamId: req.params.teamId,
-      message: error.message,
-      stack: error.stack,
-    });
     next(error);
   }
 });
@@ -210,109 +195,95 @@ router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
 // Player stats endpoint
 router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
   try {
-    const { playerId } = req.params;
+    const playerId = parseInt(req.params.playerId);
 
-    if (!playerId) {
-      console.warn("[stats] Missing playerId param");
+    if (isNaN(playerId)) {
       return res.status(400).json({ error: "Invalid player ID" });
     }
 
-    console.log("[stats] Fetching stats", { playerId });
-
     const data = await getCachedData(`player-stats-${playerId}`, async () => {
-      const url = `https://nba-api-free-data.p.rapidapi.com/nba-player-splits?playerid=${playerId}`;
+      await rateLimit();
 
-      console.log("[stats] Calling RapidAPI", { url });
-      const fetchStart = Date.now();
+      const url = new URL(`${NBA_API.BASE_URL}/playerdashboardbygeneralsplits`);
+      const queryParams = {
+        DateFrom: "",
+        DateTo: "",
+        GameSegment: "",
+        LastNGames: "0",
+        LeagueID: "00",
+        Location: "",
+        MeasureType: "Base",
+        Month: "0",
+        OpponentTeamID: "0",
+        Outcome: "",
+        PORound: "0",
+        PaceAdjust: "N",
+        PerMode: "PerGame",
+        Period: "0",
+        PlayerID: playerId.toString(),
+        PlusMinus: "N",
+        Rank: "N",
+        Season: getCurrentSeason(),
+        SeasonSegment: "",
+        SeasonType: "Regular Season",
+        ShotClockRange: "",
+        Split: "general",
+        VsConference: "",
+        VsDivision: "",
+      };
 
-      const response = await fetch(url, {
-        headers: {
-          "x-rapidapi-host": "nba-api-free-data.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
-        },
+      Object.entries(queryParams).forEach(([key, value]) => {
+        url.searchParams.append(key, value);
       });
 
-      console.log("[stats] RapidAPI responded", {
-        status: response.status,
-        statusText: response.statusText,
-        duration: `${Date.now() - fetchStart}ms`,
+      const response = await fetch(url.toString(), {
+        headers: NBA_API.HEADERS,
       });
 
       if (!response.ok) {
-        const body = await response.text();
-        console.error("[stats] Non-OK response body:", body.slice(0, 500));
-        throw new Error(`RapidAPI request failed: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch player stats: ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
 
-      if (data.status !== "success") {
-        console.error("[stats] RapidAPI returned non-success status:", data.status, JSON.stringify(data).slice(0, 300));
-        throw new Error(`RapidAPI error: ${data.status}`);
+      if (!data.resultSets?.[0]?.rowSet?.[0]) {
+        throw new Error("Invalid response format from NBA API [Stats]");
       }
 
-      const allSplits = data.response?.splits?.splitCategories
-        ?.find((c) => c.name === "split")
-        ?.splits?.find((s) => s.abbreviation === "Total");
-
-      if (!allSplits) {
-        console.warn("[stats] No stats found for player", { playerId });
-        return {
-          data: [],
-          meta: {
-            total_pages: 1,
-            current_page: 1,
-            next_page: null,
-            per_page: 0,
-            total_count: 0,
-          },
-        };
-      }
-
-      const s = allSplits.stats;
-      // s indices: 0=GP, 1=MIN, 2=FGM-FGA, 3=FG%, 4=3PM-3PA, 5=3P%,
-      //            6=FTM-FTA, 7=FT%, 8=OREB, 9=DREB, 10=REB,
-      //            11=AST, 12=BLK, 13=STL, 14=PF, 15=TO, 16=PTS
-      const [fgm, fga] = s[2].split("-").map(parseFloat);
-      const [fg3m, fg3a] = s[4].split("-").map(parseFloat);
-      const [ftm, fta] = s[6].split("-").map(parseFloat);
-      const pts = parseFloat(s[16]) || 0;
-      const reb = parseFloat(s[10]) || 0;
-      const ast = parseFloat(s[11]) || 0;
-      const stl = parseFloat(s[13]) || 0;
-      const blk = parseFloat(s[12]) || 0;
+      const seasonStats = data.resultSets[0].rowSet[0];
+      const pts = parseFloat(seasonStats[26]) || 0;
+      const reb = parseFloat(seasonStats[18]) || 0;
+      const ast = parseFloat(seasonStats[19]) || 0;
+      const stl = parseFloat(seasonStats[20]) || 0;
+      const blk = parseFloat(seasonStats[21]) || 0;
       const fantasyPoints = pts * 1 + reb * 1.2 + ast * 1.5 + stl * 3 + blk * 3;
-
-      const seasonYear = parseInt(
-        data.response?.splits?.filters?.find((f) => f.name === "season")?.value,
-      ) - 1 || getCurrentSeasonYear();
-
-      console.log("[stats] Computed stats", { playerId, pts, reb, ast, stl, blk, fantasyPoints });
 
       return {
         data: [
           {
-            games_played: parseInt(s[0]) || 0,
+            games_played: parseInt(seasonStats[2]) || 0,
             player_id: playerId,
-            season: seasonYear,
-            min: parseFloat(s[1]) || 0,
-            fgm: fgm || 0,
-            fga: fga || 0,
-            fg_pct: parseFloat(s[3]) / 100 || 0,
-            fg3m: fg3m || 0,
-            fg3a: fg3a || 0,
-            fg3_pct: parseFloat(s[5]) / 100 || 0,
-            ftm: ftm || 0,
-            fta: fta || 0,
-            ft_pct: parseFloat(s[7]) / 100 || 0,
-            oreb: parseFloat(s[8]) || 0,
-            dreb: parseFloat(s[9]) || 0,
+            season: getCurrentSeasonYear(),
+            min: seasonStats[6] || "0:00",
+            fgm: parseFloat(seasonStats[7]) || 0,
+            fga: parseFloat(seasonStats[8]) || 0,
+            fg_pct: parseFloat(seasonStats[9]) || 0,
+            fg3m: parseFloat(seasonStats[10]) || 0,
+            fg3a: parseFloat(seasonStats[11]) || 0,
+            fg3_pct: parseFloat(seasonStats[12]) || 0,
+            ftm: parseFloat(seasonStats[13]) || 0,
+            fta: parseFloat(seasonStats[14]) || 0,
+            ft_pct: parseFloat(seasonStats[15]) || 0,
+            oreb: parseFloat(seasonStats[16]) || 0,
+            dreb: parseFloat(seasonStats[17]) || 0,
             reb,
             ast,
-            turnover: parseFloat(s[15]) || 0,
-            stl,
-            blk,
-            pf: parseFloat(s[14]) || 0,
+            turnover: parseFloat(seasonStats[20]) || 0,
+            stl: parseFloat(seasonStats[21]) || 0,
+            blk: parseFloat(seasonStats[22]) || 0,
+            pf: parseFloat(seasonStats[24]) || 0,
             pts,
             fantasy_points: fantasyPoints,
           },
@@ -329,13 +300,8 @@ router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
 
     res.status(200).json(data);
   } catch (error) {
-    console.error("[stats] Route error:", {
-      playerId: req.params.playerId,
-      message: error.message,
-      stack: error.stack,
-    });
     next(error);
   }
 });
 
-module.exports = router; 
+module.exports = router;
