@@ -1,5 +1,4 @@
 const express = require("express");
-const fetch = require("node-fetch");
 const { NBA_API } = require("../constants/nba");
 const { getCachedData } = require("../utils/cache");
 const { rateLimit } = require("../utils/rateLimiter");
