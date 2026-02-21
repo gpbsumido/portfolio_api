@@ -6,6 +6,7 @@
 - `routes/gallery.js` + `utils/db.js` — gallery delete was calling delete before checking ownership. added `getGalleryItemById`, fetch the record first, check owner, then delete
 - `routes/db.js` — add auth check to marker delete
 - `init.sql` — added missing `gallery`, `med_journal`, and `feedback` table definitions; deploys were hitting runtime errors on those routes
+- apply improved CORS to only my websites
 
 ## 2026-02-21
 
