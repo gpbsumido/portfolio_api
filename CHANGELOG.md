@@ -3,6 +3,7 @@
 ## 2026-02-21 (pt. 2)
 
 - `server.js` — fix wrong param name `_req`
+- `routes/gallery.js` + `utils/db.js` — gallery delete was calling delete before checking ownership. added `getGalleryItemById`, fetch the record first, check owner, then delete
 
 ## 2026-02-21
 
