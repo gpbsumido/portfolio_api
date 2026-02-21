@@ -4,7 +4,7 @@
 
 - `server.js` — fix wrong param name `_req`
 - `routes/gallery.js` + `utils/db.js` — gallery delete was calling delete before checking ownership. added `getGalleryItemById`, fetch the record first, check owner, then delete
-- `routes/db.js` — add auth check to marker delete
+- `routes/db.js` — add auth check to marker delete; postforum POST now requires JWT and derives username from `req.auth.payload.sub` instead of trusting the request body
 - `init.sql` — added missing `gallery`, `med_journal`, and `feedback` table definitions; deploys were hitting runtime errors on those routes
 - apply improved CORS to only my websites
 - `routes/chat-gpt.js` added length check

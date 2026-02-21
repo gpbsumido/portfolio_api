@@ -42,13 +42,15 @@ router.get("/postforum", async (req, res, next) => {
   }
 });
 
-router.post("/postforum", async (req, res, next) => {
+router.post("/postforum", checkJwt, async (req, res, next) => {
   try {
-    const { title, text, username } = req.body;
-    if (!title || !text || !username) {
+    const { title, text } = req.body;
+    const username = req.auth.payload.sub;
+
+    if (!title || !text) {
       return res.status(400).json({
         error: "Missing required fields",
-        required: ["title", "text", "username"],
+        required: ["title", "text"],
       });
     }
 
