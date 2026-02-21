@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-02-21 (pt. 2)
+
+- `server.js` — fix wrong param name `_req`
+
 ## 2026-02-21
 
 - removed duplicate `medJournalRoutes` mount in `server.js` — it was registered twice and the second one skipped auth
