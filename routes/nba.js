@@ -1,7 +1,7 @@
 const express = require("express");
 const { NBA_API } = require("../constants/nba");
 const { getCachedData } = require("../utils/cache");
-const { rateLimit } = require("../utils/rateLimiter");
+const { nbaIpLimiter, throttledFetch } = require("../utils/rateLimiter");
 
 const router = express.Router();
 
@@ -24,25 +24,15 @@ function getCurrentSeasonYear() {
   return now.getMonth() >= 9 ? year : year - 1;
 }
 
-// API rate limiting middleware
-const nbaApiLimiter = (req, res, next) => {
-  rateLimit()
-    .then(() => next())
-    .catch((err) => {
-      console.error("Rate limit error:", err);
-      res.status(429).json({ error: "Too many requests" });
-    });
-};
-
 // NBA API Proxy endpoint
-router.get("/teams", nbaApiLimiter, async (req, res, next) => {
+router.get("/teams", nbaIpLimiter, async (req, res, next) => {
   try {
     const data = await getCachedData("teams", async () => {
       const startTime = Date.now();
       const season = getCurrentSeason();
       const url =
         `https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=${season}&SeasonType=Regular+Season`;
-      const response = await fetch(url, {
+      const response = await throttledFetch(url, {
         headers: NBA_API.HEADERS,
       });
 
@@ -98,7 +88,7 @@ router.get("/teams", nbaApiLimiter, async (req, res, next) => {
 });
 
 // Team players endpoint
-router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
+router.get("/players/:teamId", nbaIpLimiter, async (req, res, next) => {
   try {
     const teamId = parseInt(req.params.teamId);
 
@@ -112,7 +102,7 @@ router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
       url.searchParams.append("Season", getCurrentSeason());
       url.searchParams.append("TeamID", teamId.toString());
 
-      const response = await fetch(url.toString(), {
+      const response = await throttledFetch(url.toString(), {
         headers: NBA_API.HEADERS,
       });
 
@@ -193,7 +183,7 @@ router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
 });
 
 // Player stats endpoint
-router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
+router.get("/stats/:playerId", nbaIpLimiter, async (req, res, next) => {
   try {
     const playerId = parseInt(req.params.playerId);
 
@@ -202,8 +192,6 @@ router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
     }
 
     const data = await getCachedData(`player-stats-${playerId}`, async () => {
-      await rateLimit();
-
       const url = new URL(`${NBA_API.BASE_URL}/playerdashboardbygeneralsplits`);
       const queryParams = {
         DateFrom: "",
@@ -236,7 +224,7 @@ router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
         url.searchParams.append(key, value);
       });
 
-      const response = await fetch(url.toString(), {
+      const response = await throttledFetch(url.toString(), {
         headers: NBA_API.HEADERS,
       });
 

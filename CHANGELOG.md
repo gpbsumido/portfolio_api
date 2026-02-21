@@ -15,6 +15,7 @@
 - `utils/db.js` — wrapped `deleteMedJournalEntry` and `saveOrUpdateMedJournalEntry` in transactions; previously a failure mid-way could leave orphaned feedback rows or a journal entry with no matching feedback
 - `routes/gallery.js` — migrated from `aws-sdk` v2 to `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` v3; v2 is in maintenance mode
 - `routes/db.js` — added pagination to `GET /postforum` (`page` + `limit` query params, defaults 1/20); was returning every row
+- `utils/rateLimiter.js` — replaced 1-second unconditional delay with `express-rate-limit` (60 req / 5 min per IP) for inbound requests and `p-throttle` (1 req/s) for outbound calls to the NBA Stats API
 - apply improved CORS to only my websites
 - `routes/chat-gpt.js` added length check
 

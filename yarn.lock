@@ -2610,7 +2610,14 @@ express-oauth2-jwt-bearer@^1.6.1:
   dependencies:
     jose "^4.15.5"
 
-express@^4.18.2:
+express-rate-limit@^8.2.1:
+  version "8.2.1"
+  resolved "https://registry.npmjs.org/express-rate-limit/-/express-rate-limit-8.2.1.tgz"
+  integrity sha512-PCZEIEIxqwhzw4KF0n7QF4QqruVTcF73O5kFKUnGOyjbCCgizBBiFaYpd/fnBLUMPw/BWw9OsiN7GgrNYr7j6g==
+  dependencies:
+    ip-address "10.0.1"
+
+express@^4.18.2, "express@>= 4.11":
   version "4.21.2"
   resolved "https://registry.npmjs.org/express/-/express-4.21.2.tgz"
   integrity sha512-28HqgMZAmih1Czt9ny7qr6ek2qddF4FclbMzwhCREB6OFfH+rXAnuNCwo1/wFvrtbgsQDb4kSbX9de9lFbrXnA==
@@ -2940,6 +2947,11 @@ inherits@^2.0.3, inherits@~2.0.3, inherits@~2.0.4, inherits@2, inherits@2.0.4:
   version "2.0.4"
   resolved "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz"
   integrity sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==
+
+ip-address@10.0.1:
+  version "10.0.1"
+  resolved "https://registry.npmjs.org/ip-address/-/ip-address-10.0.1.tgz"
+  integrity sha512-NWv9YLW4PoW2B7xtzaS3NCot75m6nK7Icdv0o3lfMceJVRfSoQwqD4wEH5rLwoKJwUiZ/rfpiVBhnaF0FK4HoA==
 
 ipaddr.js@1.9.1:
   version "1.9.1"
@@ -3791,6 +3803,11 @@ p-locate@^4.1.0:
   integrity sha512-R79ZZ/0wAxKGu3oYMlz8jy/kbhsNrS7SKZ7PxEHBgJ5+F2mtFW2fK2cOtBh1cHYkQsbzFV7I+EoRKe6Yt0oK7A==
   dependencies:
     p-limit "^2.2.0"
+
+p-throttle@^4.1.1:
+  version "4.1.1"
+  resolved "https://registry.npmjs.org/p-throttle/-/p-throttle-4.1.1.tgz"
+  integrity sha512-TuU8Ato+pRTPJoDzYD4s7ocJYcNSEZRvlxoq3hcPI2kZDZ49IQ1Wkj7/gDJc3X7XiEAAvRGtDzdXJI0tC3IL1g==
 
 p-try@^2.0.0:
   version "2.2.0"
