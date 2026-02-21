@@ -10,6 +10,7 @@
 - `routes/nba.js` — removed leftover `require('node-fetch')`; Node 18 has fetch built in and the package was removed
 - `routes/f1.js` — removed `installPythonDeps()` startup call; Dockerfile already runs pip at build time so its uneccessary on boot
 - `routes/nba.js` — fixed bug in `/stats/:playerId`: swapped all hardcoded indices in that endpoint to use `getColumnIndex` by header name, same as the players endpoint
+- `docker-compose.yml` — added `db` service (postgres:15) with `init.sql` mounted so `docker compose up` works locally without an external DB; app now waits on the healthcheck before starting
 - apply improved CORS to only my websites
 - `routes/chat-gpt.js` added length check
 
