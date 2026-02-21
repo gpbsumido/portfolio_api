@@ -108,7 +108,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/postforum` | — | Fetch all forum posts |
-| POST | `/postforum` | — | Create a forum post |
+| POST | `/postforum` | Required | Create a forum post |
 | GET | `/markers` | — | Fetch all map markers |
 | POST | `/markers` | — | Add a map marker |
 | DELETE | `/markers/:id` | — | Delete a marker |
@@ -169,6 +169,14 @@ OPENAI_API_KEY=
 ```bash
 npm run dev
 ```
+
+### Tests
+
+```bash
+npm test
+```
+
+Covers the fantasy scoring engine (`calculateQualifyingPoints`, `calculateRacePoints`) — DNF variants, disqualification, fastest lap, driver of the day, positions gained/lost, overtakes, and combined scenarios.
 
 ### Docker
 
