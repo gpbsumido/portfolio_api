@@ -40,8 +40,9 @@ router.get("/teams", nbaApiLimiter, async (req, res, next) => {
   try {
     const data = await getCachedData("teams", async () => {
       const startTime = Date.now();
+      const season = getCurrentSeason();
       const url =
-        "https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=2024-25&SeasonType=Regular+Season";
+        `https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=${season}&SeasonType=Regular+Season`;
       const response = await fetch(url, {
         headers: NBA_API.HEADERS,
       });
@@ -109,7 +110,7 @@ router.get("/players/:teamId", nbaApiLimiter, async (req, res, next) => {
     const data = await getCachedData(`team-players-${teamId}`, async () => {
       const url = new URL(`${NBA_API.BASE_URL}/commonteamroster`);
       url.searchParams.append("LeagueID", "00");
-      url.searchParams.append("Season", "2024-25");
+      url.searchParams.append("Season", getCurrentSeason());
       url.searchParams.append("TeamID", teamId.toString());
 
       const response = await fetch(url.toString(), {

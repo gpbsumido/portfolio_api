@@ -6,9 +6,7 @@ const path = require("path");
 const compression = require("compression");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const apicache = require("apicache"); // Add apicache for caching
-const { checkJwt } = require('./middleware/auth');
-const chatgptRoutes = require('./routes/chat-gpt');
+const apicache = require("apicache");
 
 // Local imports
 const nbaRoutes = require('./routes/nba');
@@ -19,6 +17,7 @@ const fantasyRoutes = require('./routes/fantasy');
 const galleryRoutes = require('./routes/gallery');
 const medJournalRoutes = require('./routes/med-journal');
 const feedbackRoutes = require('./routes/feedback');
+const chatgptRoutes = require('./routes/chat-gpt');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -46,75 +45,44 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Logging middleware
 app.use(morgan('dev'));
 
-// Log all registered routes
-app.use((req, res, next) => {
-    console.log(`Route accessed: ${req.method} ${req.path}`);
-    next();
-});
-
 // Routes
-console.log('Mounting NBA routes at /api/nba');
 app.use('/api/nba', nbaRoutes);
-
-console.log('Mounting YouTube routes at /api/youtube');
 app.use('/api/youtube', youtubeRoutes);
-
-console.log('Mounting F1 routes at /api/f1');
 app.use('/api/f1', f1Routes);
-
-console.log('Mounting Fantasy F1 routes at /api/fantasy');
 app.use('/api/fantasy', fantasyRoutes);
-
-console.log('Mounting Gallery routes at /api/gallery');
 app.use('/api/gallery', galleryRoutes);
-
-console.log('Mounting Med Journal routes at /api/gallery');
 app.use('/api/med-journal', medJournalRoutes);
-
-console.log('Mounting Feedback routes at /api/feedback');
 app.use('/api/feedback', feedbackRoutes);
-
-console.log('Mounting DB routes at /api');
+app.use('/api/chatgpt', chatgptRoutes);
 app.use('/api', dbRoutes);
 
-console.log('Mounting ChatGPT routes at /api/chatgpt');
-app.use('/api/chatgpt', chatgptRoutes);
-
-// Protected routes
-app.use('/api/med-journal', medJournalRoutes);
-
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
     if (err.name === 'UnauthorizedError') {
         return res.status(401).json({
             error: 'Unauthorized',
             message: 'Invalid or missing token'
         });
     }
-    console.error('ERROR DETAILS:', {
+    console.error('Unhandled error:', {
         message: err.message,
-        stack: err.stack,
         code: err.code,
         path: req.path,
         method: req.method,
-        body: req.body,
-        query: req.query
     });
 
     res.status(500).json({
-        error: `Oops! Something went wrong! ${err.message}`,
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
 });
 
 // 404 handler
-app.use((req, res) => {
-    console.log('404 - Route not found:', req.method, req.path);
-    res.status(404).json({ error: "Not Found" });
+app.use((_req, res) => {
+    res.status(404).json({ error: 'Not Found' });
 });
 
 // Start server
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Server running on port ${port} [${process.env.NODE_ENV || 'development'}]`);
 });

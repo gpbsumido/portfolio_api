@@ -1,16 +1,9 @@
 const express = require('express');
 const { pool } = require('../config/database');
+const { checkJwt } = require('../middleware/auth');
 const router = express.Router();
 
-// Log route registration
-console.log('Registering DB routes:');
-console.log('  GET /postforum');
-console.log('  POST /postforum');
-console.log('  POST /query');
-console.log('  GET /tables');
-console.log('  GET /table/:tableName');
-
-router.get("/tables", async (req, res, next) => {
+router.get("/tables", checkJwt, async (req, res, next) => {
   try {
     const result = await pool.query(`
       SELECT table_name 
@@ -23,7 +16,7 @@ router.get("/tables", async (req, res, next) => {
   }
 });
 
-router.get("/table/:tableName", async (req, res, next) => {
+router.get("/table/:tableName", checkJwt, async (req, res, next) => {
   try {
     const { tableName } = req.params;
     const result = await pool.query(`
