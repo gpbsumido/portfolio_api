@@ -74,72 +74,83 @@ async function saveOrUpdateMedJournalEntry(entry, userSub) {
     throw new Error("Invalid entry data or missing user sub");
   }
 
-  let entryId;
-  if (entry.id) {
-    // Update existing journal entry
-    await pool.query(
-      `UPDATE med_journal 
-             SET "patientSetting" = $1, "interaction" = $2, "canmedsRoles" = $3, "learningObjectives" = $4, 
-                 "rotation" = $5, "date" = $6, "location" = $7, "hospital" = $8, "doctor" = $9, 
-                 "whatIDidWell" = $10, "whatICouldImprove" = $11 
-             WHERE "id" = $12 AND "user_sub" = $13`,
-      [
-        entry.patientSetting,
-        entry.interaction,
-        JSON.stringify(entry.canmedsRoles),
-        JSON.stringify(entry.learningObjectives),
-        entry.rotation,
-        entry.date,
-        entry.location,
-        entry.hospital,
-        entry.doctor,
-        entry.whatIDidWell,
-        entry.whatICouldImprove,
-        entry.id,
-        userSub,
-      ],
-    );
-    entryId = entry.id;
-  } else {
-    // Insert new journal entry
-    entryId = uuidv4();
-    await pool.query(
-      `INSERT INTO med_journal 
-             ("id", "patientSetting", "interaction", "canmedsRoles", "learningObjectives", "rotation", "date", "location", "hospital", "doctor", 
-              "whatIDidWell", "whatICouldImprove", "user_sub") 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [
-        entryId,
-        entry.patientSetting,
-        entry.interaction,
-        JSON.stringify(entry.canmedsRoles),
-        JSON.stringify(entry.learningObjectives),
-        entry.rotation,
-        entry.date,
-        entry.location,
-        entry.hospital,
-        entry.doctor,
-        entry.whatIDidWell,
-        entry.whatICouldImprove,
-        userSub,
-      ],
-    );
-    entry.id = entryId;
-  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
 
-  // If feedback text is provided, create a feedback entry
-  if (entry.feedbackText) {
-    await addFeedback({
-      text: entry.feedbackText,
-      rotation: entry.rotation,
-      journal_entry_id: entryId,
-      user_sub: userSub,
-    });
-  }
+    let entryId;
+    if (entry.id) {
+      // Update existing journal entry
+      await client.query(
+        `UPDATE med_journal
+               SET "patientSetting" = $1, "interaction" = $2, "canmedsRoles" = $3, "learningObjectives" = $4,
+                   "rotation" = $5, "date" = $6, "location" = $7, "hospital" = $8, "doctor" = $9,
+                   "whatIDidWell" = $10, "whatICouldImprove" = $11
+               WHERE "id" = $12 AND "user_sub" = $13`,
+        [
+          entry.patientSetting,
+          entry.interaction,
+          JSON.stringify(entry.canmedsRoles),
+          JSON.stringify(entry.learningObjectives),
+          entry.rotation,
+          entry.date,
+          entry.location,
+          entry.hospital,
+          entry.doctor,
+          entry.whatIDidWell,
+          entry.whatICouldImprove,
+          entry.id,
+          userSub,
+        ],
+      );
+      entryId = entry.id;
+    } else {
+      // Insert new journal entry
+      entryId = uuidv4();
+      await client.query(
+        `INSERT INTO med_journal
+               ("id", "patientSetting", "interaction", "canmedsRoles", "learningObjectives", "rotation", "date", "location", "hospital", "doctor",
+                "whatIDidWell", "whatICouldImprove", "user_sub")
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          entryId,
+          entry.patientSetting,
+          entry.interaction,
+          JSON.stringify(entry.canmedsRoles),
+          JSON.stringify(entry.learningObjectives),
+          entry.rotation,
+          entry.date,
+          entry.location,
+          entry.hospital,
+          entry.doctor,
+          entry.whatIDidWell,
+          entry.whatICouldImprove,
+          userSub,
+        ],
+      );
+      entry.id = entryId;
+    }
 
-  // Fetch the complete entry with any associated feedback
-  const completeEntry = await getMedJournalEntryById(entryId, userSub);
-  return completeEntry;
+    // If feedback text is provided, create a feedback entry within the same transaction
+    if (entry.feedbackText) {
+      const feedbackId = uuidv4();
+      await client.query(
+        `INSERT INTO feedback (id, text, rotation, journal_entry_id, user_sub)
+               VALUES ($1, $2, $3, $4, $5)`,
+        [feedbackId, entry.feedbackText, entry.rotation, entryId, userSub],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const completeEntry = await getMedJournalEntryById(entryId, userSub);
+    return completeEntry;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // Function to delete a med journal entry by ID
@@ -148,14 +159,18 @@ async function deleteMedJournalEntry(id, userSub) {
     throw new Error("Missing ID or user sub for deletion");
   }
 
-  // First delete any associated feedback entries
-  await pool.query("DELETE FROM feedback WHERE journal_entry_id = $1", [id]);
-
-  // Then delete the journal entry
-  await pool.query("DELETE FROM med_journal WHERE id = $1 AND user_sub = $2", [
-    id,
-    userSub,
-  ]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM feedback WHERE journal_entry_id = $1", [id]);
+    await client.query("DELETE FROM med_journal WHERE id = $1 AND user_sub = $2", [id, userSub]);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // Function to fetch a med journal entry by ID
