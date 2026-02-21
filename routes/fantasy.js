@@ -1,6 +1,5 @@
 const express = require('express');
-const { spawn } = require('child_process');
-const path = require('path');
+const { runPythonScriptQueued, MEMORY_ERROR_MESSAGES } = require('../utils/pythonQueue');
 
 const router = express.Router();
 
@@ -116,30 +115,11 @@ function calculateRacePoints(raceResult, qualifyingResult) {
 }
 
 // Route to calculate fantasy points for a specific race
-router.get('/points/:year/:round', async (req, res) => {
+router.get('/points/:year/:round', async (req, res, next) => {
     const { year, round } = req.params;
 
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'f1', 'get_fantasy_data.py');
-    const python = spawn('python3', [scriptPath, year, round]);
-
-    let data = '';
-    let error = '';
-
-    python.stdout.on('data', (chunk) => { data += chunk; });
-    python.stderr.on('data', (chunk) => { error += chunk; });
-
-    python.on('close', (code) => {
-        if (code !== 0) {
-            console.error('Fantasy data script error:', error);
-            return res.status(500).json({ error: 'Error fetching race data', details: error });
-        }
-
-        let results;
-        try {
-            results = JSON.parse(data);
-        } catch (err) {
-            return res.status(500).json({ error: 'Failed to parse race data', details: err.message });
-        }
+    try {
+        const results = await runPythonScriptQueued('get_fantasy_data.py', [year, round]);
 
         if (results.error) {
             return res.status(500).json({ error: results.error });
@@ -167,7 +147,16 @@ router.get('/points/:year/:round', async (req, res) => {
             points: fantasyPoints,
             unprocessed: results,
         });
-    });
+    } catch (error) {
+        if (error.message === MEMORY_ERROR_MESSAGES.QUEUE_TIMEOUT) {
+            return res.status(503).json({
+                error: 'Request timeout',
+                details: 'The request took too long due to high server load.',
+                suggestion: 'Please try again later',
+            });
+        }
+        next(error);
+    }
 });
 
 module.exports = router;
