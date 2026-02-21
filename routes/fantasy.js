@@ -2,6 +2,8 @@ const express = require('express');
 const { runPythonScriptQueued, MEMORY_ERROR_MESSAGES } = require('../utils/pythonQueue');
 const { calculateQualifyingPoints, calculateRacePoints } = require('../utils/fantasyScoring');
 
+const router = express.Router();
+
 // Route to calculate fantasy points for a specific race
 router.get('/points/:year/:round', async (req, res, next) => {
     const { year, round } = req.params;
