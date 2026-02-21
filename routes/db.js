@@ -34,9 +34,29 @@ router.get("/table/:tableName", checkJwt, async (req, res, next) => {
 });
 
 router.get("/postforum", async (req, res, next) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
+
+  if (page < 1 || limit < 1) {
+    return res.status(400).json({ error: "page and limit must be positive integers" });
+  }
+
+  const offset = (page - 1) * limit;
+
   try {
-    const result = await pool.query("SELECT * FROM postforum ORDER BY id DESC");
-    res.status(200).json(result.rows);
+    const [dataResult, countResult] = await Promise.all([
+      pool.query("SELECT * FROM postforum ORDER BY id DESC LIMIT $1 OFFSET $2", [limit, offset]),
+      pool.query("SELECT COUNT(*) FROM postforum"),
+    ]);
+
+    res.status(200).json({
+      data: dataResult.rows,
+      meta: {
+        total_count: parseInt(countResult.rows[0].count),
+        current_page: page,
+        per_page: limit,
+      },
+    });
   } catch (error) {
     next(error);
   }
