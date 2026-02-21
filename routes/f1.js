@@ -1,5 +1,4 @@
 const express = require('express');
-const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { checkJwt } = require('../middleware/auth');
@@ -29,20 +28,6 @@ const setupCacheDirectory = () => {
 };
 
 setupCacheDirectory();
-
-// Ensure Python dependencies are installed on startup
-const installPythonDeps = () => {
-    const requirementsPath = path.join(__dirname, '..', 'requirements.txt');
-    if (!fs.existsSync(requirementsPath)) return;
-
-    exec('pip3 install -r requirements.txt', { cwd: path.join(__dirname, '..') }, (err, stdout, stderr) => {
-        if (err) {
-            console.error('Failed to install Python dependencies:', stderr);
-        }
-    });
-};
-
-installPythonDeps();
 
 // Middleware to expose queue status in response headers
 router.use((req, res, next) => {
