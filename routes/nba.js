@@ -248,42 +248,53 @@ router.get("/stats/:playerId", nbaApiLimiter, async (req, res, next) => {
 
       const data = await response.json();
 
-      if (!data.resultSets?.[0]?.rowSet?.[0]) {
+      if (!data.resultSets?.[0]?.rowSet?.[0] || !data.resultSets[0].headers) {
         throw new Error("Invalid response format from NBA API [Stats]");
       }
 
+      const headers = data.resultSets[0].headers;
+      const getColumnIndex = (name) => {
+        const index = headers.indexOf(name);
+        if (index === -1) {
+          throw new Error(`Column '${name}' not found in API response`);
+        }
+        return index;
+      };
+
       const seasonStats = data.resultSets[0].rowSet[0];
-      const pts = parseFloat(seasonStats[26]) || 0;
-      const reb = parseFloat(seasonStats[18]) || 0;
-      const ast = parseFloat(seasonStats[19]) || 0;
-      const stl = parseFloat(seasonStats[20]) || 0;
-      const blk = parseFloat(seasonStats[21]) || 0;
+      const get = (name) => seasonStats[getColumnIndex(name)];
+
+      const pts = parseFloat(get("PTS")) || 0;
+      const reb = parseFloat(get("REB")) || 0;
+      const ast = parseFloat(get("AST")) || 0;
+      const stl = parseFloat(get("STL")) || 0;
+      const blk = parseFloat(get("BLK")) || 0;
       const fantasyPoints = pts * 1 + reb * 1.2 + ast * 1.5 + stl * 3 + blk * 3;
 
       return {
         data: [
           {
-            games_played: parseInt(seasonStats[2]) || 0,
+            games_played: parseInt(get("GP")) || 0,
             player_id: playerId,
             season: getCurrentSeasonYear(),
-            min: seasonStats[6] || "0:00",
-            fgm: parseFloat(seasonStats[7]) || 0,
-            fga: parseFloat(seasonStats[8]) || 0,
-            fg_pct: parseFloat(seasonStats[9]) || 0,
-            fg3m: parseFloat(seasonStats[10]) || 0,
-            fg3a: parseFloat(seasonStats[11]) || 0,
-            fg3_pct: parseFloat(seasonStats[12]) || 0,
-            ftm: parseFloat(seasonStats[13]) || 0,
-            fta: parseFloat(seasonStats[14]) || 0,
-            ft_pct: parseFloat(seasonStats[15]) || 0,
-            oreb: parseFloat(seasonStats[16]) || 0,
-            dreb: parseFloat(seasonStats[17]) || 0,
+            min: get("MIN") || "0:00",
+            fgm: parseFloat(get("FGM")) || 0,
+            fga: parseFloat(get("FGA")) || 0,
+            fg_pct: parseFloat(get("FG_PCT")) || 0,
+            fg3m: parseFloat(get("FG3M")) || 0,
+            fg3a: parseFloat(get("FG3A")) || 0,
+            fg3_pct: parseFloat(get("FG3_PCT")) || 0,
+            ftm: parseFloat(get("FTM")) || 0,
+            fta: parseFloat(get("FTA")) || 0,
+            ft_pct: parseFloat(get("FT_PCT")) || 0,
+            oreb: parseFloat(get("OREB")) || 0,
+            dreb: parseFloat(get("DREB")) || 0,
             reb,
             ast,
-            turnover: parseFloat(seasonStats[20]) || 0,
-            stl: parseFloat(seasonStats[21]) || 0,
-            blk: parseFloat(seasonStats[22]) || 0,
-            pf: parseFloat(seasonStats[24]) || 0,
+            turnover: parseFloat(get("TOV")) || 0,
+            stl,
+            blk,
+            pf: parseFloat(get("PF")) || 0,
             pts,
             fantasy_points: fantasyPoints,
           },
