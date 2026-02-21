@@ -33,6 +33,7 @@ cache/fastf1/*
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
