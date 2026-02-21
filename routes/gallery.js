@@ -3,8 +3,9 @@ const express = require('express');
 const router = express.Router();
 const { addGalleryItem, getGalleryItemById, deleteGalleryItem, getGalleryItems } = require('../utils/db');
 const multer = require("multer");
-const AWS = require("aws-sdk");
-const sharp = require('sharp'); // Add sharp for image processing
+const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { Upload } = require("@aws-sdk/lib-storage");
+const sharp = require('sharp');
 const { checkJwt } = require('../middleware/auth');
 
 // Validate required environment variables
@@ -17,9 +18,11 @@ requiredEnvVars.forEach((varName) => {
 });
 
 // Configure AWS S3
-const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+const s3 = new S3Client({
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    },
     region: process.env.AWS_REGION,
 });
 
@@ -77,15 +80,18 @@ router.post("/", checkJwt, upload.single("file"), async (req, res) => {
             return res.status(400).json({ error: "Unsupported image format." });
         }
 
-        const s3Params = {
-            Bucket: process.env.AWS_S3_BUCKET_NAME,
-            Key: `gallery/${Date.now()}_${sanitizedFilename.replace(/\.[^/.]+$/, "")}.${outputFormat}`,
-            Body: optimizedBuffer,
-            ContentType: contentType,
-            ACL: "public-read",
-        };
-
-        const s3Response = await s3.upload(s3Params).promise();
+        const key = `gallery/${Date.now()}_${sanitizedFilename.replace(/\.[^/.]+$/, "")}.${outputFormat}`;
+        const upload = new Upload({
+            client: s3,
+            params: {
+                Bucket: process.env.AWS_S3_BUCKET_NAME,
+                Key: key,
+                Body: optimizedBuffer,
+                ContentType: contentType,
+                ACL: "public-read",
+            },
+        });
+        const s3Response = await upload.done();
         const imageUrl = s3Response.Location;
 
         const savedData = await addGalleryItem({
@@ -150,7 +156,7 @@ router.delete("/:id", checkJwt, async (req, res) => {
         await deleteGalleryItem(id);
 
         const key = new URL(record.image_url).pathname.slice(1);
-        await s3.deleteObject({ Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key }).promise();
+        await s3.send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key }));
 
         res.status(200).json({ message: "Record and image deleted successfully." });
     } catch (error) {
