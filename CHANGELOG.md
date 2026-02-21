@@ -7,6 +7,7 @@
 - `routes/db.js` — add auth check to marker delete
 - `init.sql` — added missing `gallery`, `med_journal`, and `feedback` table definitions; deploys were hitting runtime errors on those routes
 - apply improved CORS to only my websites
+- `routes/chat-gpt.js` added length check
 
 ## 2026-02-21
 
