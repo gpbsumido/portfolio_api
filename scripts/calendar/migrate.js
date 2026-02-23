@@ -15,7 +15,7 @@ async function migrate() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS calendar_events (
               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id TEXT NOT NULL,
+              user_sub TEXT NOT NULL,
               title TEXT NOT NULL,
               description TEXT,
               start_date TIMESTAMPTZ NOT NULL,
@@ -28,10 +28,20 @@ async function migrate() {
         `);
         console.log('Created table: calendar_events');
 
-        await client.query(`
-            CREATE INDEX IF NOT EXISTS idx_calendar_events_user_id ON calendar_events(user_id);
+        // rename user_id → user_sub if the table was created with the old column name
+        const { rows } = await client.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'calendar_events' AND column_name = 'user_id';
         `);
-        console.log('Created index: idx_calendar_events_user_id');
+        if (rows.length > 0) {
+            await client.query(`ALTER TABLE calendar_events RENAME COLUMN user_id TO user_sub;`);
+            console.log('Renamed column: user_id → user_sub');
+        }
+
+        await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_calendar_events_user_sub ON calendar_events(user_sub);
+        `);
+        console.log('Created index: idx_calendar_events_user_sub');
 
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_calendar_events_start_date ON calendar_events(start_date);
