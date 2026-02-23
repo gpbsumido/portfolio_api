@@ -18,6 +18,7 @@ const galleryRoutes = require("./routes/gallery");
 const medJournalRoutes = require("./routes/med-journal");
 const feedbackRoutes = require("./routes/feedback");
 const chatgptRoutes = require("./routes/chat-gpt");
+const calendarRoutes = require("./routes/calendar");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -63,11 +64,12 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/med-journal", medJournalRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/chatgpt", chatgptRoutes);
+app.use("/api/calendar", calendarRoutes);
 app.use("/api", dbRoutes);
 
 // Error handling middleware
 app.use((err, req, res, _next) => {
-  if (err.name === "UnauthorizedError") {
+  if (err.status === 401 || err.name === "UnauthorizedError") {
     return res.status(401).json({
       error: "Unauthorized",
       message: "Invalid or missing token",

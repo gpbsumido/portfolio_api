@@ -451,6 +451,157 @@ async function deleteFeedback(id) {
   return rows[0]; // Return the deleted feedback
 }
 
+// ---------------------------------------------------------------------------
+// Calendar events
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches all calendar events for a user, with an optional date range filter.
+ *
+ * @param {string} userSub - Auth0 sub (user identifier)
+ * @param {string} [start] - ISO datetime string; only return events ending on or after this
+ * @param {string} [end]   - ISO datetime string; only return events starting on or before this
+ * @returns {Promise<Array>}
+ */
+// maps a raw calendar_events row (snake_case) to the shape the frontend expects.
+// dates are always returned as UTC ISO strings (ending in Z) so the frontend
+// is responsible for converting to local time for display.
+function toCalendarEvent(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    startDate: row.start_date instanceof Date ? row.start_date.toISOString() : row.start_date,
+    endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
+    allDay: row.all_day,
+    color: row.color,
+  };
+}
+
+async function getCalendarEvents(userSub, start, end) {
+  const values = [userSub];
+
+  let query = "SELECT * FROM calendar_events WHERE user_sub = $1";
+
+  if (start) {
+    values.push(start);
+    query += ` AND end_date >= $${values.length}`;
+  }
+
+  if (end) {
+    values.push(end);
+    query += ` AND start_date <= $${values.length}`;
+  }
+
+  query += " ORDER BY start_date ASC";
+
+  const { rows } = await pool.query(query, values);
+  return rows.map(toCalendarEvent);
+}
+
+/**
+ * Fetches a single calendar event by ID, scoped to the requesting user.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarEventById(id, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendar_events WHERE id = $1 AND user_sub = $2",
+    [id, userSub],
+  );
+  return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
+/**
+ * Creates a new calendar event for the authenticated user.
+ *
+ * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCalendarEvent(
+  { title, description, startDate, endDate, allDay = false, color = "#3b82f6" },
+  userSub,
+) {
+  const id = uuidv4();
+
+  const { rows } = await pool.query(
+    `INSERT INTO calendar_events (id, title, description, start_date, end_date, all_day, color, user_sub)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING *`,
+    [id, title, description || null, startDate, endDate, allDay, color, userSub],
+  );
+
+  return toCalendarEvent(rows[0]);
+}
+
+/**
+ * Partially updates a calendar event. Only the owner can modify it.
+ * Accepts a subset of fields — anything not passed is left as-is.
+ *
+ * @param {string} id
+ * @param {{ title?: string, description?: string, startDate?: string, endDate?: string, allDay?: boolean, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} updated row, or null if not found / not owned
+ */
+async function updateCalendarEvent(id, fields, userSub) {
+  // map frontend camelCase to the actual column names
+  const colMap = {
+    title: "title",
+    description: "description",
+    startDate: "start_date",
+    endDate: "end_date",
+    allDay: "all_day",
+    color: "color",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  // always bump updated_at
+  values.push(new Date());
+  setClauses.push(`updated_at = $${values.length}`);
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE calendar_events
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
+/**
+ * Deletes a calendar event by ID. Only the owner can delete it.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} the deleted row, or null if not found
+ */
+async function deleteCalendarEvent(id, userSub) {
+  const { rows } = await pool.query(
+    "DELETE FROM calendar_events WHERE id = $1 AND user_sub = $2 RETURNING *",
+    [id, userSub],
+  );
+
+  return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
 module.exports = {
   addGalleryItem,
   getGalleryItemById,
@@ -464,4 +615,9 @@ module.exports = {
   addFeedback,
   updateFeedback,
   deleteFeedback,
+  getCalendarEvents,
+  getCalendarEventById,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
 };

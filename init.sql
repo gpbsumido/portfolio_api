@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS feedback (
     user_sub TEXT NOT NULL
 );
 
+-- Create calendar_events table
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id UUID PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    all_day BOOLEAN NOT NULL DEFAULT false,
+    color TEXT NOT NULL DEFAULT '#3b82f6',
+    user_sub TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Grant privileges
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO postgres;
