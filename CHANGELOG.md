@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-02-23
+
+- `scripts/calendar/migrate.js` — migration script that creates the `calendar_events` table
+- `routes/calendar.js` — new auth-gated CRUD route (`GET /events`, `GET /events/:id`, `POST /events`, `PUT /events/:id`, `DELETE /events/:id`) mounted at `/api/calendar`;
+- `utils/db.js` — utils for calendar API, note that dates are in UTC
+- `server.js` — mounted `calendarRoutes` at `/api/calendar`. fix auth error handler to catch `express-oauth2-jwt-bearer` errors (`err.status === 401`) which were previously falling through to the 500 handler
+
 ## 2026-02-21 (pt. 2)
 
 - `server.js` — fix wrong param name `_req`
