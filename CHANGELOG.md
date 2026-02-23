@@ -2,10 +2,11 @@
 
 ## 2026-02-23
 
-- `scripts/calendar/migrate.js` — migration script that creates the `calendar_events` table
-- `routes/calendar.js` — new auth-gated CRUD route (`GET /events`, `GET /events/:id`, `POST /events`, `PUT /events/:id`, `DELETE /events/:id`) mounted at `/api/calendar`;
-- `utils/db.js` — utils for calendar API, note that dates are in UTC
-- `server.js` — mounted `calendarRoutes` at `/api/calendar`. fix auth error handler to catch `express-oauth2-jwt-bearer` errors (`err.status === 401`) which were previously falling through to the 500 handler
+- added calendar feature — create and manage personal events, Auth0-gated with dates stored and returned in UTC
+- added ability to attach TCG cards to calendar events — card metadata is saved to the DB at the time you pick it so it doesn't need to hit TCGdex on every read
+- card endpoints under `/api/calendar/events/:id/cards` — list, add, update quantity/notes, and remove cards from an event
+- `GET /events` now accepts `?cardId=` and `?cardName=` to filter events by card
+- fixed a bug where auth failures were returning 500 instead of 401 due to a wrong error name check in the global error handler
 
 ## 2026-02-21 (pt. 2)
 

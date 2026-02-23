@@ -105,13 +105,17 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 ### Calendar — `/api/calendar` _(Auth Required, in progress)_
 
-| Method | Path   | Description                                                             |
-| ------ | ------ | ----------------------------------------------------------------------- |
-| GET    | `/`    | List events for the authenticated user (supports `?start=&end=` filter) |
-| GET    | `/:id` | Get a single event                                                      |
-| POST   | `/`    | Create an event                                                         |
-| PUT    | `/:id` | Update an event                                                         |
-| DELETE | `/:id` | Delete an event                                                         |
+| Method | Path                         | Description                                                                                         |
+| ------ | ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| GET    | `/events`                    | List events for the authenticated user (supports `?start=`, `?end=`, `?cardId=`, `?cardName=`)      |
+| GET    | `/events/:id`                | Get a single event                                                                                  |
+| POST   | `/events`                    | Create an event                                                                                     |
+| PUT    | `/events/:id`                | Update an event                                                                                     |
+| DELETE | `/events/:id`                | Delete an event                                                                                     |
+| GET    | `/events/:id/cards`          | List all TCG cards linked to an event                                                               |
+| POST   | `/events/:id/cards`          | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
+| PUT    | `/events/:id/cards/:entryId` | Update `quantity` or `notes` on a card entry                                                        |
+| DELETE | `/events/:id/cards/:entryId` | Remove a card from an event                                                                         |
 
 ### General — `/api`
 
@@ -214,6 +218,9 @@ Migrations are one-time scripts in `scripts/`. Run them manually after setup:
 ```bash
 # Create calendar_events table
 node scripts/calendar/migrate.js
+
+# Create event_cards junction table (TCG card ↔ event)
+node scripts/calendar/migrate_tcg.js
 ```
 
 ### Tests
