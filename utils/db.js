@@ -466,6 +466,21 @@ async function deleteFeedback(id) {
 // maps a raw calendar_events row (snake_case) to the shape the frontend expects.
 // dates are always returned as UTC ISO strings (ending in Z) so the frontend
 // is responsible for converting to local time for display.
+function toEventCard(row) {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    cardId: row.card_id,
+    cardName: row.card_name,
+    cardSetId: row.card_set_id ?? undefined,
+    cardSetName: row.card_set_name ?? undefined,
+    cardImageUrl: row.card_image_url ?? undefined,
+    quantity: row.quantity,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  };
+}
+
 function toCalendarEvent(row) {
   return {
     id: row.id,
@@ -478,22 +493,35 @@ function toCalendarEvent(row) {
   };
 }
 
-async function getCalendarEvents(userSub, start, end) {
+async function getCalendarEvents(userSub, start, end, cardId, cardName) {
   const values = [userSub];
+  const needsCardJoin = cardId || cardName;
 
-  let query = "SELECT * FROM calendar_events WHERE user_sub = $1";
+  let query = `
+    SELECT DISTINCT ce.*
+    FROM calendar_events ce
+    ${needsCardJoin ? "JOIN event_cards ec ON ec.event_id = ce.id" : ""}
+    WHERE ce.user_sub = $1
+  `;
 
   if (start) {
     values.push(start);
-    query += ` AND end_date >= $${values.length}`;
+    query += ` AND ce.end_date >= $${values.length}`;
   }
-
   if (end) {
     values.push(end);
-    query += ` AND start_date <= $${values.length}`;
+    query += ` AND ce.start_date <= $${values.length}`;
+  }
+  if (cardId) {
+    values.push(cardId);
+    query += ` AND ec.card_id = $${values.length}`;
+  }
+  if (cardName) {
+    values.push(`%${cardName}%`);
+    query += ` AND ec.card_name ILIKE $${values.length}`;
   }
 
-  query += " ORDER BY start_date ASC";
+  query += " ORDER BY ce.start_date ASC";
 
   const { rows } = await pool.query(query, values);
   return rows.map(toCalendarEvent);
@@ -602,6 +630,111 @@ async function deleteCalendarEvent(id, userSub) {
   return rows[0] ? toCalendarEvent(rows[0]) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Event cards (TCG card ↔ calendar event junction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns all cards linked to an event. Verifies ownership via join.
+ */
+async function getEventCards(eventId, userSub) {
+  const { rows } = await pool.query(
+    `SELECT ec.*
+     FROM event_cards ec
+     JOIN calendar_events ce ON ce.id = ec.event_id
+     WHERE ec.event_id = $1 AND ce.user_sub = $2
+     ORDER BY ec.created_at ASC`,
+    [eventId, userSub],
+  );
+  return rows.map(toEventCard);
+}
+
+/**
+ * Adds a card to an event. Returns null if the event doesn't exist or isn't owned by userSub.
+ */
+async function addEventCard(
+  { eventId, cardId, cardName, cardSetId, cardSetName, cardImageUrl, quantity, notes },
+  userSub,
+) {
+  const { rows: owned } = await pool.query(
+    "SELECT id FROM calendar_events WHERE id = $1 AND user_sub = $2",
+    [eventId, userSub],
+  );
+  if (owned.length === 0) return null;
+
+  const id = uuidv4();
+  const { rows } = await pool.query(
+    `INSERT INTO event_cards
+       (id, event_id, card_id, card_name, card_set_id, card_set_name, card_image_url, quantity, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING *`,
+    [
+      id,
+      eventId,
+      cardId,
+      cardName,
+      cardSetId || null,
+      cardSetName || null,
+      cardImageUrl || null,
+      quantity ?? 1,
+      notes || null,
+    ],
+  );
+  return rows[0] ? toEventCard(rows[0]) : null;
+}
+
+/**
+ * Updates quantity and/or notes on an event_cards row.
+ * entryId is the event_cards UUID (not the TCGdex card_id).
+ * Ownership is enforced via join to calendar_events.
+ */
+async function updateEventCard(entryId, eventId, fields, userSub) {
+  const colMap = { quantity: "quantity", notes: "notes" };
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  values.push(entryId, eventId, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE event_cards ec
+     SET ${setClauses.join(", ")}
+     FROM calendar_events ce
+     WHERE ec.id = $${values.length - 2}
+       AND ec.event_id = $${values.length - 1}
+       AND ec.event_id = ce.id
+       AND ce.user_sub = $${values.length}
+     RETURNING ec.*`,
+    values,
+  );
+  return rows[0] ? toEventCard(rows[0]) : null;
+}
+
+/**
+ * Removes a card entry from an event. Ownership enforced via join.
+ */
+async function deleteEventCard(entryId, eventId, userSub) {
+  const { rows } = await pool.query(
+    `DELETE FROM event_cards ec
+     USING calendar_events ce
+     WHERE ec.id = $1
+       AND ec.event_id = $2
+       AND ec.event_id = ce.id
+       AND ce.user_sub = $3
+     RETURNING ec.*`,
+    [entryId, eventId, userSub],
+  );
+  return rows[0] ? toEventCard(rows[0]) : null;
+}
+
 module.exports = {
   addGalleryItem,
   getGalleryItemById,
@@ -620,4 +753,8 @@ module.exports = {
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
+  getEventCards,
+  addEventCard,
+  updateEventCard,
+  deleteEventCard,
 };

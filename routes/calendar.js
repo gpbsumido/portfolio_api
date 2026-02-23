@@ -21,14 +21,14 @@ router.use((err, req, res, next) => {
   next(err);
 });
 
-// GET /api/calendar/events?start=<ISO>&end=<ISO>
-// returns events for the authenticated user, optionally filtered by date range
+// GET /api/calendar/events?start=<ISO>&end=<ISO>&cardId=<id>&cardName=<name>
+// returns events for the authenticated user with optional date range and card filters
 router.get("/events", async (req, res) => {
   const userSub = req.auth.payload.sub;
-  const { start, end } = req.query;
+  const { start, end, cardId, cardName } = req.query;
 
   try {
-    const events = await db.getCalendarEvents(userSub, start, end);
+    const events = await db.getCalendarEvents(userSub, start, end, cardId, cardName);
     res.json({ events });
   } catch (err) {
     console.error("GET /calendar/events failed:", err.message);
@@ -121,6 +121,98 @@ router.delete("/events/:id", async (req, res) => {
   } catch (err) {
     console.error("DELETE /calendar/events/:id failed:", err.message);
     res.status(500).json({ error: "Failed to delete event" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Card sub-routes — /api/calendar/events/:id/cards
+// :id      = calendar_events UUID
+// :entryId = event_cards UUID (the row, not the TCGdex card_id string)
+// ---------------------------------------------------------------------------
+
+// GET /api/calendar/events/:id/cards
+router.get("/events/:id/cards", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const cards = await db.getEventCards(id, userSub);
+    res.json({ cards });
+  } catch (err) {
+    console.error("GET /calendar/events/:id/cards failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch cards" });
+  }
+});
+
+// POST /api/calendar/events/:id/cards
+// body: { cardId, cardName, cardSetId?, cardSetName?, cardImageUrl?, quantity?, notes? }
+router.post("/events/:id/cards", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: eventId } = req.params;
+  const { cardId, cardName, cardSetId, cardSetName, cardImageUrl, quantity, notes } = req.body;
+
+  if (!cardId || !cardName) {
+    return res.status(400).json({ error: "cardId and cardName are required" });
+  }
+
+  try {
+    const card = await db.addEventCard(
+      { eventId, cardId, cardName, cardSetId, cardSetName, cardImageUrl, quantity, notes },
+      userSub,
+    );
+
+    if (!card) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    res.status(201).json({ card });
+  } catch (err) {
+    console.error("POST /calendar/events/:id/cards failed:", err.message);
+    res.status(500).json({ error: "Failed to add card" });
+  }
+});
+
+// PUT /api/calendar/events/:id/cards/:entryId
+// body: { quantity?, notes? }
+router.put("/events/:id/cards/:entryId", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: eventId, entryId } = req.params;
+  const fields = req.body;
+
+  if (!fields || Object.keys(fields).length === 0) {
+    return res.status(400).json({ error: "No fields provided to update" });
+  }
+
+  try {
+    const card = await db.updateEventCard(entryId, eventId, fields, userSub);
+
+    if (!card) {
+      return res.status(404).json({ error: "Card entry not found" });
+    }
+
+    res.json({ card });
+  } catch (err) {
+    console.error("PUT /calendar/events/:id/cards/:entryId failed:", err.message);
+    res.status(500).json({ error: "Failed to update card" });
+  }
+});
+
+// DELETE /api/calendar/events/:id/cards/:entryId
+router.delete("/events/:id/cards/:entryId", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: eventId, entryId } = req.params;
+
+  try {
+    const deleted = await db.deleteEventCard(entryId, eventId, userSub);
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Card entry not found" });
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /calendar/events/:id/cards/:entryId failed:", err.message);
+    res.status(500).json({ error: "Failed to delete card" });
   }
 });
 
