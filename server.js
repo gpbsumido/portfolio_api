@@ -19,6 +19,7 @@ const medJournalRoutes = require("./routes/med-journal");
 const feedbackRoutes = require("./routes/feedback");
 const chatgptRoutes = require("./routes/chat-gpt");
 const calendarRoutes = require("./routes/calendar");
+const vitalsRoutes = require("./routes/vitals");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -65,6 +66,7 @@ app.use("/api/med-journal", medJournalRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/chatgpt", chatgptRoutes);
 app.use("/api/calendar", calendarRoutes);
+app.use("/api/vitals", vitalsRoutes);
 app.use("/api", dbRoutes);
 
 // Error handling middleware
