@@ -24,7 +24,8 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Medical Journal | Protected CRUD journal for medical rotations (Auth0-gated)                      |
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | ChatGPT         | OpenAI-powered chat and journal entry summarization (Auth0-gated)               |
-| Calendar        | Personal calendar events stored in PostgreSQL (Auth0-gated) — _in progress_     |
+| Calendar        | Personal calendar events with Pokémon TCG card associations (Auth0-gated)       |
+| Web Vitals      | Real-user Core Web Vitals collection and P75 aggregation (open POST, auth GET)  |
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
 
 ## API Endpoints
@@ -103,7 +104,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | POST   | `/`          | Chat completion                 |
 | POST   | `/summarize` | Reword text for medical journal |
 
-### Calendar — `/api/calendar` _(Auth Required, in progress)_
+### Calendar — `/api/calendar` _(Auth Required)_
 
 | Method | Path                         | Description                                                                                         |
 | ------ | ---------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -116,6 +117,14 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | POST   | `/events/:id/cards`          | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
 | PUT    | `/events/:id/cards/:entryId` | Update `quantity` or `notes` on a card entry                                                        |
 | DELETE | `/events/:id/cards/:entryId` | Remove a card from an event                                                                         |
+
+### Web Vitals — `/api/vitals`
+
+| Method | Path | Auth | Description |
+| ------ | ---- | ---- | ----------- |
+| POST | `/` | — | Ingest a Core Web Vitals metric (LCP, CLS, FCP, INP, TTFB) |
+| GET | `/summary` | Required | P75 + good/needs-improvement/poor counts per metric |
+| GET | `/by-page` | Required | Same aggregation grouped by pathname (min 5 samples per page) |
 
 ### General — `/api`
 
@@ -221,6 +230,9 @@ node scripts/calendar/migrate.js
 
 # Create event_cards junction table (TCG card ↔ event)
 node scripts/calendar/migrate_tcg.js
+
+# Create web_vitals table
+node scripts/vitals/migrate.js
 ```
 
 ### Tests

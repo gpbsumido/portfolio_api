@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-02-26
+
+- added `web_vitals` table to track real-user Core Web Vitals (LCP, CLS, FCP, INP, TTFB) from the frontend
+- `POST /api/vitals` is open (no auth) — vitals aren't sensitive, anonymous collection is standard; validates metric name against a whitelist and rejects unknown values
+- `GET /api/vitals/summary` returns P75 + good/needs-improvement/poor counts per metric using `PERCENTILE_CONT(0.75)` — Postgres handles the percentile math natively, no application-layer sorting needed
+- `GET /api/vitals/by-page` same aggregation grouped by pathname first, min 5 samples per page to keep single-visit noise out of the numbers; results sorted by total page traffic descending
+- both GET routes require `checkJwt` — the aggregate view is only meaningful to the site owner
+- `scripts/vitals/migrate.js` creates the table and three indexes (metric, page, created_at) — same pattern as the calendar migration
+
 ## 2026-02-23
 
 - added calendar feature — create and manage personal events, Auth0-gated with dates stored and returned in UTC
