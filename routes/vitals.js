@@ -163,6 +163,59 @@ router.get("/by-page", checkJwt, async (req, res) => {
   }
 });
 
+// GET /api/vitals/by-version
+// P75 per metric for the last 5 distinct versions, sorted oldest→newest so
+// chart x-axis reads left=old, right=new — auth required
+router.get("/by-version", checkJwt, async (_req, res) => {
+  try {
+    const versionsResult = await pool.query(`
+      SELECT app_version
+      FROM web_vitals
+      WHERE app_version != 'unknown'
+      GROUP BY app_version
+      ORDER BY string_to_array(app_version, '.')::int[] DESC
+      LIMIT 5
+    `);
+    const versions = versionsResult.rows.map((r) => r.app_version);
+    if (versions.length === 0) return res.json({ byVersion: [] });
+
+    const result = await pool.query(
+      `SELECT
+        app_version,
+        metric,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY value) AS p75,
+        COUNT(*) AS total
+      FROM web_vitals
+      WHERE app_version = ANY($1)
+      GROUP BY app_version, metric`,
+      [versions],
+    );
+
+    const versionMap = {};
+    for (const row of result.rows) {
+      if (!versionMap[row.app_version]) {
+        versionMap[row.app_version] = { version: row.app_version, metrics: {} };
+      }
+      versionMap[row.app_version].metrics[row.metric] = {
+        p75: parseFloat(row.p75),
+        total: parseInt(row.total, 10),
+      };
+    }
+
+    // oldest first so charts render left→right chronologically
+    const byVersion = versions
+      .slice()
+      .reverse()
+      .map((v) => versionMap[v])
+      .filter(Boolean);
+
+    res.json({ byVersion });
+  } catch (err) {
+    console.error("GET /vitals/by-version failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch vitals by version" });
+  }
+});
+
 // GET /api/vitals/versions
 // distinct app_version values, newest first by semver — auth required
 // unknown rows are excluded (pre-feature data, not meaningful as a selectable version)

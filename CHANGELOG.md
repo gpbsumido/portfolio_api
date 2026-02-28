@@ -2,7 +2,8 @@
 
 ## 2026-02-28
 
-- `GET /api/vitals/versions` — fixed bug where the endpoint always returned an empty array; `SELECT DISTINCT ... ORDER BY string_to_array(...)` fails in PostgreSQL because the ORDER BY expression must appear in the SELECT list when using DISTINCT; switched to `GROUP BY` which deduplicates the same way but allows arbitrary ORDER BY expressions
+- `GET /api/vitals/by-version` — new endpoint returning P75 per metric for the last 5 distinct versions, sorted oldest→newest so charts render chronologically left to right; fetches top-5 versions first, then a single aggregation query using `ANY($1)` to avoid N queries
+- `GET /api/vitals/versions` — fixed bug where endpoint always returned an empty array; `SELECT DISTINCT ... ORDER BY string_to_array(...)` fails in PostgreSQL because the ORDER BY expression must appear in the SELECT list when using DISTINCT; switched to `GROUP BY` which deduplicates the same way and allows arbitrary ORDER BY expressions
 
 ## 2026-02-27
 
