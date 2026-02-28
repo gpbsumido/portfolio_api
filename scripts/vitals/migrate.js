@@ -44,6 +44,19 @@ async function migrate() {
     `);
     console.log("Created index: idx_web_vitals_created_at");
 
+    // v0.3.1 — add app_version for version-based filtering
+    await client.query(`
+      ALTER TABLE web_vitals
+        ADD COLUMN IF NOT EXISTS app_version VARCHAR(20) NOT NULL DEFAULT 'unknown';
+    `);
+    console.log("Added column: app_version");
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_web_vitals_app_version
+        ON web_vitals(app_version);
+    `);
+    console.log("Created index: idx_web_vitals_app_version");
+
     console.log("Migration complete.");
   } catch (err) {
     console.error("Migration failed:", err.message);

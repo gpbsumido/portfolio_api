@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-02-27
+
+- added `app_version` column (`VARCHAR(20) NOT NULL DEFAULT 'unknown'`) to `web_vitals` table — run `node scripts/vitals/migrate.js` to apply
+- `POST /api/vitals` now stores `app_version` from the request body (defaults to `'unknown'` if omitted, so old clients continue to work)
+- `GET /api/vitals/summary` accepts `?v=X.Y.Z` and filters to rows from that version onwards; uses `string_to_array(app_version, '.')::int[]` for correct semver ordering (`0.10.0 > 0.9.0`)
+- `GET /api/vitals/by-page` same version filter applied to both the CTE and the outer join
+- `GET /api/vitals/versions` — new endpoint returning distinct `app_version` values sorted newest-first (excludes `'unknown'` rows); auth required
+
 ## 2026-02-26
 
 - added `web_vitals` table to track real-user Core Web Vitals (LCP, CLS, FCP, INP, TTFB) from the frontend
