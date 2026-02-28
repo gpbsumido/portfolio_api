@@ -125,6 +125,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | POST | `/` | — | Ingest a Core Web Vitals metric (LCP, CLS, FCP, INP, TTFB); accepts optional `app_version` |
 | GET | `/summary` | Required | P75 + good/needs-improvement/poor counts per metric; supports `?v=X.Y.Z` to filter by version |
 | GET | `/by-page` | Required | Same aggregation grouped by pathname (min 5 samples); supports `?v=X.Y.Z` |
+| GET | `/by-version` | Required | P75 per metric for the last 5 versions, sorted oldest→newest (for trend charts) |
 | GET | `/versions` | Required | Distinct `app_version` values sorted by semver descending |
 
 ### General — `/api`
