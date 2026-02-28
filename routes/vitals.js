@@ -169,9 +169,10 @@ router.get("/by-page", checkJwt, async (req, res) => {
 router.get("/versions", checkJwt, async (_req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT app_version
+      SELECT app_version
       FROM web_vitals
       WHERE app_version != 'unknown'
+      GROUP BY app_version
       ORDER BY string_to_array(app_version, '.')::int[] DESC
     `);
     res.json({ versions: result.rows.map((r) => r.app_version) });
