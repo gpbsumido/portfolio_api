@@ -15,7 +15,7 @@ const MIN_PAGE_SAMPLES = 5;
 // POST /api/vitals
 // open ingestion, no auth — vitals are non-sensitive and anonymous collection is fine
 router.post("/", async (req, res) => {
-  const { metric, value, rating, page, nav_type } = req.body;
+  const { metric, value, rating, page, nav_type, app_version = "unknown" } = req.body;
 
   if (!metric || value === undefined || value === null || !rating || !page) {
     return res
@@ -41,10 +41,10 @@ router.post("/", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO web_vitals (metric, value, rating, page, nav_type)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO web_vitals (metric, value, rating, page, nav_type, app_version)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [metric, value, rating, page, nav_type ?? null],
+      [metric, value, rating, page, nav_type ?? null, app_version],
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -55,10 +55,20 @@ router.post("/", async (req, res) => {
 
 // GET /api/vitals/summary
 // P75 value + rating distribution + total count per metric — auth required
+// optional ?v=X.Y.Z filters to rows from that version onwards (semver-aware)
 router.get("/summary", checkJwt, async (req, res) => {
+  const { v } = req.query;
+  // semver filter: cast "X.Y.Z" to int[] for correct ordering (e.g. 0.10.0 > 0.9.0)
+  // unknown rows are pre-feature data and are excluded when a version filter is active
+  const whereClause = v
+    ? `WHERE app_version != 'unknown'
+         AND string_to_array(app_version, '.')::int[] >= string_to_array($1, '.')::int[]`
+    : "";
+  const params = v ? [v] : [];
+
   try {
-    const result = await pool.query(`
-      SELECT
+    const result = await pool.query(
+      `SELECT
         metric,
         PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY value) AS p75,
         COUNT(*) FILTER (WHERE rating = 'good')              AS good,
@@ -66,8 +76,10 @@ router.get("/summary", checkJwt, async (req, res) => {
         COUNT(*) FILTER (WHERE rating = 'poor')              AS poor,
         COUNT(*)                                             AS total
       FROM web_vitals
-      GROUP BY metric
-    `);
+      ${whereClause}
+      GROUP BY metric`,
+      params,
+    );
 
     // pivot rows into { LCP: { p75, good, needsImprovement, poor, total }, ... }
     const summary = {};
@@ -91,15 +103,26 @@ router.get("/summary", checkJwt, async (req, res) => {
 // GET /api/vitals/by-page
 // same aggregation but grouped by page first; pages under MIN_PAGE_SAMPLES are excluded
 // so one-off visits don't show up as permanent data points — auth required
+// optional ?v=X.Y.Z filters to rows from that version onwards (semver-aware)
 router.get("/by-page", checkJwt, async (req, res) => {
+  const { v } = req.query;
+  const versionFilter = v
+    ? `AND app_version != 'unknown'
+       AND string_to_array(app_version, '.')::int[] >= string_to_array($1, '.')::int[]`
+    : "";
+  // MIN_PAGE_SAMPLES is $1 without a version, $2 with one
+  const minSamplesParam = v ? "$2" : "$1";
+  const params = v ? [v, MIN_PAGE_SAMPLES] : [MIN_PAGE_SAMPLES];
+
   try {
     const result = await pool.query(
       `
       WITH page_totals AS (
         SELECT page, COUNT(*) AS total
         FROM web_vitals
+        WHERE TRUE ${versionFilter}
         GROUP BY page
-        HAVING COUNT(*) >= $1
+        HAVING COUNT(*) >= ${minSamplesParam}
       )
       SELECT
         w.page,
@@ -109,10 +132,11 @@ router.get("/by-page", checkJwt, async (req, res) => {
         pt.total                                               AS page_total
       FROM web_vitals w
       JOIN page_totals pt ON pt.page = w.page
+      WHERE TRUE ${versionFilter}
       GROUP BY w.page, w.metric, pt.total
       ORDER BY pt.total DESC, w.page, w.metric
       `,
-      [MIN_PAGE_SAMPLES],
+      params,
     );
 
     // reshape flat rows into [{page, total, metrics: {LCP: {p75, count}, ...}}]
@@ -136,6 +160,24 @@ router.get("/by-page", checkJwt, async (req, res) => {
   } catch (err) {
     console.error("GET /vitals/by-page failed:", err.message);
     res.status(500).json({ error: "Failed to fetch vitals by page" });
+  }
+});
+
+// GET /api/vitals/versions
+// distinct app_version values, newest first by semver — auth required
+// unknown rows are excluded (pre-feature data, not meaningful as a selectable version)
+router.get("/versions", checkJwt, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT app_version
+      FROM web_vitals
+      WHERE app_version != 'unknown'
+      ORDER BY string_to_array(app_version, '.')::int[] DESC
+    `);
+    res.json({ versions: result.rows.map((r) => r.app_version) });
+  } catch (err) {
+    console.error("GET /vitals/versions failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch versions" });
   }
 });
 

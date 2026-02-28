@@ -25,7 +25,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | ChatGPT         | OpenAI-powered chat and journal entry summarization (Auth0-gated)               |
 | Calendar        | Personal calendar events with Pokémon TCG card associations (Auth0-gated)       |
-| Web Vitals      | Real-user Core Web Vitals collection and P75 aggregation (open POST, auth GET)  |
+| Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
 
 ## API Endpoints
@@ -122,9 +122,10 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 | Method | Path | Auth | Description |
 | ------ | ---- | ---- | ----------- |
-| POST | `/` | — | Ingest a Core Web Vitals metric (LCP, CLS, FCP, INP, TTFB) |
-| GET | `/summary` | Required | P75 + good/needs-improvement/poor counts per metric |
-| GET | `/by-page` | Required | Same aggregation grouped by pathname (min 5 samples per page) |
+| POST | `/` | — | Ingest a Core Web Vitals metric (LCP, CLS, FCP, INP, TTFB); accepts optional `app_version` |
+| GET | `/summary` | Required | P75 + good/needs-improvement/poor counts per metric; supports `?v=X.Y.Z` to filter by version |
+| GET | `/by-page` | Required | Same aggregation grouped by pathname (min 5 samples); supports `?v=X.Y.Z` |
+| GET | `/versions` | Required | Distinct `app_version` values sorted by semver descending |
 
 ### General — `/api`
 
