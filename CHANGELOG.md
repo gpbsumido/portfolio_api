@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-03-11 - version 1.1.5
+
+- added `countdowns` table to the database — stores a title, optional description, target date (plain `DATE`, no time component to avoid timezone confusion), color, and `user_sub` for ownership scoping; same auth pattern as `calendar_events`
+- added five new routes under `/api/calendar/countdowns`: list all sorted by target date, get by id, create, partial update, and delete; all require a valid Auth0 JWT and are scoped to the requesting user via `req.auth.payload.sub`
+- added `getCountdowns`, `getCountdownById`, `createCountdown`, `updateCountdown`, and `deleteCountdown` to `utils/db.js`; the partial update uses the same `colMap` pattern as `updateCalendarEvent` so only the fields you pass actually change
+- `target_date` is stored as `DATE` and returned as a `"YYYY-MM-DD"` string; pg returns `DATE` columns as strings (unlike `TIMESTAMP` which becomes a `Date` object), so `toCountdown` can use it directly with no conversion
+
 ## 2026-02-28
 
 - `GET /api/vitals/by-version` — new endpoint returning P75 per metric for the last 5 distinct versions, sorted oldest→newest so charts render chronologically left to right; fetches top-5 versions first, then a single aggregation query using `ANY($1)` to avoid N queries

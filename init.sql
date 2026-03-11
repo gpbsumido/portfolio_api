@@ -66,6 +66,21 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create countdowns table
+-- target_date is a plain DATE (no time, no timezone) because countdowns track days, not moments.
+-- user_sub matches the pattern used by calendar_events so ownership checks are consistent.
+CREATE TABLE IF NOT EXISTS countdowns (
+    id UUID PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    target_date DATE NOT NULL,
+    color TEXT NOT NULL DEFAULT '#6366f1',
+    user_sub TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_countdowns_user_sub ON countdowns(user_sub);
+
 -- Grant privileges
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO postgres;
