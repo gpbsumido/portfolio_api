@@ -216,4 +216,108 @@ router.delete("/events/:id/cards/:entryId", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Countdowns — /api/calendar/countdowns
+// ---------------------------------------------------------------------------
+
+// GET /api/calendar/countdowns
+// returns all countdowns for the authenticated user, sorted by target date
+router.get("/countdowns", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+
+  try {
+    const countdowns = await db.getCountdowns(userSub);
+    res.json({ countdowns });
+  } catch (err) {
+    console.error("GET /calendar/countdowns failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch countdowns" });
+  }
+});
+
+// GET /api/calendar/countdowns/:id
+// returns a single countdown, 404 if it doesn't exist or belongs to someone else
+router.get("/countdowns/:id", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const countdown = await db.getCountdownById(id, userSub);
+
+    if (!countdown) {
+      return res.status(404).json({ error: "Countdown not found" });
+    }
+
+    res.json({ countdown });
+  } catch (err) {
+    console.error("GET /calendar/countdowns/:id failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch countdown" });
+  }
+});
+
+// POST /api/calendar/countdowns
+// body: { title, description?, targetDate, color? }
+router.post("/countdowns", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { title, description, targetDate, color } = req.body;
+
+  if (!title || !targetDate) {
+    return res.status(400).json({ error: "title and targetDate are required" });
+  }
+
+  try {
+    const countdown = await db.createCountdown(
+      { title, description, targetDate, color },
+      userSub,
+    );
+    res.status(201).json({ countdown });
+  } catch (err) {
+    console.error("POST /calendar/countdowns failed:", err.message);
+    res.status(500).json({ error: "Failed to create countdown" });
+  }
+});
+
+// PUT /api/calendar/countdowns/:id
+// partial update, only send the fields you want to change
+router.put("/countdowns/:id", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+  const fields = req.body;
+
+  if (!fields || Object.keys(fields).length === 0) {
+    return res.status(400).json({ error: "No fields provided to update" });
+  }
+
+  try {
+    const countdown = await db.updateCountdown(id, fields, userSub);
+
+    if (!countdown) {
+      return res.status(404).json({ error: "Countdown not found" });
+    }
+
+    res.json({ countdown });
+  } catch (err) {
+    console.error("PUT /calendar/countdowns/:id failed:", err.message);
+    res.status(500).json({ error: "Failed to update countdown" });
+  }
+});
+
+// DELETE /api/calendar/countdowns/:id
+router.delete("/countdowns/:id", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const deleted = await db.deleteCountdown(id, userSub);
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Countdown not found" });
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /calendar/countdowns/:id failed:", err.message);
+    res.status(500).json({ error: "Failed to delete countdown" });
+  }
+});
+
 module.exports = router;
