@@ -24,7 +24,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Medical Journal | Protected CRUD journal for medical rotations (Auth0-gated)                      |
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | ChatGPT         | OpenAI-powered chat and journal entry summarization (Auth0-gated)               |
-| Calendar        | Personal calendar events with Pokémon TCG card associations (Auth0-gated)       |
+| Calendar        | Personal calendar events with Pokémon TCG card associations, plus countdowns (Auth0-gated) |
 | Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
 
@@ -117,6 +117,11 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | POST   | `/events/:id/cards`          | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
 | PUT    | `/events/:id/cards/:entryId` | Update `quantity` or `notes` on a card entry                                                        |
 | DELETE | `/events/:id/cards/:entryId` | Remove a card from an event                                                                         |
+| GET    | `/countdowns`                | List all countdowns for the authenticated user, sorted by target date ascending                     |
+| GET    | `/countdowns/:id`            | Get a single countdown                                                                              |
+| POST   | `/countdowns`                | Create a countdown (`title` and `targetDate` required, `targetDate` as `"YYYY-MM-DD"`)             |
+| PUT    | `/countdowns/:id`            | Partial update — send only the fields to change                                                     |
+| DELETE | `/countdowns/:id`            | Delete a countdown                                                                                  |
 
 ### Web Vitals — `/api/vitals`
 
@@ -235,6 +240,9 @@ node scripts/calendar/migrate_tcg.js
 
 # Create web_vitals table
 node scripts/vitals/migrate.js
+
+# Create countdowns table
+node scripts/calendar/migrate_countdowns.js
 ```
 
 ### Tests

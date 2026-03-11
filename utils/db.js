@@ -735,6 +735,132 @@ async function deleteEventCard(entryId, eventId, userSub) {
   return rows[0] ? toEventCard(rows[0]) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Countdowns
+// ---------------------------------------------------------------------------
+
+// Maps a raw countdowns row to the shape the frontend expects.
+// target_date comes back from pg as a "YYYY-MM-DD" string (pg does not parse
+// DATE columns into Date objects, unlike TIMESTAMP), so we can use it as-is.
+function toCountdown(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? undefined,
+    targetDate: row.target_date,
+    color: row.color,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  };
+}
+
+/**
+ * Returns all countdowns for a user, sorted by target date ascending
+ * so the nearest one always comes first.
+ *
+ * @param {string} userSub - Auth0 sub
+ * @returns {Promise<Array>}
+ */
+async function getCountdowns(userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM countdowns WHERE user_sub = $1 ORDER BY target_date ASC",
+    [userSub],
+  );
+  return rows.map(toCountdown);
+}
+
+/**
+ * Fetches a single countdown by ID. Returns null if it doesn't exist
+ * or belongs to a different user.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCountdownById(id, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM countdowns WHERE id = $1 AND user_sub = $2",
+    [id, userSub],
+  );
+  return rows[0] ? toCountdown(rows[0]) : null;
+}
+
+/**
+ * Creates a new countdown for the authenticated user.
+ *
+ * @param {{ title: string, description?: string, targetDate: string, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCountdown({ title, description, targetDate, color = "#6366f1" }, userSub) {
+  const id = uuidv4();
+
+  const { rows } = await pool.query(
+    `INSERT INTO countdowns (id, title, description, target_date, color, user_sub)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [id, title, description || null, targetDate, color, userSub],
+  );
+
+  return toCountdown(rows[0]);
+}
+
+/**
+ * Partially updates a countdown. Only the owner can modify it.
+ * Pass only the fields you want to change, everything else stays as-is.
+ *
+ * @param {string} id
+ * @param {{ title?: string, description?: string, targetDate?: string, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} the updated row, or null if not found
+ */
+async function updateCountdown(id, fields, userSub) {
+  const colMap = {
+    title: "title",
+    description: "description",
+    targetDate: "target_date",
+    color: "color",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE countdowns
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCountdown(rows[0]) : null;
+}
+
+/**
+ * Deletes a countdown by ID. Only the owner can delete it.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} the deleted row, or null if not found
+ */
+async function deleteCountdown(id, userSub) {
+  const { rows } = await pool.query(
+    "DELETE FROM countdowns WHERE id = $1 AND user_sub = $2 RETURNING *",
+    [id, userSub],
+  );
+  return rows[0] ? toCountdown(rows[0]) : null;
+}
+
 module.exports = {
   addGalleryItem,
   getGalleryItemById,
@@ -757,4 +883,9 @@ module.exports = {
   addEventCard,
   updateEventCard,
   deleteEventCard,
+  getCountdowns,
+  getCountdownById,
+  createCountdown,
+  updateCountdown,
+  deleteCountdown,
 };
