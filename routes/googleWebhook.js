@@ -4,6 +4,27 @@ const { fetchIncrementalEvents } = require("../utils/googleCalendar");
 
 const router = express.Router();
 
+// Per-user webhook queue. Google can fire multiple push notifications in rapid
+// succession (e.g. during initial sync flood). Each notification reads and writes
+// the user's sync_token, so concurrent handlers for the same user collide: the
+// second fetch uses a token that was already consumed, triggers a 410 full re-sync,
+// and any deletions in the batch get lost. Chaining promises per-user ensures
+// only one handler runs at a time per user while still allowing different users
+// to process concurrently.
+const userQueues = new Map();
+
+function enqueueForUser(userId, fn) {
+  const prev = userQueues.get(userId) ?? Promise.resolve();
+  const curr = prev.then(() => fn()).catch((err) => {
+    console.error(`[googleWebhook] handler error for ${userId}:`, err.message);
+  });
+  userQueues.set(userId, curr);
+  curr.finally(() => {
+    if (userQueues.get(userId) === curr) userQueues.delete(userId);
+  });
+  return curr;
+}
+
 // reverse color map: Google colorId back to our EVENT_COLORS hex values.
 // "7" (peacock) maps back to blue since both blue and teal map to peacock on the way out.
 const GOOGLE_COLOR_TO_HEX = {
@@ -72,7 +93,7 @@ router.post("/webhook", async (req, res) => {
   // there are no actual changes to process, just acknowledge it.
   if (resourceState === "sync") return;
 
-  try {
+  enqueueForUser(userId, async () => {
     const auth = await db.getGoogleAuth(userId);
     if (!auth) return;
 
@@ -124,10 +145,7 @@ router.post("/webhook", async (req, res) => {
         await db.updateCalendarEventFromWebhook(existing.id, fields, userId);
       }
     }
-  } catch (err) {
-    // log but don't throw, the 200 is already sent
-    console.error("[googleWebhook] Error processing notification:", err.message);
-  }
+  });
 });
 
 module.exports = router;

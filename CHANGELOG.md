@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.7
+
+- fixed concurrent webhook processing race condition in `routes/googleWebhook.js`: when Google fires multiple push notifications in rapid succession (e.g. during initial sync flood), two handlers for the same user would both read the same `sync_token`, the second fetch would get a 410 Gone (token already consumed), trigger a full re-sync, and any deletions in the batch would be lost; added `enqueueForUser` — a per-user promise chain that ensures only one webhook handler runs at a time per user while different users still process concurrently
+
 ## 2026-03-12 - version 1.2.6
 
 - fixed Railway cron job conflicting with main server: both services share the same `railway.json`, so setting `startCommand` to `node utils/renewWatchChannels.js` broke the main server (502 on all routes); replaced with a `start.js` entry point that checks `RUN_CRON=true` env var — cron service gets that variable set in Railway dashboard, main server runs `server.js` as before
