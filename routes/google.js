@@ -6,6 +6,14 @@ const { registerWatch, stopWatch } = require("../utils/googleCalendar");
 
 const router = express.Router();
 
+// origins that are allowed to initiate Google OAuth. the callback will redirect
+// back to whichever origin started the flow, so both prod and develop work from
+// the same single API deployment.
+const ALLOWED_ORIGINS = new Set([
+  "https://paulsumido.com",
+  "https://develop.paulsumido.com",
+]);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -26,41 +34,47 @@ function signState(payload) {
 }
 
 /**
- * Builds the state query param: "<userId>.<hmac>". The userId is the part
- * before the dot, the hmac is everything after. We verify by re-signing
- * the userId and comparing.
+ * Builds the state query param from a { userId, origin } pair.
+ * Payload is base64url-encoded JSON so it survives URL round-trips cleanly.
+ * Format: "<base64url(json)>.<hmac>"
  *
  * @param {string} userId
+ * @param {string} origin  - one of ALLOWED_ORIGINS
  * @returns {string}
  */
-function buildState(userId) {
-  const sig = signState(userId);
-  return `${userId}.${sig}`;
+function buildState(userId, origin) {
+  const payload = Buffer.from(JSON.stringify({ userId, origin })).toString("base64url");
+  const sig = signState(payload);
+  return `${payload}.${sig}`;
 }
 
 /**
- * Verifies the state param from the callback. Returns the userId if valid,
- * null if tampered or malformed.
+ * Verifies the state param from the callback. Returns { userId, origin } if
+ * valid, null if tampered or malformed.
  *
  * @param {string} state
- * @returns {string|null}
+ * @returns {{ userId: string, origin: string }|null}
  */
 function verifyState(state) {
   if (!state || !state.includes(".")) return null;
   const dotIdx = state.lastIndexOf(".");
-  const userId = state.slice(0, dotIdx);
+  const payload = state.slice(0, dotIdx);
   const sig = state.slice(dotIdx + 1);
-  const expected = signState(userId);
+  const expected = signState(payload);
   // constant-time compare to avoid timing attacks
   try {
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    if (!crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"))) {
       return null;
     }
   } catch {
     // buffers were different lengths, definitely invalid
     return null;
   }
-  return userId;
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -100,8 +114,14 @@ router.get("/auth/status", checkJwt, async (req, res) => {
  */
 router.get("/auth/url", checkJwt, async (req, res) => {
   const userId = req.auth.payload.sub;
+  const origin = req.query.origin;
+
+  if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+    return res.status(400).json({ error: "Missing or invalid origin" });
+  }
+
   try {
-    const state = buildState(userId);
+    const state = buildState(userId, origin);
     const params = new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID,
       redirect_uri: process.env.GOOGLE_REDIRECT_URI,
@@ -132,19 +152,22 @@ router.get("/auth/url", checkJwt, async (req, res) => {
 router.get("/auth/callback", async (req, res) => {
   const { code, state, error } = req.query;
 
+  const parsed = verifyState(state);
+  // fall back to FRONTEND_URL if state is missing/invalid (e.g. very old flows)
+  const origin = parsed?.origin ?? process.env.FRONTEND_URL;
+
   // user clicked "deny" on the Google consent screen
   if (error) {
     console.warn("[google] OAuth denied by user:", error);
-    return res.redirect(
-      `${process.env.FRONTEND_URL}/protected/settings?gcal=denied`,
-    );
+    return res.redirect(`${origin}/protected/settings?gcal=denied`);
   }
 
-  const userId = verifyState(state);
-  if (!userId) {
+  if (!parsed) {
     console.warn("[google] Invalid state param in callback");
     return res.status(400).json({ error: "Invalid state parameter" });
   }
+
+  const { userId } = parsed;
 
   try {
     // exchange the authorization code for tokens
@@ -163,9 +186,7 @@ router.get("/auth/callback", async (req, res) => {
     if (!tokenRes.ok) {
       const body = await tokenRes.text();
       console.error("[google] Token exchange failed:", body);
-      return res.redirect(
-        `${process.env.FRONTEND_URL}/protected/settings?gcal=error`,
-      );
+      return res.redirect(`${origin}/protected/settings?gcal=error`);
     }
 
     const { access_token, refresh_token, expires_in } = await tokenRes.json();
@@ -186,10 +207,10 @@ router.get("/auth/callback", async (req, res) => {
       console.error("[google] registerWatch failed after connect:", watchErr.message);
     }
 
-    res.redirect(`${process.env.FRONTEND_URL}/protected/settings?gcal=connected`);
+    res.redirect(`${origin}/protected/settings?gcal=connected`);
   } catch (err) {
     console.error("[google] Callback error:", err.message);
-    res.redirect(`${process.env.FRONTEND_URL}/protected/settings?gcal=error`);
+    res.redirect(`${origin}/protected/settings?gcal=error`);
   }
 });
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.10
+
+- fixed `FRONTEND_URL` being a single static env var in `routes/google.js`: the single API deployment at `api.paulsumido.com` serves both `paulsumido.com` and `develop.paulsumido.com`, so the OAuth callback always redirected to the same frontend regardless of which one initiated the flow; frontend now passes `?origin=` to `GET /api/google/auth/url`, the origin is embedded (signed) in the OAuth state param alongside the userId, and the callback reads it back to redirect to the correct frontend; unknown origins are rejected with 400; `FRONTEND_URL` kept as fallback for any in-flight old-format state params
+
 ## 2026-03-12 - version 1.2.9
 
 - fixed all-day event end date in `utils/googleCalendar.js`: Google Calendar treats all-day end dates as exclusive (the day after the last day), but our DB stores them as inclusive; added `exclusiveEndDate` helper in `toGoogleEvent` that adds one UTC day before sending to Google, so a single-day event no longer appears to end the day before in Google Calendar
