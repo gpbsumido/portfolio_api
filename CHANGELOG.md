@@ -1,5 +1,54 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.4
+
+- added `registerWatch(userId)` and `stopWatch(userId)` to `utils/googleCalendar.js`; `registerWatch` POSTs to the Google watch endpoint with a 6.5-day expiry, stores the channel info via `updateChannelInfo`, then runs a full initial sync to bootstrap the sync token; `stopWatch` swallows all errors since a 404 from Google just means the channel already expired
+- replaced the stubs in `routes/google.js` with real imports from `utils/googleCalendar.js`
+- added `utils/renewWatchChannels.js`: queries `google_auth` for rows with `channel_expiry` within 24 hours, stops each old channel then re-registers; failures per user are logged and skipped so one bad token doesn't block the rest; has a `require.main` block so it can be run directly with `node utils/renewWatchChannels.js`
+- no `setInterval` added to `server.js` -- renewal runs as a Railway cron job (`0 6 * * *`) to survive deploys; the comment in `server.js` already documents this
+- added Google Calendar env vars to README (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_STATE_SECRET`, `GOOGLE_WEBHOOK_URL`, `FRONTEND_URL`) with notes on the webhook URL needing to be publicly reachable and ngrok for local testing
+- documented the Railway cron job setup in README (command, schedule, shared env vars)
+
+## 2026-03-12 - version 1.2.3
+
+- added `routes/googleWebhook.js` with `POST /api/google/webhook`; receives Google Calendar push notifications (body is always empty, all info is in headers); responds 200 immediately before any async work so Google never times out waiting
+- webhook handler skips events not in our DB (identified by `google_event_id`) so Gmail events and anything created directly in Google Calendar are ignored entirely
+- conflict resolution via `updated_at`: if Google's `item.updated` timestamp is newer than our `updated_at`, we apply the change; if ours is newer we skip (our version wins)
+- cancelled events (`item.status === "cancelled"`) are deleted from our DB
+- sync token is saved before processing items so a mid-batch crash doesn't re-apply the same changes on the next notification
+- added `getEventByGoogleId(googleEventId, userSub)` to `utils/db.js`; returns the raw row including `updated_at` for conflict comparison
+- added `updateCalendarEventFromWebhook(id, fields, userSub)` to `utils/db.js`; sets `sync_source='google'` instead of `'local'` so the push sync knows to fire on the next user-driven edit
+- registered `googleWebhook` router separately from `google` router in `server.js` to keep the unauthenticated webhook route clearly separated from the JWT-protected OAuth routes
+
+## 2026-03-11 - version 1.2.2
+
+- added `utils/googleCalendar.js` with four helpers: `createGoogleEvent`, `updateGoogleEvent`, `deleteGoogleEvent`, `fetchIncrementalEvents`; all call `getValidAccessToken` internally and return null (or no-op) when the user is not connected
+- color mapping table in `googleCalendar.js` maps our 8 EVENT_COLORS hex values to Google Calendar colorIds; defaults to "9" (blueberry) for unknown colors
+- all-day events are sent to Google with `{ date: "YYYY-MM-DD" }` start/end; timed events use `{ dateTime, timeZone: "UTC" }`; PATCH uses the same field mapping as POST
+- `deleteGoogleEvent` swallows 404s since the event may have already been deleted on the Google side
+- wired push sync into `routes/calendar.js` for the three event mutation routes: create calls `createGoogleEvent` then `setEventGoogleId`; update calls `updateGoogleEvent` with the full updated event; delete calls `deleteGoogleEvent` using the `googleEventId` from the deleted row
+- Google sync failures in all three routes are caught and logged but never fail the response, the user's data is already saved
+- `toCalendarEvent` in `utils/db.js` now includes `googleEventId` so route handlers can read it without a second query
+- `updateCalendarEvent` always resets `sync_source = 'local'` on any user-driven update so the outbound push fires even if the event last arrived via webhook
+
+## 2026-03-11 - version 1.2.1
+
+- added `routes/google.js` with four routes under `/api/google/auth`: `GET /status` (connected check), `GET /url` (generates Google OAuth URL), `GET /callback` (exchanges code for tokens, saves to DB, registers watch channel), `DELETE /disconnect` (stops watch channel, deletes tokens)
+- OAuth state param is signed with HMAC-SHA256 using `GOOGLE_STATE_SECRET` so the callback can verify which user it belongs to without storing anything server-side; `timingSafeEqual` used for comparison to avoid timing attacks
+- `prompt=consent` and `access_type=offline` are set on the authorization URL to ensure a refresh token is always returned, even for returning users
+- callback redirects to `FRONTEND_URL/protected/settings?gcal=connected` on success, `?gcal=denied` if the user declined, `?gcal=error` on failure
+- `registerWatch` and `stopWatch` are stubbed in this route (implemented in prompt 5); watch failure on connect is non-fatal, user is still connected
+- registered router at `/api/google` in `server.js`; added comment explaining why watch channel renewal is a Railway cron job, not a setInterval
+- new required env vars: `GOOGLE_STATE_SECRET`, `FRONTEND_URL`
+
+## 2026-03-11 - version 1.2.0
+
+- added `google_auth` table to store per-user Google OAuth tokens (access token, refresh token, expiry, watch channel info, sync token); one row per connected user, primary key on `user_id`
+- added `google_event_id` and `sync_source` columns to `calendar_events`; `google_event_id` maps our events to their Google Calendar counterparts, `sync_source` tracks whether the last change came from us or from a Google webhook (prevents push loops); partial index on `google_event_id` where not null
+- run `node scripts/calendar/migrate_google_sync.js` to apply the schema changes
+- added Google sync helpers to `utils/db.js`: `getGoogleAuth`, `upsertGoogleAuth`, `deleteGoogleAuth`, `updateChannelInfo`, `updateSyncToken`, `setEventGoogleId`, `clearEventGoogleId`
+- added `utils/googleToken.js` with `getValidAccessToken(userId)`: returns a cached token if still valid, otherwise hits the Google token endpoint with the refresh token and stores the new one; throws if the user is not connected
+
 ## 2026-03-11 - version 1.1.6
 
 - `GET /api/calendar/countdowns` now supports cursor-based pagination; pass `?cursor=YYYY-MM-DD__<uuid>` to get the next page; the cursor is a composite of `target_date` and `id` (double-underscore separator) which makes page boundaries stable — an insert or delete between fetches doesn't shift items the way OFFSET would

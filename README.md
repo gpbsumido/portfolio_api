@@ -194,7 +194,32 @@ AWS_S3_BUCKET_NAME=
 
 # OpenAI
 OPENAI_API_KEY=
+
+# Google Calendar sync (optional, only needed if using the calendar sync feature)
+# Create an OAuth 2.0 client in Google Cloud Console (Web application type)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# the callback URL you registered in Google Cloud Console
+GOOGLE_REDIRECT_URI=https://api.paulsumido.com/api/google/auth/callback
+# any random secret, used to sign the OAuth state param (openssl rand -hex 32)
+GOOGLE_STATE_SECRET=
+# publicly reachable URL for the webhook endpoint -- must be https, won't work on localhost
+# use ngrok or similar for local testing: ngrok http 3001, then set this to the tunnel URL
+GOOGLE_WEBHOOK_URL=https://api.paulsumido.com/api/google/webhook
+# the frontend URL the OAuth callback redirects back to after connect/disconnect
+FRONTEND_URL=https://paulsumido.com
 ```
+
+### Google Calendar watch channel renewal
+
+Watch channels expire after 7 days. The renewal job in `utils/renewWatchChannels.js`
+renews any channel expiring within 24 hours. Set it up as a Railway cron service:
+
+- **Command**: `node utils/renewWatchChannels.js`
+- **Schedule**: `0 6 * * *` (daily at 6am UTC)
+- The cron service lives in the same Railway project and shares the same env vars
+
+You can also run it manually: `node utils/renewWatchChannels.js`
 
 ### Run (without Docker)
 

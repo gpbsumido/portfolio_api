@@ -1,6 +1,11 @@
 const express = require("express");
 const db = require("../utils/db");
 const { checkJwt } = require("../middleware/auth");
+const {
+  createGoogleEvent,
+  updateGoogleEvent,
+  deleteGoogleEvent,
+} = require("../utils/googleCalendar");
 
 const router = express.Router();
 
@@ -73,6 +78,18 @@ router.post("/events", async (req, res) => {
       { title, description, startDate, endDate, allDay, color },
       userSub,
     );
+
+    // push to Google after the DB write. if it fails the event is still saved
+    // here, the sync just won't have a Google counterpart yet.
+    try {
+      const googleEventId = await createGoogleEvent(userSub, event);
+      if (googleEventId) {
+        await db.setEventGoogleId(event.id, googleEventId, userSub);
+      }
+    } catch (syncErr) {
+      console.error("POST /calendar/events Google sync failed:", syncErr.message);
+    }
+
     res.status(201).json({ event });
   } catch (err) {
     console.error("POST /calendar/events failed:", err.message);
@@ -98,6 +115,14 @@ router.put("/events/:id", async (req, res) => {
       return res.status(404).json({ error: "Event not found" });
     }
 
+    // sync the change to Google if this event has been pushed there before.
+    // we pass the full updated event so Google gets the current state, not just the diff.
+    try {
+      await updateGoogleEvent(userSub, event.googleEventId, event);
+    } catch (syncErr) {
+      console.error("PUT /calendar/events/:id Google sync failed:", syncErr.message);
+    }
+
     res.json({ event });
   } catch (err) {
     console.error("PUT /calendar/events/:id failed:", err.message);
@@ -111,10 +136,18 @@ router.delete("/events/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
+    // deleteCalendarEvent returns the deleted row including googleEventId,
+    // so we can clean up Google after the DB row is gone.
     const deleted = await db.deleteCalendarEvent(id, userSub);
 
     if (!deleted) {
       return res.status(404).json({ error: "Event not found" });
+    }
+
+    try {
+      await deleteGoogleEvent(userSub, deleted.googleEventId);
+    } catch (syncErr) {
+      console.error("DELETE /calendar/events/:id Google sync failed:", syncErr.message);
     }
 
     res.status(204).send();
