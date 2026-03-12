@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.5
+
+- fixed `COLOR_MAP` in `utils/googleCalendar.js`: previous hex values did not match the actual `EVENT_COLORS` used in the frontend, so almost every event fell back to blueberry "9"; map now keyed by the real event color hex values (`#3b82f6`, `#10b981`, `#f59e0b`, `#ef4444`, `#8b5cf6`, `#ec4899`, `#14b8a6`, `#f97316`)
+- fixed `GOOGLE_COLOR_TO_HEX` reverse map in `routes/googleWebhook.js` to match, so colors round-trip correctly when Google-side changes are pulled back in
+- fixed timestamp race in webhook handler: when we push an edit to Google, Google fires a webhook back almost immediately with `item.updated` slightly after our `updated_at`; the old `<=` comparison treated this echo as a real inbound change and wrote Google's version back, flipping `sync_source` to `'google'`; now uses a 10-second buffer (`SYNC_BUFFER_MS = 10_000`) so only genuine Google-side changes (made more than 10s after our last write) are applied
+
 ## 2026-03-12 - version 1.2.4
 
 - added `registerWatch(userId)` and `stopWatch(userId)` to `utils/googleCalendar.js`; `registerWatch` POSTs to the Google watch endpoint with a 6.5-day expiry, stores the channel info via `updateChannelInfo`, then runs a full initial sync to bootstrap the sync token; `stopWatch` swallows all errors since a 404 from Google just means the channel already expired
