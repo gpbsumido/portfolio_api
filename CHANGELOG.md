@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-11 - version 1.2.2
+
+- added `utils/googleCalendar.js` with four helpers: `createGoogleEvent`, `updateGoogleEvent`, `deleteGoogleEvent`, `fetchIncrementalEvents`; all call `getValidAccessToken` internally and return null (or no-op) when the user is not connected
+- color mapping table in `googleCalendar.js` maps our 8 EVENT_COLORS hex values to Google Calendar colorIds; defaults to "9" (blueberry) for unknown colors
+- all-day events are sent to Google with `{ date: "YYYY-MM-DD" }` start/end; timed events use `{ dateTime, timeZone: "UTC" }`; PATCH uses the same field mapping as POST
+- `deleteGoogleEvent` swallows 404s since the event may have already been deleted on the Google side
+- wired push sync into `routes/calendar.js` for the three event mutation routes: create calls `createGoogleEvent` then `setEventGoogleId`; update calls `updateGoogleEvent` with the full updated event; delete calls `deleteGoogleEvent` using the `googleEventId` from the deleted row
+- Google sync failures in all three routes are caught and logged but never fail the response, the user's data is already saved
+- `toCalendarEvent` in `utils/db.js` now includes `googleEventId` so route handlers can read it without a second query
+- `updateCalendarEvent` always resets `sync_source = 'local'` on any user-driven update so the outbound push fires even if the event last arrived via webhook
+
 ## 2026-03-11 - version 1.2.1
 
 - added `routes/google.js` with four routes under `/api/google/auth`: `GET /status` (connected check), `GET /url` (generates Google OAuth URL), `GET /callback` (exchanges code for tokens, saves to DB, registers watch channel), `DELETE /disconnect` (stops watch channel, deletes tokens)

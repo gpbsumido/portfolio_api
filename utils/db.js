@@ -490,6 +490,8 @@ function toCalendarEvent(row) {
     endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
     allDay: row.all_day,
     color: row.color,
+    // included so route handlers can read it for Google push sync without a second query
+    googleEventId: row.google_event_id ?? undefined,
   };
 }
 
@@ -596,6 +598,10 @@ async function updateCalendarEvent(id, fields, userSub) {
   }
 
   if (setClauses.length === 0) return null;
+
+  // always reset sync_source to 'local' on a user-driven update, so the
+  // outbound Google push fires even if the event last arrived via webhook.
+  setClauses.push(`sync_source = 'local'`);
 
   // always bump updated_at
   values.push(new Date());
