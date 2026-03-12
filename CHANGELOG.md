@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.1
+
+- added calendar DB helpers to `utils/db.js`: `toCalendar` mapper, `getCalendars`, `getCalendarById`, `getCalendarByGoogleCalId`, `createCalendar`, `updateCalendar`, `deleteCalendar`; `updateCalendar` uses the same dynamic SET clause pattern as `updateCalendarEvent` and always bumps `updated_at`
+- added `createCalendarEventFromWebhook` helper: inserts a new `calendar_events` row with `sync_source='google'`, defaults title to `''` and color to `#3b82f6` so the webhook handler does not need to sanitize Google event fields before calling it
+
 ## 2026-03-12 - version 1.3.0
 
 - added `calendars` table with `id`, `name`, `color`, `user_sub`, `google_cal_id`, `google_cal_name`, `sync_mode`, `channel_id`, `resource_id`, `channel_expiry`, `sync_token`; `sync_mode` is `none | push | two_way` -- this is the foundation for per-calendar Google sync config and eventual two-way dedicated calendar support

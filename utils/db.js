@@ -837,6 +837,203 @@ async function clearEventGoogleId(googleEventId, userSub) {
 }
 
 // ---------------------------------------------------------------------------
+// Calendars
+// ---------------------------------------------------------------------------
+
+// maps a raw calendars row (snake_case) to the camelCase shape the frontend expects.
+// the watch channel fields (channelId etc.) live here because each two_way calendar
+// has its own dedicated channel, unlike the old setup where channels were per-user.
+function toCalendar(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    userSub: row.user_sub,
+    googleCalId: row.google_cal_id ?? undefined,
+    googleCalName: row.google_cal_name ?? undefined,
+    syncMode: row.sync_mode,
+    channelId: row.channel_id ?? undefined,
+    resourceId: row.resource_id ?? undefined,
+    channelExpiry: row.channel_expiry instanceof Date ? row.channel_expiry.toISOString() : (row.channel_expiry ?? undefined),
+    syncToken: row.sync_token ?? undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+  };
+}
+
+/**
+ * Returns all calendars for a user in creation order (oldest first).
+ *
+ * @param {string} userSub
+ * @returns {Promise<Array>}
+ */
+async function getCalendars(userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendars WHERE user_sub = $1 ORDER BY created_at ASC",
+    [userSub],
+  );
+  return rows.map(toCalendar);
+}
+
+/**
+ * Fetches a single calendar by its UUID. Returns null if it doesn't exist
+ * or belongs to a different user.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarById(id, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendars WHERE id = $1 AND user_sub = $2",
+    [id, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Looks up a calendar by its Google Calendar ID. The webhook handler uses this
+ * to figure out which of our calendars a notification belongs to.
+ *
+ * @param {string} googleCalId
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarByGoogleCalId(googleCalId, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendars WHERE google_cal_id = $1 AND user_sub = $2",
+    [googleCalId, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Creates a new calendar for the authenticated user.
+ *
+ * @param {{ name: string, color?: string, syncMode?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCalendar({ name, color = "#3b82f6", syncMode = "none" }, userSub) {
+  const id = uuidv4();
+  const { rows } = await pool.query(
+    `INSERT INTO calendars (id, name, color, user_sub, sync_mode)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [id, name, color, userSub, syncMode],
+  );
+  return toCalendar(rows[0]);
+}
+
+/**
+ * Partially updates a calendar. Only the owner can modify it.
+ * Pass only the fields you want to change -- everything else stays as-is.
+ * Always bumps updated_at.
+ *
+ * @param {string} id
+ * @param {{ name?: string, color?: string, syncMode?: string, googleCalId?: string,
+ *           googleCalName?: string, channelId?: string, resourceId?: string,
+ *           channelExpiry?: string, syncToken?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} updated row, or null if not found / not owned
+ */
+async function updateCalendar(id, fields, userSub) {
+  const colMap = {
+    name: "name",
+    color: "color",
+    syncMode: "sync_mode",
+    googleCalId: "google_cal_id",
+    googleCalName: "google_cal_name",
+    channelId: "channel_id",
+    resourceId: "resource_id",
+    channelExpiry: "channel_expiry",
+    syncToken: "sync_token",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  // always bump updated_at so callers don't have to pass it explicitly
+  values.push(new Date());
+  setClauses.push(`updated_at = $${values.length}`);
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE calendars
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Deletes a calendar by ID. Only the owner can delete it.
+ * Events belonging to the calendar cascade-delete via the FK constraint.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} the deleted row, or null if not found
+ */
+async function deleteCalendar(id, userSub) {
+  const { rows } = await pool.query(
+    "DELETE FROM calendars WHERE id = $1 AND user_sub = $2 RETURNING *",
+    [id, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Inserts a calendar event that arrived from a Google webhook. Sets sync_source
+ * to 'google' so any subsequent user-driven mutation knows to push back out.
+ *
+ * Default color and title are applied here rather than in the webhook handler
+ * so this helper is safe to call without sanitizing the Google event first.
+ *
+ * @param {{ title?: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string }} fields
+ * @param {string} googleEventId
+ * @param {string} calendarId - UUID of our calendar row
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCalendarEventFromWebhook(fields, googleEventId, calendarId, userSub) {
+  const {
+    title = "",
+    description,
+    startDate,
+    endDate,
+    allDay = false,
+    color = "#3b82f6",
+  } = fields;
+
+  const id = uuidv4();
+
+  const { rows } = await pool.query(
+    `INSERT INTO calendar_events
+       (id, title, description, start_date, end_date, all_day, color,
+        calendar_id, user_sub, google_event_id, sync_source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'google')
+     RETURNING *`,
+    [id, title, description || null, startDate, endDate, allDay, color,
+     calendarId, userSub, googleEventId],
+  );
+
+  return toCalendarEvent(rows[0]);
+}
+
+// ---------------------------------------------------------------------------
 // Event cards (TCG card ↔ calendar event junction)
 // ---------------------------------------------------------------------------
 
@@ -1140,6 +1337,13 @@ module.exports = {
   createCountdown,
   updateCountdown,
   deleteCountdown,
+  getCalendars,
+  getCalendarById,
+  getCalendarByGoogleCalId,
+  createCalendar,
+  updateCalendar,
+  deleteCalendar,
+  createCalendarEventFromWebhook,
   getEventByGoogleId,
   updateCalendarEventFromWebhook,
   getGoogleAuth,
