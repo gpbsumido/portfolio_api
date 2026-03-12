@@ -220,14 +220,16 @@ router.delete("/events/:id/cards/:entryId", async (req, res) => {
 // Countdowns — /api/calendar/countdowns
 // ---------------------------------------------------------------------------
 
-// GET /api/calendar/countdowns
-// returns all countdowns for the authenticated user, sorted by target date
+// GET /api/calendar/countdowns?cursor=<cursor>
+// returns one page of countdowns sorted by target date ascending.
+// pass the nextCursor from the previous response to get the next page.
 router.get("/countdowns", async (req, res) => {
   const userSub = req.auth.payload.sub;
+  const { cursor } = req.query;
 
   try {
-    const countdowns = await db.getCountdowns(userSub);
-    res.json({ countdowns });
+    const result = await db.getCountdowns(userSub, cursor || null);
+    res.json(result);
   } catch (err) {
     console.error("GET /calendar/countdowns failed:", err.message);
     res.status(500).json({ error: "Failed to fetch countdowns" });

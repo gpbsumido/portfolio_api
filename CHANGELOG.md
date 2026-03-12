@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-11 - version 1.1.6
+
+- `GET /api/calendar/countdowns` now supports cursor-based pagination; pass `?cursor=YYYY-MM-DD__<uuid>` to get the next page; the cursor is a composite of `target_date` and `id` (double-underscore separator) which makes page boundaries stable — an insert or delete between fetches doesn't shift items the way OFFSET would
+- `getCountdowns(userSub, cursor)` in `utils/db.js` uses the LIMIT n+1 trick to detect `hasNextPage` without a COUNT query; `COUNTDOWN_PAGE_SIZE = 50`; response shape is `{ countdowns: Countdown[], nextCursor: string | null }` — `null` when there is no next page
+
 ## 2026-03-11 - version 1.1.5
 
 - added `countdowns` table to the database — stores a title, optional description, target date (plain `DATE`, no time component to avoid timezone confusion), color, and `user_sub` for ownership scoping; same auth pattern as `calendar_events`
