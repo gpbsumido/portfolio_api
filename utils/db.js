@@ -490,6 +490,8 @@ function toCalendarEvent(row) {
     endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
     allDay: row.all_day,
     color: row.color,
+    // included so route handlers can read it for Google push sync without a second query
+    googleEventId: row.google_event_id ?? undefined,
   };
 }
 
@@ -597,6 +599,10 @@ async function updateCalendarEvent(id, fields, userSub) {
 
   if (setClauses.length === 0) return null;
 
+  // always reset sync_source to 'local' on a user-driven update, so the
+  // outbound Google push fires even if the event last arrived via webhook.
+  setClauses.push(`sync_source = 'local'`);
+
   // always bump updated_at
   values.push(new Date());
   setClauses.push(`updated_at = $${values.length}`);
@@ -628,6 +634,206 @@ async function deleteCalendarEvent(id, userSub) {
   );
 
   return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar sync helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the google_auth row for a user, or null if they haven't connected.
+ *
+ * @param {string} userId - Auth0 sub
+ * @returns {Promise<Object|null>}
+ */
+async function getGoogleAuth(userId) {
+  const { rows } = await pool.query(
+    "SELECT * FROM google_auth WHERE user_id = $1",
+    [userId],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Creates or updates the google_auth row for a user. Partial updates are fine,
+ * any field you leave out just stays as-is (except updated_at, which always refreshes).
+ *
+ * @param {string} userId
+ * @param {{ accessToken?: string, refreshToken?: string, tokenExpiry?: Date,
+ *            googleCalId?: string, channelId?: string, resourceId?: string,
+ *            channelExpiry?: Date, syncToken?: string }} fields
+ */
+async function upsertGoogleAuth(userId, fields) {
+  const {
+    accessToken,
+    refreshToken,
+    tokenExpiry,
+    googleCalId,
+    channelId,
+    resourceId,
+    channelExpiry,
+    syncToken,
+  } = fields;
+
+  await pool.query(
+    `INSERT INTO google_auth
+       (user_id, access_token, refresh_token, token_expiry, google_cal_id,
+        channel_id, resource_id, channel_expiry, sync_token, updated_at)
+     VALUES ($1, $2, $3, $4, COALESCE($5, 'primary'), $6, $7, $8, $9, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET
+       access_token   = COALESCE($2, google_auth.access_token),
+       refresh_token  = COALESCE($3, google_auth.refresh_token),
+       token_expiry   = COALESCE($4, google_auth.token_expiry),
+       google_cal_id  = COALESCE($5, google_auth.google_cal_id),
+       channel_id     = COALESCE($6, google_auth.channel_id),
+       resource_id    = COALESCE($7, google_auth.resource_id),
+       channel_expiry = COALESCE($8, google_auth.channel_expiry),
+       sync_token     = COALESCE($9, google_auth.sync_token),
+       updated_at     = NOW()`,
+    [userId, accessToken, refreshToken, tokenExpiry, googleCalId,
+     channelId, resourceId, channelExpiry, syncToken],
+  );
+}
+
+/**
+ * Removes the google_auth row when a user disconnects. Also clears their
+ * channel info so the renewal job skips them.
+ *
+ * @param {string} userId
+ */
+async function deleteGoogleAuth(userId) {
+  await pool.query("DELETE FROM google_auth WHERE user_id = $1", [userId]);
+}
+
+/**
+ * Saves the watch channel details after registering a new channel with Google.
+ * Called right after a successful POST to the Google watch endpoint.
+ *
+ * @param {string} userId
+ * @param {{ channelId: string, resourceId: string, channelExpiry: Date }} info
+ */
+async function updateChannelInfo(userId, { channelId, resourceId, channelExpiry }) {
+  await pool.query(
+    `UPDATE google_auth
+     SET channel_id = $2, resource_id = $3, channel_expiry = $4, updated_at = NOW()
+     WHERE user_id = $1`,
+    [userId, channelId, resourceId, channelExpiry],
+  );
+}
+
+/**
+ * Saves the latest sync token after processing an incremental fetch from Google.
+ * The token is Google's cursor, we hand it back next time to get only the delta.
+ *
+ * @param {string} userId
+ * @param {string} syncToken
+ */
+async function updateSyncToken(userId, syncToken) {
+  await pool.query(
+    "UPDATE google_auth SET sync_token = $2, updated_at = NOW() WHERE user_id = $1",
+    [userId, syncToken],
+  );
+}
+
+/**
+ * Finds a calendar event by its Google event ID, scoped to the user.
+ * Returns the raw DB row (not toCalendarEvent) so the caller can read
+ * updated_at directly for conflict resolution.
+ *
+ * @param {string} googleEventId
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getEventByGoogleId(googleEventId, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendar_events WHERE google_event_id = $1 AND user_sub = $2",
+    [googleEventId, userSub],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Updates a calendar event with data that arrived from a Google webhook.
+ * Sets sync_source='google' instead of 'local' so the next user-driven
+ * mutation knows to push back out rather than skip.
+ *
+ * Only updates the fields that Google actually tracks (title, description,
+ * startDate, endDate, allDay, color). Uses the same colMap pattern as
+ * updateCalendarEvent.
+ *
+ * @param {string} id - our UUID
+ * @param {{ title?: string, description?: string, startDate?: string, endDate?: string, allDay?: boolean, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function updateCalendarEventFromWebhook(id, fields, userSub) {
+  const colMap = {
+    title: "title",
+    description: "description",
+    startDate: "start_date",
+    endDate: "end_date",
+    allDay: "all_day",
+    color: "color",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  // mark as coming from Google so the next user edit knows it needs a push
+  setClauses.push(`sync_source = 'google'`);
+
+  values.push(new Date());
+  setClauses.push(`updated_at = $${values.length}`);
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE calendar_events
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
+/**
+ * Stores the Google event ID on one of our events after a successful push.
+ * We use this later to look up the event when Google sends us a webhook.
+ *
+ * @param {string} eventId - our UUID
+ * @param {string} googleEventId - the id Google assigned
+ * @param {string} userSub
+ */
+async function setEventGoogleId(eventId, googleEventId, userSub) {
+  await pool.query(
+    "UPDATE calendar_events SET google_event_id = $1 WHERE id = $2 AND user_sub = $3",
+    [googleEventId, eventId, userSub],
+  );
+}
+
+/**
+ * Clears the google_event_id from our event row after Google confirms a delete,
+ * or when we need to unlink for any reason.
+ *
+ * @param {string} googleEventId
+ * @param {string} userSub
+ */
+async function clearEventGoogleId(googleEventId, userSub) {
+  await pool.query(
+    "UPDATE calendar_events SET google_event_id = NULL WHERE google_event_id = $1 AND user_sub = $2",
+    [googleEventId, userSub],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -934,4 +1140,13 @@ module.exports = {
   createCountdown,
   updateCountdown,
   deleteCountdown,
+  getEventByGoogleId,
+  updateCalendarEventFromWebhook,
+  getGoogleAuth,
+  upsertGoogleAuth,
+  deleteGoogleAuth,
+  updateChannelInfo,
+  updateSyncToken,
+  setEventGoogleId,
+  clearEventGoogleId,
 };
