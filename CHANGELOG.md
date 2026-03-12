@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.2
+
+- added calendar CRUD routes to `routes/calendar.js` under `/api/calendar/calendars`: `GET` (list), `POST` (create, validates name), `PUT /:id` (partial update, strips undefined fields before passing to db helper), `DELETE /:id` (204, cascade via FK); delete calls `stopWatchByCalId` stub before removing the row and logs any failure without aborting the delete; the Google Calendar itself is intentionally not deleted on disconnect
+
 ## 2026-03-12 - version 1.3.1
 
 - added calendar DB helpers to `utils/db.js`: `toCalendar` mapper, `getCalendars`, `getCalendarById`, `getCalendarByGoogleCalId`, `createCalendar`, `updateCalendar`, `deleteCalendar`; `updateCalendar` uses the same dynamic SET clause pattern as `updateCalendarEvent` and always bumps `updated_at`

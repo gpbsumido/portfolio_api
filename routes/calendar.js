@@ -158,6 +158,127 @@ router.delete("/events/:id", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Calendars — /api/calendar/calendars
+// ---------------------------------------------------------------------------
+
+/**
+ * Stub -- stopWatchByCalId will be wired up in Prompt 9 when the cron/watch
+ * renewal is refactored to track channels per calendar rather than per user.
+ * For now, logging the intent is enough so the delete route can call it safely.
+ *
+ * @param {string} _userId
+ * @param {string} _calId
+ */
+async function stopWatchByCalId(_userId, _calId) {
+  console.log(`[calendar] stopWatchByCalId stub called for calId=${_calId} -- will implement in Prompt 9`);
+}
+
+/**
+ * GET /api/calendar/calendars
+ * Returns all calendars for the authenticated user.
+ */
+router.get("/calendars", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+
+  try {
+    const calendars = await db.getCalendars(userSub);
+    res.json({ calendars });
+  } catch (err) {
+    console.error("GET /calendar/calendars failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch calendars" });
+  }
+});
+
+/**
+ * POST /api/calendar/calendars
+ * Creates a new calendar for the user.
+ * Body: { name, color?, syncMode? }
+ */
+router.post("/calendars", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { name, color, syncMode } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: "name is required" });
+  }
+
+  try {
+    const calendar = await db.createCalendar({ name, color, syncMode }, userSub);
+    res.status(201).json({ calendar });
+  } catch (err) {
+    console.error("POST /calendar/calendars failed:", err.message);
+    res.status(500).json({ error: "Failed to create calendar" });
+  }
+});
+
+/**
+ * PUT /api/calendar/calendars/:id
+ * Partial update -- only send the fields you want to change.
+ * Accepted fields: name, color, syncMode, googleCalId, googleCalName.
+ */
+router.put("/calendars/:id", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+  const { name, color, syncMode, googleCalId, googleCalName } = req.body;
+  const fields = { name, color, syncMode, googleCalId, googleCalName };
+
+  // strip undefined so updateCalendar's presence-check works correctly
+  Object.keys(fields).forEach((k) => fields[k] === undefined && delete fields[k]);
+
+  if (Object.keys(fields).length === 0) {
+    return res.status(400).json({ error: "No fields provided to update" });
+  }
+
+  try {
+    const calendar = await db.updateCalendar(id, fields, userSub);
+
+    if (!calendar) {
+      return res.status(404).json({ error: "Calendar not found" });
+    }
+
+    res.json({ calendar });
+  } catch (err) {
+    console.error("PUT /calendar/calendars/:id failed:", err.message);
+    res.status(500).json({ error: "Failed to update calendar" });
+  }
+});
+
+/**
+ * DELETE /api/calendar/calendars/:id
+ * Deletes the calendar and cascade-deletes its events (via FK).
+ * If the calendar had a linked Google Calendar, we stop the watch channel first.
+ * We do NOT delete the Google Calendar itself -- the user may want to keep it.
+ */
+router.delete("/calendars/:id", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const calendar = await db.getCalendarById(id, userSub);
+
+    if (!calendar) {
+      return res.status(404).json({ error: "Calendar not found" });
+    }
+
+    // stop the watch channel before deleting so Google stops sending notifications
+    // for an ID we no longer have a record for. non-fatal if it fails.
+    if (calendar.googleCalId) {
+      try {
+        await stopWatchByCalId(userSub, id);
+      } catch (watchErr) {
+        console.error("DELETE /calendar/calendars/:id -- stopWatchByCalId failed:", watchErr.message);
+      }
+    }
+
+    await db.deleteCalendar(id, userSub);
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /calendar/calendars/:id failed:", err.message);
+    res.status(500).json({ error: "Failed to delete calendar" });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Card sub-routes — /api/calendar/events/:id/cards
 // :id      = calendar_events UUID
 // :entryId = event_cards UUID (the row, not the TCGdex card_id string)
