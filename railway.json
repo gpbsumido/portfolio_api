@@ -3,6 +3,6 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "node utils/renewWatchChannels.js"
+    "startCommand": "node start.js"
   }
 }
