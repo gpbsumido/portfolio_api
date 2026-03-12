@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.8
+
+- fixed `fetchIncrementalEvents` in `utils/googleCalendar.js` not handling pagination: full syncs on calendars with many events return multiple pages via `nextPageToken`; only the final page carries `nextSyncToken`, so without pagination the stored sync token was always `null`/`undefined`, causing every subsequent webhook to trigger another full re-sync — deletions and updates from Google Calendar were never seen; now follows `nextPageToken` in a loop until `nextSyncToken` is returned, accumulating all items across pages
+
 ## 2026-03-12 - version 1.2.7
 
 - fixed concurrent webhook processing race condition in `routes/googleWebhook.js`: when Google fires multiple push notifications in rapid succession (e.g. during initial sync flood), two handlers for the same user would both read the same `sync_token`, the second fetch would get a 410 Gone (token already consumed), trigger a full re-sync, and any deletions in the batch would be lost; added `enqueueForUser` — a per-user promise chain that ensures only one webhook handler runs at a time per user while different users still process concurrently

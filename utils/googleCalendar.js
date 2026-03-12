@@ -167,27 +167,38 @@ async function deleteGoogleEvent(userId, googleEventId) {
 async function fetchIncrementalEvents(userId, syncToken) {
   const token = await getValidAccessToken(userId);
 
-  const params = new URLSearchParams({ singleEvents: "true" });
-  if (syncToken) params.set("syncToken", syncToken);
+  const allItems = [];
+  let pageToken = null;
+  let nextSyncToken = null;
 
-  const res = await fetch(
-    `${GCAL_BASE}/events?${params}`,
-    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
-  );
+  do {
+    const params = new URLSearchParams({ singleEvents: "true" });
+    if (syncToken) params.set("syncToken", syncToken);
+    if (pageToken) params.set("pageToken", pageToken);
 
-  // 410 Gone means the sync token is stale, do a full re-sync
-  if (res.status === 410) {
-    console.log(`[googleCalendar] sync token expired for ${userId}, doing full sync`);
-    return fetchIncrementalEvents(userId, null);
-  }
+    const res = await fetch(
+      `${GCAL_BASE}/events?${params}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+    );
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Google list events failed (${res.status}): ${body}`);
-  }
+    // 410 Gone means the sync token is stale, do a full re-sync
+    if (res.status === 410) {
+      console.log(`[googleCalendar] sync token expired for ${userId}, doing full sync`);
+      return fetchIncrementalEvents(userId, null);
+    }
 
-  const data = await res.json();
-  return { items: data.items ?? [], nextSyncToken: data.nextSyncToken };
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Google list events failed (${res.status}): ${body}`);
+    }
+
+    const data = await res.json();
+    allItems.push(...(data.items ?? []));
+    pageToken = data.nextPageToken ?? null;
+    nextSyncToken = data.nextSyncToken ?? null;
+  } while (pageToken);
+
+  return { items: allItems, nextSyncToken };
 }
 
 /**
