@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.9
+
+- fixed all-day event end date in `utils/googleCalendar.js`: Google Calendar treats all-day end dates as exclusive (the day after the last day), but our DB stores them as inclusive; added `exclusiveEndDate` helper in `toGoogleEvent` that adds one UTC day before sending to Google, so a single-day event no longer appears to end the day before in Google Calendar
+
 ## 2026-03-12 - version 1.2.8
 
 - fixed `fetchIncrementalEvents` in `utils/googleCalendar.js` not handling pagination: full syncs on calendars with many events return multiple pages via `nextPageToken`; only the final page carries `nextSyncToken`, so without pagination the stored sync token was always `null`/`undefined`, causing every subsequent webhook to trigger another full re-sync — deletions and updates from Google Calendar were never seen; now follows `nextPageToken` in a loop until `nextSyncToken` is returned, accumulating all items across pages

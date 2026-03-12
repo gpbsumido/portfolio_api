@@ -55,10 +55,18 @@ function fromGoogleEvent(item) {
   if (item.start) {
     const allDay = Boolean(item.start.date && !item.start.dateTime);
     fields.allDay = allDay;
-    fields.startDate = allDay ? item.start.date : item.start.dateTime;
-    fields.endDate = allDay
-      ? item.end.date
-      : item.end.dateTime;
+    if (allDay) {
+      // Store as noon UTC so timezone conversion never shifts the date backward.
+      // Google's all-day end is exclusive (the day after the last day), so
+      // subtract one day to get our inclusive end date.
+      fields.startDate = `${item.start.date}T12:00:00.000Z`;
+      const exclusiveEnd = new Date(`${item.end.date}T12:00:00.000Z`);
+      exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() - 1);
+      fields.endDate = exclusiveEnd.toISOString();
+    } else {
+      fields.startDate = item.start.dateTime;
+      fields.endDate = item.end.dateTime;
+    }
   }
 
   if (item.colorId !== undefined) {

@@ -34,12 +34,20 @@ function toGoogleEvent(event) {
   // whether startDate is already a date string or a full ISO datetime.
   const dateOnly = (iso) => iso.slice(0, 10);
 
+  // Google's all-day end date is exclusive (the day after the last day).
+  // Add one UTC day to our inclusive endDate before sending.
+  const exclusiveEndDate = (iso) => {
+    const d = new Date(`${dateOnly(iso)}T12:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+
   const start = allDay
     ? { date: dateOnly(startDate) }
     : { dateTime: startDate, timeZone: "UTC" };
 
   const end = allDay
-    ? { date: dateOnly(endDate) }
+    ? { date: exclusiveEndDate(endDate) }
     : { dateTime: endDate, timeZone: "UTC" };
 
   const body = {
