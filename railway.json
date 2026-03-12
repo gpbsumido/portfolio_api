@@ -1,8 +1,8 @@
 {
-    "build": {
-        "dockerfilePath": "Dockerfile"
-    },
-    "deploy": {
-        "startCommand": "npm start"
-    }
+  "build": {
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "node utils/renewWatchChannels.js"
+  }
 }

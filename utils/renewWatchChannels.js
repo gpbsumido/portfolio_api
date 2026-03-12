@@ -11,12 +11,13 @@ const { registerWatch, stopWatch } = require("./googleCalendar");
  * Each user is renewed independently so one failure doesn't block the rest.
  */
 async function renewExpiringChannels() {
-  const { rows } = await pool.query(`
+  console.log("[renewWatchChannels] starting");
+  const { rows } = await pool.query({ text: `
     SELECT user_id
     FROM google_auth
     WHERE channel_expiry < NOW() + INTERVAL '24 hours'
       AND channel_id IS NOT NULL
-  `);
+  `, query_timeout: 10_000 });
 
   if (rows.length === 0) {
     console.log("[renewWatchChannels] nothing to renew");
