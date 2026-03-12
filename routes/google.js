@@ -7,11 +7,12 @@ const { registerWatch, stopWatch } = require("../utils/googleCalendar");
 const router = express.Router();
 
 // origins that are allowed to initiate Google OAuth. the callback will redirect
-// back to whichever origin started the flow, so both prod and develop work from
-// the same single API deployment.
+// back to whichever origin started the flow, so prod, develop, and local dev
+// all work from the same single API deployment.
 const ALLOWED_ORIGINS = new Set([
   "https://paulsumido.com",
   "https://develop.paulsumido.com",
+  "http://localhost:3000",
 ]);
 
 // ---------------------------------------------------------------------------
