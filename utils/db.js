@@ -753,19 +753,65 @@ function toCountdown(row) {
   };
 }
 
+/** Number of countdowns returned per page. */
+const COUNTDOWN_PAGE_SIZE = 50;
+
 /**
- * Returns all countdowns for a user, sorted by target date ascending
- * so the nearest one always comes first.
+ * Returns one page of countdowns for a user, sorted by target date ascending
+ * so the nearest countdown always comes first.
+ *
+ * Uses a composite cursor (target_date, id) for stable keyset pagination.
+ * Inserts and deletes between pages don't shift items the way OFFSET-based
+ * pagination would. Cursor format is "YYYY-MM-DD__<uuid>" (double underscore
+ * separates the two parts; the date portion uses single hyphens).
+ *
+ * Fetches COUNTDOWN_PAGE_SIZE + 1 rows and returns hasMore = true when the
+ * extra row exists, so callers know whether to show a "load more" button
+ * without a separate COUNT query.
  *
  * @param {string} userSub - Auth0 sub
- * @returns {Promise<Array>}
+ * @param {string|null} [cursor] - opaque cursor returned by the previous page
+ * @returns {Promise<{ countdowns: Array, nextCursor: string|null }>}
  */
-async function getCountdowns(userSub) {
-  const { rows } = await pool.query(
-    "SELECT * FROM countdowns WHERE user_sub = $1 ORDER BY target_date ASC",
-    [userSub],
-  );
-  return rows.map(toCountdown);
+async function getCountdowns(userSub, cursor = null) {
+  const limit = COUNTDOWN_PAGE_SIZE;
+  const values = [userSub];
+  let query;
+
+  if (cursor) {
+    // cursor = "YYYY-MM-DD__<uuid>"; split on first double-underscore
+    const sep = cursor.indexOf("__");
+    const cursorDate = cursor.slice(0, sep);
+    const cursorId = cursor.slice(sep + 2);
+    values.push(cursorDate, cursorId, limit + 1);
+    query = `
+      SELECT * FROM countdowns
+      WHERE user_sub = $1
+        AND (target_date > $2 OR (target_date = $2 AND id > $3))
+      ORDER BY target_date ASC, id ASC
+      LIMIT $4
+    `;
+  } else {
+    values.push(limit + 1);
+    query = `
+      SELECT * FROM countdowns
+      WHERE user_sub = $1
+      ORDER BY target_date ASC, id ASC
+      LIMIT $2
+    `;
+  }
+
+  const { rows } = await pool.query(query, values);
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit).map(toCountdown);
+
+  // build the next cursor from the raw row (before toCountdown) so we get
+  // the original target_date string and id without any transformation
+  const nextCursor = hasMore
+    ? `${rows[limit - 1].target_date}__${rows[limit - 1].id}`
+    : null;
+
+  return { countdowns: page, nextCursor };
 }
 
 /**
