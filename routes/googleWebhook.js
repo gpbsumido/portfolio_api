@@ -81,6 +81,8 @@ router.post("/webhook", async (req, res) => {
       auth.sync_token,
     );
 
+    console.log(`[googleWebhook] ${items.length} item(s) from incremental fetch for ${userId}`);
+
     // save the new sync token before processing items so if we crash partway
     // through we don't re-process the same batch on the next notification.
     await db.updateSyncToken(userId, nextSyncToken);
@@ -89,9 +91,13 @@ router.post("/webhook", async (req, res) => {
       // look up by google_event_id scoped to this user.
       // if we don't have it, it's a foreign event and we skip it.
       const existing = await db.getEventByGoogleId(item.id, userId);
-      if (!existing) continue;
+      if (!existing) {
+        console.log(`[googleWebhook] skipping item ${item.id} (status=${item.status}): not in our DB`);
+        continue;
+      }
 
       if (item.status === "cancelled") {
+        console.log(`[googleWebhook] deleting event ${existing.id} (google_event_id=${item.id})`);
         await db.deleteCalendarEvent(existing.id, userId);
         continue;
       }
@@ -107,10 +113,14 @@ router.post("/webhook", async (req, res) => {
       const ourUpdated = new Date(existing.updated_at);
       const SYNC_BUFFER_MS = 10_000;
 
-      if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) continue;
+      if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) {
+        console.log(`[googleWebhook] skipping update for ${existing.id}: googleUpdated=${googleUpdated.toISOString()} ourUpdated=${ourUpdated.toISOString()} (within buffer)`);
+        continue;
+      }
 
       const fields = fromGoogleEvent(item);
       if (Object.keys(fields).length > 0) {
+        console.log(`[googleWebhook] updating event ${existing.id} from Google`);
         await db.updateCalendarEventFromWebhook(existing.id, fields, userId);
       }
     }
