@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.0
+
+- added `calendars` table with `id`, `name`, `color`, `user_sub`, `google_cal_id`, `google_cal_name`, `sync_mode`, `channel_id`, `resource_id`, `channel_expiry`, `sync_token`; `sync_mode` is `none | push | two_way` -- this is the foundation for per-calendar Google sync config and eventual two-way dedicated calendar support
+- added `calendar_id` FK column on `calendar_events` referencing `calendars(id)` with cascade delete
+- migration script `scripts/calendar/migrate_calendars.js` creates a "Personal" calendar (`sync_mode='push'`) for every user that already has events and backfills `calendar_id` on all existing events, preserving current one-way sync behavior
+
 ## 2026-03-12 - version 1.2.10
 
 - fixed `FRONTEND_URL` being a single static env var in `routes/google.js`: the single API deployment at `api.paulsumido.com` serves both `paulsumido.com` and `develop.paulsumido.com`, so the OAuth callback always redirected to the same frontend regardless of which one initiated the flow; frontend now passes `?origin=` to `GET /api/google/auth/url`, the origin is embedded (signed) in the OAuth state param alongside the userId, and the callback reads it back to redirect to the correct frontend; unknown origins are rejected with 400; `FRONTEND_URL` kept as fallback for any in-flight old-format state params
