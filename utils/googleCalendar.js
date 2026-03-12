@@ -3,18 +3,20 @@ const { getValidAccessToken } = require("./googleToken");
 const db = require("./db");
 
 const GCAL_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary";
+const FETCH_TIMEOUT_MS = 30_000;
 
 // maps our EVENT_COLORS hex values to the closest Google Calendar colorId.
+// these match the actual EVENT_COLORS array in src/lib/calendar.ts exactly.
 // Google's colorId reference: https://developers.google.com/calendar/api/v3/reference/colors/get
 const COLOR_MAP = {
-  "#6366f1": "9",  // blueberry
-  "#f43f5e": "11", // tomato
-  "#f97316": "6",  // tangerine
-  "#eab308": "5",  // banana
-  "#22c55e": "10", // sage
-  "#06b6d4": "7",  // peacock
-  "#8b5cf6": "3",  // grape
-  "#ec4899": "4",  // flamingo
+  "#3b82f6": "7",  // blue      -> peacock
+  "#10b981": "10", // emerald   -> sage
+  "#f59e0b": "5",  // amber     -> banana
+  "#ef4444": "11", // red       -> tomato
+  "#8b5cf6": "3",  // violet    -> grape
+  "#ec4899": "4",  // pink      -> flamingo
+  "#14b8a6": "7",  // teal      -> peacock (closest match)
+  "#f97316": "6",  // orange    -> tangerine
 };
 
 /**
@@ -77,6 +79,7 @@ async function createGoogleEvent(userId, event) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(toGoogleEvent(event)),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -113,6 +116,7 @@ async function updateGoogleEvent(userId, googleEventId, fields) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(toGoogleEvent(fields)),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -141,6 +145,7 @@ async function deleteGoogleEvent(userId, googleEventId) {
   const res = await fetch(`${GCAL_BASE}/events/${googleEventId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   // 404 means it's already gone, that's fine
@@ -167,7 +172,7 @@ async function fetchIncrementalEvents(userId, syncToken) {
 
   const res = await fetch(
     `${GCAL_BASE}/events?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
   );
 
   // 410 Gone means the sync token is stale, do a full re-sync
@@ -214,6 +219,7 @@ async function registerWatch(userId) {
       token: userId,           // echoed back as X-Goog-Channel-Token on each ping
       expiration,
     }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -262,6 +268,7 @@ async function stopWatch(userId) {
         id: auth.channel_id,
         resourceId: auth.resource_id,
       }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     // we don't check res.ok here, a 404 just means the channel already expired
   } catch (err) {

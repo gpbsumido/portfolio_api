@@ -4,17 +4,17 @@ const { fetchIncrementalEvents } = require("../utils/googleCalendar");
 
 const router = express.Router();
 
-// reverse color map: Google colorId back to our hex values.
-// used when applying Google-side color changes to our events.
+// reverse color map: Google colorId back to our EVENT_COLORS hex values.
+// "7" (peacock) maps back to blue since both blue and teal map to peacock on the way out.
 const GOOGLE_COLOR_TO_HEX = {
-  "9": "#6366f1",  // blueberry
-  "11": "#f43f5e", // tomato
-  "6": "#f97316",  // tangerine
-  "5": "#eab308",  // banana
-  "10": "#22c55e", // sage
-  "7": "#06b6d4",  // peacock
-  "3": "#8b5cf6",  // grape
-  "4": "#ec4899",  // flamingo
+  "7": "#3b82f6",  // peacock   -> blue
+  "10": "#10b981", // sage      -> emerald
+  "5": "#f59e0b",  // banana    -> amber
+  "11": "#ef4444", // tomato    -> red
+  "3": "#8b5cf6",  // grape     -> violet
+  "4": "#ec4899",  // flamingo  -> pink
+  "6": "#f97316",  // tangerine -> orange
+  "9": "#3b82f6",  // blueberry -> blue (fallback for old events)
 };
 
 /**
@@ -96,13 +96,18 @@ router.post("/webhook", async (req, res) => {
         continue;
       }
 
-      // last-write wins: if Google's timestamp is newer, apply the change.
-      // if ours is newer it means the user just edited it here and the webhook
-      // is stale -- our version is already correct, skip it.
+      // last-write wins, but with a 10-second buffer. when we push an edit to
+      // Google, Google fires a webhook back almost immediately and item.updated
+      // ends up slightly after our updated_at (Google processes it after we write
+      // to DB). without the buffer, that echo would trip the comparison and write
+      // Google's version back over ours, flipping sync_source to 'google'. the
+      // buffer means a Google-side change needs to be at least 10s newer than our
+      // last write to be treated as a real inbound change.
       const googleUpdated = new Date(item.updated);
       const ourUpdated = new Date(existing.updated_at);
+      const SYNC_BUFFER_MS = 10_000;
 
-      if (googleUpdated <= ourUpdated) continue;
+      if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) continue;
 
       const fields = fromGoogleEvent(item);
       if (Object.keys(fields).length > 0) {
