@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.3
+
+- added `routes/googleWebhook.js` with `POST /api/google/webhook`; receives Google Calendar push notifications (body is always empty, all info is in headers); responds 200 immediately before any async work so Google never times out waiting
+- webhook handler skips events not in our DB (identified by `google_event_id`) so Gmail events and anything created directly in Google Calendar are ignored entirely
+- conflict resolution via `updated_at`: if Google's `item.updated` timestamp is newer than our `updated_at`, we apply the change; if ours is newer we skip (our version wins)
+- cancelled events (`item.status === "cancelled"`) are deleted from our DB
+- sync token is saved before processing items so a mid-batch crash doesn't re-apply the same changes on the next notification
+- added `getEventByGoogleId(googleEventId, userSub)` to `utils/db.js`; returns the raw row including `updated_at` for conflict comparison
+- added `updateCalendarEventFromWebhook(id, fields, userSub)` to `utils/db.js`; sets `sync_source='google'` instead of `'local'` so the push sync knows to fire on the next user-driven edit
+- registered `googleWebhook` router separately from `google` router in `server.js` to keep the unauthenticated webhook route clearly separated from the JWT-protected OAuth routes
+
 ## 2026-03-11 - version 1.2.2
 
 - added `utils/googleCalendar.js` with four helpers: `createGoogleEvent`, `updateGoogleEvent`, `deleteGoogleEvent`, `fetchIncrementalEvents`; all call `getValidAccessToken` internally and return null (or no-op) when the user is not connected

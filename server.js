@@ -21,6 +21,7 @@ const chatgptRoutes = require("./routes/chat-gpt");
 const calendarRoutes = require("./routes/calendar");
 const vitalsRoutes = require("./routes/vitals");
 const googleRoutes = require("./routes/google");
+const googleWebhookRoutes = require("./routes/googleWebhook");
 // watch channel renewal runs as a Railway cron job (utils/renewWatchChannels.js)
 // not as a setInterval here, since deploys restart the process and would reset the timer
 
@@ -71,6 +72,7 @@ app.use("/api/chatgpt", chatgptRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/vitals", vitalsRoutes);
 app.use("/api/google", googleRoutes);
+app.use("/api/google", googleWebhookRoutes);
 app.use("/api", dbRoutes);
 
 // Error handling middleware

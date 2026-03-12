@@ -736,6 +736,78 @@ async function updateSyncToken(userId, syncToken) {
 }
 
 /**
+ * Finds a calendar event by its Google event ID, scoped to the user.
+ * Returns the raw DB row (not toCalendarEvent) so the caller can read
+ * updated_at directly for conflict resolution.
+ *
+ * @param {string} googleEventId
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getEventByGoogleId(googleEventId, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendar_events WHERE google_event_id = $1 AND user_sub = $2",
+    [googleEventId, userSub],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Updates a calendar event with data that arrived from a Google webhook.
+ * Sets sync_source='google' instead of 'local' so the next user-driven
+ * mutation knows to push back out rather than skip.
+ *
+ * Only updates the fields that Google actually tracks (title, description,
+ * startDate, endDate, allDay, color). Uses the same colMap pattern as
+ * updateCalendarEvent.
+ *
+ * @param {string} id - our UUID
+ * @param {{ title?: string, description?: string, startDate?: string, endDate?: string, allDay?: boolean, color?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function updateCalendarEventFromWebhook(id, fields, userSub) {
+  const colMap = {
+    title: "title",
+    description: "description",
+    startDate: "start_date",
+    endDate: "end_date",
+    allDay: "all_day",
+    color: "color",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  // mark as coming from Google so the next user edit knows it needs a push
+  setClauses.push(`sync_source = 'google'`);
+
+  values.push(new Date());
+  setClauses.push(`updated_at = $${values.length}`);
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE calendar_events
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCalendarEvent(rows[0]) : null;
+}
+
+/**
  * Stores the Google event ID on one of our events after a successful push.
  * We use this later to look up the event when Google sends us a webhook.
  *
@@ -1068,6 +1140,8 @@ module.exports = {
   createCountdown,
   updateCountdown,
   deleteCountdown,
+  getEventByGoogleId,
+  updateCalendarEventFromWebhook,
   getGoogleAuth,
   upsertGoogleAuth,
   deleteGoogleAuth,
