@@ -20,6 +20,9 @@ const feedbackRoutes = require("./routes/feedback");
 const chatgptRoutes = require("./routes/chat-gpt");
 const calendarRoutes = require("./routes/calendar");
 const vitalsRoutes = require("./routes/vitals");
+const googleRoutes = require("./routes/google");
+// watch channel renewal runs as a Railway cron job (utils/renewWatchChannels.js)
+// not as a setInterval here, since deploys restart the process and would reset the timer
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -67,6 +70,7 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/chatgpt", chatgptRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/vitals", vitalsRoutes);
+app.use("/api/google", googleRoutes);
 app.use("/api", dbRoutes);
 
 // Error handling middleware

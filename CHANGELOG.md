@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-11 - version 1.2.1
+
+- added `routes/google.js` with four routes under `/api/google/auth`: `GET /status` (connected check), `GET /url` (generates Google OAuth URL), `GET /callback` (exchanges code for tokens, saves to DB, registers watch channel), `DELETE /disconnect` (stops watch channel, deletes tokens)
+- OAuth state param is signed with HMAC-SHA256 using `GOOGLE_STATE_SECRET` so the callback can verify which user it belongs to without storing anything server-side; `timingSafeEqual` used for comparison to avoid timing attacks
+- `prompt=consent` and `access_type=offline` are set on the authorization URL to ensure a refresh token is always returned, even for returning users
+- callback redirects to `FRONTEND_URL/protected/settings?gcal=connected` on success, `?gcal=denied` if the user declined, `?gcal=error` on failure
+- `registerWatch` and `stopWatch` are stubbed in this route (implemented in prompt 5); watch failure on connect is non-fatal, user is still connected
+- registered router at `/api/google` in `server.js`; added comment explaining why watch channel renewal is a Railway cron job, not a setInterval
+- new required env vars: `GOOGLE_STATE_SECRET`, `FRONTEND_URL`
+
 ## 2026-03-11 - version 1.2.0
 
 - added `google_auth` table to store per-user Google OAuth tokens (access token, refresh token, expiry, watch channel info, sync token); one row per connected user, primary key on `user_id`
