@@ -1,4 +1,6 @@
+const { v4: uuidv4 } = require("uuid");
 const { getValidAccessToken } = require("./googleToken");
+const db = require("./db");
 
 const GCAL_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary";
 
@@ -183,9 +185,95 @@ async function fetchIncrementalEvents(userId, syncToken) {
   return { items: data.items ?? [], nextSyncToken: data.nextSyncToken };
 }
 
+/**
+ * Registers a Google Calendar push notification channel for the user.
+ * Google will POST to GOOGLE_WEBHOOK_URL whenever something changes on their
+ * primary calendar. The channel lives for 6.5 days, the Railway cron job
+ * (utils/renewWatchChannels.js) renews it before it expires.
+ *
+ * Also kicks off an initial full sync so we bootstrap our sync token and
+ * pick up any events the user may have already synced in the past.
+ *
+ * @param {string} userId - Auth0 sub
+ */
+async function registerWatch(userId) {
+  const token = await getValidAccessToken(userId);
+  const channelId = uuidv4();
+  const expiration = Date.now() + 6.5 * 24 * 60 * 60 * 1000;
+
+  const res = await fetch(`${GCAL_BASE}/events/watch`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: channelId,
+      type: "web_hook",
+      address: process.env.GOOGLE_WEBHOOK_URL,
+      token: userId,           // echoed back as X-Goog-Channel-Token on each ping
+      expiration,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`registerWatch failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json();
+  await db.updateChannelInfo(userId, {
+    channelId: data.id,
+    resourceId: data.resourceId,
+    channelExpiry: new Date(parseInt(data.expiration, 10)),
+  });
+
+  // bootstrap the sync token with a full sync so future incremental fetches
+  // have a valid cursor to start from.
+  try {
+    const { nextSyncToken } = await fetchIncrementalEvents(userId, null);
+    await db.updateSyncToken(userId, nextSyncToken);
+  } catch (syncErr) {
+    console.warn(`[googleCalendar] initial sync after registerWatch failed for ${userId}:`, syncErr.message);
+  }
+}
+
+/**
+ * Stops an existing watch channel. Called on disconnect and before re-registering
+ * during renewal. Swallows errors since Google returns 404 for already-expired
+ * channels, which is fine.
+ *
+ * @param {string} userId - Auth0 sub
+ */
+async function stopWatch(userId) {
+  try {
+    const auth = await db.getGoogleAuth(userId);
+    if (!auth?.channel_id || !auth?.resource_id) return;
+
+    const token = await getValidAccessToken(userId);
+
+    await fetch("https://www.googleapis.com/calendar/v3/channels/stop", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: auth.channel_id,
+        resourceId: auth.resource_id,
+      }),
+    });
+    // we don't check res.ok here, a 404 just means the channel already expired
+  } catch (err) {
+    console.warn(`[googleCalendar] stopWatch failed for ${userId}:`, err.message);
+  }
+}
+
 module.exports = {
   createGoogleEvent,
   updateGoogleEvent,
   deleteGoogleEvent,
   fetchIncrementalEvents,
+  registerWatch,
+  stopWatch,
 };

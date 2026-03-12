@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-12 - version 1.2.4
+
+- added `registerWatch(userId)` and `stopWatch(userId)` to `utils/googleCalendar.js`; `registerWatch` POSTs to the Google watch endpoint with a 6.5-day expiry, stores the channel info via `updateChannelInfo`, then runs a full initial sync to bootstrap the sync token; `stopWatch` swallows all errors since a 404 from Google just means the channel already expired
+- replaced the stubs in `routes/google.js` with real imports from `utils/googleCalendar.js`
+- added `utils/renewWatchChannels.js`: queries `google_auth` for rows with `channel_expiry` within 24 hours, stops each old channel then re-registers; failures per user are logged and skipped so one bad token doesn't block the rest; has a `require.main` block so it can be run directly with `node utils/renewWatchChannels.js`
+- no `setInterval` added to `server.js` -- renewal runs as a Railway cron job (`0 6 * * *`) to survive deploys; the comment in `server.js` already documents this
+- added Google Calendar env vars to README (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_STATE_SECRET`, `GOOGLE_WEBHOOK_URL`, `FRONTEND_URL`) with notes on the webhook URL needing to be publicly reachable and ngrok for local testing
+- documented the Railway cron job setup in README (command, schedule, shared env vars)
+
 ## 2026-03-12 - version 1.2.3
 
 - added `routes/googleWebhook.js` with `POST /api/google/webhook`; receives Google Calendar push notifications (body is always empty, all info is in headers); responds 200 immediately before any async work so Google never times out waiting

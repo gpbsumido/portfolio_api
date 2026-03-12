@@ -2,17 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 const db = require("../utils/db");
 const { checkJwt } = require("../middleware/auth");
-
-// registerWatch and stopWatch live in googleCalendar.js (implemented in prompt 5).
-// stubbed here so the connect/disconnect flow compiles now.
-async function registerWatch(userId) {
-  // TODO: implement in prompt 5
-  console.log(`[google] registerWatch stub called for ${userId}`);
-}
-async function stopWatch(userId) {
-  // TODO: implement in prompt 5
-  console.log(`[google] stopWatch stub called for ${userId}`);
-}
+const { registerWatch, stopWatch } = require("../utils/googleCalendar");
 
 const router = express.Router();
 
