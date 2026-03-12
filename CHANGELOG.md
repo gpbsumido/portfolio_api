@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-03-11 - version 1.2.0
+
+- added `google_auth` table to store per-user Google OAuth tokens (access token, refresh token, expiry, watch channel info, sync token); one row per connected user, primary key on `user_id`
+- added `google_event_id` and `sync_source` columns to `calendar_events`; `google_event_id` maps our events to their Google Calendar counterparts, `sync_source` tracks whether the last change came from us or from a Google webhook (prevents push loops); partial index on `google_event_id` where not null
+- run `node scripts/calendar/migrate_google_sync.js` to apply the schema changes
+- added Google sync helpers to `utils/db.js`: `getGoogleAuth`, `upsertGoogleAuth`, `deleteGoogleAuth`, `updateChannelInfo`, `updateSyncToken`, `setEventGoogleId`, `clearEventGoogleId`
+- added `utils/googleToken.js` with `getValidAccessToken(userId)`: returns a cached token if still valid, otherwise hits the Google token endpoint with the refresh token and stores the new one; throws if the user is not connected
+
 ## 2026-03-11 - version 1.1.6
 
 - `GET /api/calendar/countdowns` now supports cursor-based pagination; pass `?cursor=YYYY-MM-DD__<uuid>` to get the next page; the cursor is a composite of `target_date` and `id` (double-underscore separator) which makes page boundaries stable — an insert or delete between fetches doesn't shift items the way OFFSET would
