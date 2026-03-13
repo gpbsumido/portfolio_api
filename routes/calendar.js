@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../utils/db");
+const { pool } = require("../config/database");
 const { checkJwt } = require("../middleware/auth");
 const upsertUser = require("../middleware/upsertUser");
 const {
@@ -12,7 +13,19 @@ const {
 } = require("../utils/googleCalendar");
 const { getValidAccessToken } = require("../utils/googleToken");
 
+const rateLimit = require("express-rate-limit");
+
 const router = express.Router();
+
+// 20 invite attempts per minute per user sub (falls back to IP if sub is unavailable)
+const inviteRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.auth?.payload?.sub ?? req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many invite requests. Please wait a minute." },
+});
 
 // all calendar routes require a valid Auth0 token
 router.use(checkJwt);
@@ -378,6 +391,136 @@ router.delete("/calendars/:id/google", async (req, res) => {
   } catch (err) {
     console.error("DELETE /calendar/calendars/:id/google failed:", err.message);
     res.status(500).json({ error: "Failed to disconnect Google Calendar" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Sharing — /api/calendar/calendars/:id/members
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/calendar/calendars/:id/members
+ * Returns the owner entry (synthesized) plus all members.
+ * Accessible by the owner or any member.
+ */
+router.get("/calendars/:id/members", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: calendarId } = req.params;
+
+  try {
+    // allow owner or any member — a single union check
+    const { rows } = await pool.query(
+      `SELECT 1 FROM calendars        WHERE id = $1 AND user_sub = $2
+       UNION
+       SELECT 1 FROM calendar_members WHERE calendar_id = $1 AND user_sub = $2`,
+      [calendarId, userSub],
+    );
+    if (rows.length === 0) return res.status(403).json({ error: "Not authorized" });
+
+    const calRow = await pool.query(
+      "SELECT * FROM calendars WHERE id = $1",
+      [calendarId],
+    );
+    const cal = calRow.rows[0];
+    if (!cal) return res.status(404).json({ error: "Calendar not found" });
+
+    const ownerUser = await db.getUserBySub(cal.user_sub);
+    const ownerEntry = {
+      id: null,
+      userSub: cal.user_sub,
+      email: ownerUser?.email ?? null,
+      role: "owner",
+    };
+
+    const members = await db.getCalendarMembers(calendarId);
+    res.json({ members: [ownerEntry, ...members] });
+  } catch (err) {
+    console.error("GET /calendar/calendars/:id/members failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch members" });
+  }
+});
+
+/**
+ * POST /api/calendar/calendars/:id/members
+ * Invites a user by email. Owner-only. Rate-limited to 20/min.
+ * Body: { email, role? }
+ */
+router.post("/calendars/:id/members", inviteRateLimit, async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: calendarId } = req.params;
+  const { email, role = "editor" } = req.body;
+
+  if (!email) return res.status(400).json({ error: "email is required" });
+  if (!["editor", "viewer"].includes(role)) {
+    return res.status(400).json({ error: "role must be editor or viewer" });
+  }
+
+  try {
+    const cal = await db.getCalendarForMutation(calendarId, userSub, "owner");
+    if (!cal) return res.status(403).json({ error: "Not authorized" });
+
+    const target = await db.getUserByEmail(email);
+    // generic message — never reveal whether the email is registered or not
+    if (!target) return res.status(404).json({ error: "No account found for that email address." });
+    if (target.sub === userSub) {
+      return res.status(400).json({ error: "You cannot share a calendar with yourself." });
+    }
+
+    const member = await db.addCalendarMember(calendarId, target.sub, role, userSub);
+    res.status(201).json({ member });
+  } catch (err) {
+    console.error("POST /calendar/calendars/:id/members failed:", err.message);
+    res.status(500).json({ error: "Failed to invite member" });
+  }
+});
+
+/**
+ * PUT /api/calendar/calendars/:id/members/:memberSub
+ * Updates the role of an existing member. Owner-only.
+ * Body: { role }
+ */
+router.put("/calendars/:id/members/:memberSub", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: calendarId, memberSub } = req.params;
+  const { role } = req.body;
+
+  if (!["editor", "viewer"].includes(role)) {
+    return res.status(400).json({ error: "role must be editor or viewer" });
+  }
+
+  try {
+    const cal = await db.getCalendarForMutation(calendarId, userSub, "owner");
+    if (!cal) return res.status(403).json({ error: "Not authorized" });
+
+    const member = await db.updateCalendarMemberRole(calendarId, memberSub, role, userSub);
+    if (!member) return res.status(404).json({ error: "Member not found" });
+
+    res.json({ member });
+  } catch (err) {
+    console.error("PUT /calendar/calendars/:id/members/:memberSub failed:", err.message);
+    res.status(500).json({ error: "Failed to update member role" });
+  }
+});
+
+/**
+ * DELETE /api/calendar/calendars/:id/members/:memberSub
+ * Removes a member. Owner-only.
+ */
+router.delete("/calendars/:id/members/:memberSub", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id: calendarId, memberSub } = req.params;
+
+  try {
+    const cal = await db.getCalendarForMutation(calendarId, userSub, "owner");
+    if (!cal) return res.status(403).json({ error: "Not authorized" });
+
+    const removed = await db.removeCalendarMember(calendarId, memberSub, userSub);
+    if (!removed) return res.status(404).json({ error: "Member not found" });
+
+    res.status(204).send();
+  } catch (err) {
+    console.error("DELETE /calendar/calendars/:id/members/:memberSub failed:", err.message);
+    res.status(500).json({ error: "Failed to remove member" });
   }
 });
 

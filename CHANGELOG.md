@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.4
+
+- added `GET /api/calendar/calendars/:id/members`: accessible by owner or any member; synthesizes an owner entry from the calendars row and prepends it to the member list
+- added `POST /api/calendar/calendars/:id/members`: owner-only invite by email; rate-limited to 20 requests per minute per user sub; returns generic 404 when email is not found to avoid enumeration; returns 400 when owner tries to invite themselves
+- added `PUT /api/calendar/calendars/:id/members/:memberSub`: owner-only role update ('editor' or 'viewer')
+- added `DELETE /api/calendar/calendars/:id/members/:memberSub`: owner-only member removal
+
 ## 2026-03-13 - version 1.4.3
 
 - event create/update/delete: replaced `getCalendarById` with `getCalendarForMutation('editor')` for Google sync lookup so editors on shared calendars can write events and credentials always come from the owner's row
