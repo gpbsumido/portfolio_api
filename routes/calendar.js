@@ -15,7 +15,7 @@ const {
 } = require("../utils/googleCalendar");
 const { getValidAccessToken } = require("../utils/googleToken");
 
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ const router = express.Router();
 const inviteRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
-  keyGenerator: (req) => req.auth?.payload?.sub ?? req.ip,
+  keyGenerator: (req) => req.auth?.payload?.sub ?? ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many invite requests. Please wait a minute." },
@@ -522,13 +522,48 @@ router.put("/calendars/:id/members/:memberSub", async (req, res) => {
 
 /**
  * DELETE /api/calendar/calendars/:id/members/:memberSub
- * Removes a member. Owner-only.
+ * Owner can remove any member. Any member can remove themselves ("me" or their own sub).
  */
 router.delete("/calendars/:id/members/:memberSub", async (req, res) => {
   const userSub = req.auth.payload.sub;
-  const { id: calendarId, memberSub } = req.params;
+  const { id: calendarId, memberSub: rawMemberSub } = req.params;
+  // "me" is a convenience alias so the frontend doesn't need to know the sub
+  const memberSub = rawMemberSub === "me" ? userSub : rawMemberSub;
+  const isSelfRemoval = memberSub === userSub;
 
   try {
+    if (isSelfRemoval) {
+      // members can always leave their own shared calendars
+      const { rows } = await pool.query(
+        `DELETE FROM calendar_members
+         WHERE calendar_id = $1 AND user_sub = $2
+         RETURNING *`,
+        [calendarId, userSub],
+      );
+      if (!rows[0]) return res.status(404).json({ error: "Not a member of this calendar" });
+
+      // best-effort Google ACL removal; use the owner's credentials
+      let googleAclRemoved = true;
+      try {
+        const calRes = await pool.query(
+          `SELECT google_cal_id, sync_mode, user_sub AS owner_sub FROM calendars WHERE id = $1`,
+          [calendarId],
+        );
+        const calRow = calRes.rows[0];
+        if (calRow?.sync_mode === "two_way" && calRow?.google_cal_id) {
+          const memberUser = await db.getUserBySub(userSub);
+          if (memberUser?.email) {
+            await removeCalendarAclEntry(calRow.owner_sub, calRow.google_cal_id, memberUser.email);
+          }
+        }
+      } catch (err) {
+        googleAclRemoved = false;
+        console.warn("[calendar] removeCalendarAclEntry failed on leave:", err.message);
+      }
+      return res.json({ googleAclRemoved });
+    }
+
+    // owner removing someone else
     const cal = await db.getCalendarForMutation(calendarId, userSub, "owner");
     if (!cal) return res.status(403).json({ error: "Not authorized" });
 
