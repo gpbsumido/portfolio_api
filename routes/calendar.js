@@ -333,6 +333,46 @@ router.post("/calendars/:id/connect-google", async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/calendar/calendars/:id/google
+ * Stops the Google Calendar push channel and unlinks the Google Calendar from
+ * this row. Resets sync_mode to 'push' so events keep syncing to Google primary.
+ * Does not delete the Google Calendar itself -- the user may want to keep it.
+ */
+router.delete("/calendars/:id/google", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const calendar = await db.getCalendarById(id, userSub);
+
+    if (!calendar) {
+      return res.status(404).json({ error: "Calendar not found" });
+    }
+
+    // stop the watch channel before we null out the google_cal_id, since
+    // stopWatchByCalId looks up the channel by google_cal_id
+    if (calendar.googleCalId) {
+      try {
+        await stopWatchByCalId(userSub, calendar.googleCalId);
+      } catch (watchErr) {
+        console.error("DELETE /calendar/calendars/:id/google -- stopWatchByCalId failed:", watchErr.message);
+      }
+    }
+
+    const updated = await db.updateCalendar(
+      id,
+      { googleCalId: null, googleCalName: null, syncMode: "push" },
+      userSub,
+    );
+
+    res.json({ calendar: updated });
+  } catch (err) {
+    console.error("DELETE /calendar/calendars/:id/google failed:", err.message);
+    res.status(500).json({ error: "Failed to disconnect Google Calendar" });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Card sub-routes — /api/calendar/events/:id/cards
 // :id      = calendar_events UUID
