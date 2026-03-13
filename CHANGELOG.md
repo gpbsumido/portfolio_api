@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.6
+
+- `POST /calendars/:id/members`: fires `addCalendarAclEntry` as fire-and-forget after the DB insert so ACL latency never delays the HTTP response
+- `DELETE /calendars/:id/members/:memberSub`: awaits `removeCalendarAclEntry` and returns `{ googleAclRemoved: boolean }` (200) instead of 204 so the frontend can warn the user when Google access was not revoked
+- `DELETE /calendars/:id`: before the DB delete, calls `removeCalendarAclEntry` for all members via `Promise.allSettled` so one failure doesn't block the rest; runs before `stopWatchByCalId` so the channel is still alive for any retries
+
 ## 2026-03-13 - version 1.4.5
 
 - added `addCalendarAclEntry(ownerUserId, googleCalId, memberEmail, role)` to `utils/googleCalendar.js`: maps 'editor' to 'writer' and 'viewer' to 'reader', POSTs to the Google ACL endpoint using the owner's token, throws on non-2xx

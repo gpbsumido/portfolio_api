@@ -10,6 +10,8 @@ const {
   stopWatchByCalId,
   createDedicatedCalendar,
   registerWatch,
+  addCalendarAclEntry,
+  removeCalendarAclEntry,
 } = require("../utils/googleCalendar");
 const { getValidAccessToken } = require("../utils/googleToken");
 
@@ -292,6 +294,15 @@ router.delete("/calendars/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
+    // remove all member ACL entries from Google before deleting the calendar.
+    // allSettled so one failure doesn't block the others.
+    if (calendar.syncMode === "two_way" && calendar.googleCalId) {
+      const members = await db.getCalendarMembers(id);
+      await Promise.allSettled(
+        members.map((m) => removeCalendarAclEntry(userSub, calendar.googleCalId, m.email)),
+      );
+    }
+
     // stop the watch channel before deleting so Google stops sending notifications
     // for an ID we no longer have a record for. non-fatal if it fails.
     if (calendar.googleCalId) {
@@ -467,6 +478,13 @@ router.post("/calendars/:id/members", inviteRateLimit, async (req, res) => {
     }
 
     const member = await db.addCalendarMember(calendarId, target.sub, role, userSub);
+
+    // fire-and-forget so ACL latency never delays the HTTP response
+    if (cal.syncMode === "two_way" && cal.googleCalId) {
+      addCalendarAclEntry(userSub, cal.googleCalId, email, member.role)
+        .catch((err) => console.warn("[calendar] addCalendarAclEntry failed (non-fatal):", err.message));
+    }
+
     res.status(201).json({ member });
   } catch (err) {
     console.error("POST /calendar/calendars/:id/members failed:", err.message);
@@ -517,7 +535,21 @@ router.delete("/calendars/:id/members/:memberSub", async (req, res) => {
     const removed = await db.removeCalendarMember(calendarId, memberSub, userSub);
     if (!removed) return res.status(404).json({ error: "Member not found" });
 
-    res.status(204).send();
+    // attempt ACL removal and surface the result so the frontend can warn
+    // the user if Google access was not revoked (member removed from app but
+    // may still see the calendar in their Google Calendar)
+    let googleAclRemoved = true;
+    try {
+      const memberUser = await db.getUserBySub(memberSub);
+      if (cal.syncMode === "two_way" && cal.googleCalId && memberUser?.email) {
+        await removeCalendarAclEntry(userSub, cal.googleCalId, memberUser.email);
+      }
+    } catch (err) {
+      googleAclRemoved = false;
+      console.warn("[calendar] removeCalendarAclEntry failed:", err.message);
+    }
+
+    res.json({ googleAclRemoved });
   } catch (err) {
     console.error("DELETE /calendar/calendars/:id/members/:memberSub failed:", err.message);
     res.status(500).json({ error: "Failed to remove member" });
