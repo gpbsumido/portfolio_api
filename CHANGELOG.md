@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.6
+
+- updated OAuth scope in `routes/google.js` from `calendar.events` to `calendar`; the broader scope is required to create and manage dedicated Google Calendars for two_way sync; users who already authorized with the old scope will need to reconnect
+
 ## 2026-03-12 - version 1.3.5
 
 - updated `POST /api/calendar/events` to fetch the event's calendar after insert and route the Google sync by `syncMode`: `push` targets `primary`, `two_way` targets `calendar.googleCalId`, `none` skips Google entirely
