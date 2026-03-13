@@ -24,7 +24,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Medical Journal | Protected CRUD journal for medical rotations (Auth0-gated)                      |
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | ChatGPT         | OpenAI-powered chat and journal entry summarization (Auth0-gated)               |
-| Calendar        | Personal calendar events with Pokémon TCG card associations, plus countdowns (Auth0-gated) |
+| Calendar        | Personal calendar events, countdowns, and calendar sharing with editor/viewer roles (Auth0-gated) |
 | Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
 
@@ -106,22 +106,32 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 ### Calendar — `/api/calendar` _(Auth Required)_
 
-| Method | Path                         | Description                                                                                         |
-| ------ | ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| GET    | `/events`                    | List events for the authenticated user (supports `?start=`, `?end=`, `?cardId=`, `?cardName=`)      |
-| GET    | `/events/:id`                | Get a single event                                                                                  |
-| POST   | `/events`                    | Create an event                                                                                     |
-| PUT    | `/events/:id`                | Update an event                                                                                     |
-| DELETE | `/events/:id`                | Delete an event                                                                                     |
-| GET    | `/events/:id/cards`          | List all TCG cards linked to an event                                                               |
-| POST   | `/events/:id/cards`          | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
-| PUT    | `/events/:id/cards/:entryId` | Update `quantity` or `notes` on a card entry                                                        |
-| DELETE | `/events/:id/cards/:entryId` | Remove a card from an event                                                                         |
-| GET    | `/countdowns`                | List all countdowns for the authenticated user, sorted by target date ascending                     |
-| GET    | `/countdowns/:id`            | Get a single countdown                                                                              |
-| POST   | `/countdowns`                | Create a countdown (`title` and `targetDate` required, `targetDate` as `"YYYY-MM-DD"`)             |
-| PUT    | `/countdowns/:id`            | Partial update — send only the fields to change                                                     |
-| DELETE | `/countdowns/:id`            | Delete a countdown                                                                                  |
+| Method | Path                                  | Description                                                                                         |
+| ------ | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| GET    | `/events`                             | List events for the authenticated user (supports `?start=`, `?end=`, `?cardId=`, `?cardName=`)      |
+| GET    | `/events/:id`                         | Get a single event                                                                                  |
+| POST   | `/events`                             | Create an event                                                                                     |
+| PUT    | `/events/:id`                         | Update an event                                                                                     |
+| DELETE | `/events/:id`                         | Delete an event                                                                                     |
+| GET    | `/events/:id/cards`                   | List all TCG cards linked to an event                                                               |
+| POST   | `/events/:id/cards`                   | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
+| PUT    | `/events/:id/cards/:entryId`          | Update `quantity` or `notes` on a card entry                                                        |
+| DELETE | `/events/:id/cards/:entryId`          | Remove a card from an event                                                                         |
+| GET    | `/countdowns`                         | List all countdowns for the authenticated user, sorted by target date ascending                     |
+| GET    | `/countdowns/:id`                     | Get a single countdown                                                                              |
+| POST   | `/countdowns`                         | Create a countdown (`title` and `targetDate` required, `targetDate` as `"YYYY-MM-DD"`)             |
+| PUT    | `/countdowns/:id`                     | Partial update — send only the fields to change                                                     |
+| DELETE | `/countdowns/:id`                     | Delete a countdown                                                                                  |
+| GET    | `/calendars`                          | List all calendars owned by or shared with the user; owned rows include `role: "owner"`, shared rows include `role`, `ownerSub`, `ownerEmail` |
+| POST   | `/calendars`                          | Create a calendar (`name`, `color`, `syncMode` required)                                            |
+| PUT    | `/calendars/:id`                      | Update calendar name/color/syncMode — owner only                                                    |
+| DELETE | `/calendars/:id`                      | Delete a calendar and all its events — owner only; removes Google ACL entries via `Promise.allSettled` before DB delete |
+| POST   | `/calendars/:id/connect-google`       | Create a Google Calendar and register a push watch channel — owner only                             |
+| DELETE | `/calendars/:id/google`               | Disconnect Google Calendar, stop watch channel — owner only                                         |
+| GET    | `/calendars/:id/members`             | List members (owner entry synthesized at top); accessible by owner or any member                    |
+| POST   | `/calendars/:id/members`             | Invite by email — owner only; rate-limited 20/min; generic 404 if email not found                  |
+| PUT    | `/calendars/:id/members/:memberSub`  | Update member role (`editor`\|`viewer`) — owner only                                               |
+| DELETE | `/calendars/:id/members/:memberSub`  | Remove member — owner only, or `"me"` for self-removal; awaits Google ACL revocation and returns `{ googleAclRemoved }` |
 
 ### Web Vitals — `/api/vitals`
 
@@ -268,7 +278,12 @@ node scripts/vitals/migrate.js
 
 # Create countdowns table
 node scripts/calendar/migrate_countdowns.js
+
+# Create users + calendar_members tables (required for calendar sharing)
+node scripts/calendar/migrate_sharing.js
 ```
+
+> **Auth0 setup for sharing**: add a post-login Action that sets `api.accessToken.setCustomClaim("email", event.user.email)` so the backend `upsertUser` middleware can populate the users table from the JWT email claim.
 
 ### Tests
 

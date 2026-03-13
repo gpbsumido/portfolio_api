@@ -1,14 +1,20 @@
 const db = require("./db");
 
 /**
- * Returns a valid access token for the user, refreshing it from Google if it's
- * going to expire within the next 5 minutes. Throws if the user hasn't connected
- * their Google Calendar or if the refresh request fails.
+ * Returns a valid access token and the user-level Google Calendar ID stored in
+ * google_auth. Refreshes the token if it expires within the next 5 minutes.
+ * Throws if the user hasn't connected their Google Calendar or if the refresh
+ * request fails.
+ *
+ * The returned calId is the legacy user-level calendar (google_auth.google_cal_id,
+ * defaults to "primary"). Per-calendar calIds for two_way calendars come from the
+ * calendars table -- callers that have those IDs should pass them in directly and
+ * only use this function for the token.
  *
  * @param {string} userId - Auth0 sub
- * @returns {Promise<string>} a non-expired access token
+ * @returns {Promise<{ token: string, calId: string }>}
  */
-async function getValidAccessToken(userId) {
+async function getTokenAndCalId(userId) {
   const auth = await db.getGoogleAuth(userId);
   if (!auth) throw new Error("Google Calendar not connected");
 
@@ -17,7 +23,7 @@ async function getValidAccessToken(userId) {
 
   // still good for at least 5 minutes, use it as-is
   if (expiresAt > fiveMinFromNow) {
-    return auth.access_token;
+    return { token: auth.access_token, calId: auth.google_cal_id };
   }
 
   // access token is stale, use the refresh token to get a new one
@@ -48,7 +54,18 @@ async function getValidAccessToken(userId) {
     tokenExpiry: newExpiry,
   });
 
-  return access_token;
+  return { token: access_token, calId: auth.google_cal_id };
 }
 
-module.exports = { getValidAccessToken };
+/**
+ * Convenience wrapper for callers that only need the token and not the calId.
+ *
+ * @param {string} userId - Auth0 sub
+ * @returns {Promise<string>} a non-expired access token
+ */
+async function getValidAccessToken(userId) {
+  const { token } = await getTokenAndCalId(userId);
+  return token;
+}
+
+module.exports = { getTokenAndCalId, getValidAccessToken };

@@ -1,9 +1,13 @@
 const { v4: uuidv4 } = require("uuid");
-const { getValidAccessToken } = require("./googleToken");
+const { getTokenAndCalId, getValidAccessToken } = require("./googleToken");
 const db = require("./db");
 
-const GCAL_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary";
 const FETCH_TIMEOUT_MS = 30_000;
+
+// builds the base URL for a given calendar. encodeURIComponent handles
+// "primary" (no change) and real calendar IDs (may contain @, spaces, etc.).
+const calBase = (calId) =>
+  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}`;
 
 // maps our EVENT_COLORS hex values to the closest Google Calendar colorId.
 // these match the actual EVENT_COLORS array in src/lib/calendar.ts exactly.
@@ -69,18 +73,21 @@ function toGoogleEvent(event) {
  *
  * @param {string} userId - Auth0 sub
  * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay: boolean, color?: string }} event
+ * @param {string} [calId] - Google Calendar ID; defaults to the user-level calId from google_auth
  * @returns {Promise<string|null>} Google event ID, or null if user is not connected
  */
-async function createGoogleEvent(userId, event) {
-  let token;
+async function createGoogleEvent(userId, event, calId) {
+  let token, resolvedCalId;
   try {
-    token = await getValidAccessToken(userId);
+    const result = await getTokenAndCalId(userId);
+    token = result.token;
+    resolvedCalId = calId ?? result.calId;
   } catch {
     // user is not connected, nothing to do
     return null;
   }
 
-  const res = await fetch(`${GCAL_BASE}/events`, {
+  const res = await fetch(`${calBase(resolvedCalId)}/events`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -106,18 +113,21 @@ async function createGoogleEvent(userId, event) {
  * @param {string} userId - Auth0 sub
  * @param {string|null} googleEventId
  * @param {{ title?: string, description?: string, startDate?: string, endDate?: string, allDay?: boolean, color?: string }} fields
+ * @param {string} [calId] - Google Calendar ID; defaults to the user-level calId from google_auth
  */
-async function updateGoogleEvent(userId, googleEventId, fields) {
+async function updateGoogleEvent(userId, googleEventId, fields, calId) {
   if (!googleEventId) return;
 
-  let token;
+  let token, resolvedCalId;
   try {
-    token = await getValidAccessToken(userId);
+    const result = await getTokenAndCalId(userId);
+    token = result.token;
+    resolvedCalId = calId ?? result.calId;
   } catch {
     return;
   }
 
-  const res = await fetch(`${GCAL_BASE}/events/${googleEventId}`, {
+  const res = await fetch(`${calBase(resolvedCalId)}/events/${googleEventId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -139,18 +149,21 @@ async function updateGoogleEvent(userId, googleEventId, fields) {
  *
  * @param {string} userId - Auth0 sub
  * @param {string} googleEventId
+ * @param {string} [calId] - Google Calendar ID; defaults to the user-level calId from google_auth
  */
-async function deleteGoogleEvent(userId, googleEventId) {
+async function deleteGoogleEvent(userId, googleEventId, calId) {
   if (!googleEventId) return;
 
-  let token;
+  let token, resolvedCalId;
   try {
-    token = await getValidAccessToken(userId);
+    const result = await getTokenAndCalId(userId);
+    token = result.token;
+    resolvedCalId = calId ?? result.calId;
   } catch {
     return;
   }
 
-  const res = await fetch(`${GCAL_BASE}/events/${googleEventId}`, {
+  const res = await fetch(`${calBase(resolvedCalId)}/events/${googleEventId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -170,10 +183,12 @@ async function deleteGoogleEvent(userId, googleEventId) {
  *
  * @param {string} userId - Auth0 sub
  * @param {string|null} syncToken
+ * @param {string} [calId] - Google Calendar ID; defaults to the user-level calId from google_auth
  * @returns {Promise<{ items: Array, nextSyncToken: string }>}
  */
-async function fetchIncrementalEvents(userId, syncToken) {
-  const token = await getValidAccessToken(userId);
+async function fetchIncrementalEvents(userId, syncToken, calId) {
+  const { token, calId: authCalId } = await getTokenAndCalId(userId);
+  const resolvedCalId = calId ?? authCalId;
 
   const allItems = [];
   let pageToken = null;
@@ -185,14 +200,14 @@ async function fetchIncrementalEvents(userId, syncToken) {
     if (pageToken) params.set("pageToken", pageToken);
 
     const res = await fetch(
-      `${GCAL_BASE}/events?${params}`,
+      `${calBase(resolvedCalId)}/events?${params}`,
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
     );
 
     // 410 Gone means the sync token is stale, do a full re-sync
     if (res.status === 410) {
       console.log(`[googleCalendar] sync token expired for ${userId}, doing full sync`);
-      return fetchIncrementalEvents(userId, null);
+      return fetchIncrementalEvents(userId, null, calId);
     }
 
     if (!res.ok) {
@@ -211,21 +226,23 @@ async function fetchIncrementalEvents(userId, syncToken) {
 
 /**
  * Registers a Google Calendar push notification channel for the user.
- * Google will POST to GOOGLE_WEBHOOK_URL whenever something changes on their
- * primary calendar. The channel lives for 6.5 days, the Railway cron job
+ * Google will POST to GOOGLE_WEBHOOK_URL whenever something changes on the
+ * target calendar. The channel lives for 6.5 days, the Railway cron job
  * (utils/renewWatchChannels.js) renews it before it expires.
  *
  * Also kicks off an initial full sync so we bootstrap our sync token and
  * pick up any events the user may have already synced in the past.
  *
  * @param {string} userId - Auth0 sub
+ * @param {string} [calId] - Google Calendar ID; defaults to the user-level calId from google_auth
  */
-async function registerWatch(userId) {
-  const token = await getValidAccessToken(userId);
+async function registerWatch(userId, calId) {
+  const { token, calId: authCalId } = await getTokenAndCalId(userId);
+  const resolvedCalId = calId ?? authCalId;
   const channelId = uuidv4();
   const expiration = Date.now() + 6.5 * 24 * 60 * 60 * 1000;
 
-  const res = await fetch(`${GCAL_BASE}/events/watch`, {
+  const res = await fetch(`${calBase(resolvedCalId)}/events/watch`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -235,7 +252,9 @@ async function registerWatch(userId) {
       id: channelId,
       type: "web_hook",
       address: process.env.GOOGLE_WEBHOOK_URL,
-      token: userId,           // echoed back as X-Goog-Channel-Token on each ping
+      // "userId:googleCalId" format lets the webhook handler route the
+      // notification to the right calendar row. old channels used just userId.
+      token: `${userId}:${resolvedCalId}`,
       expiration,
     }),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -247,26 +266,103 @@ async function registerWatch(userId) {
   }
 
   const data = await res.json();
-  await db.updateChannelInfo(userId, {
+  const channelInfo = {
     channelId: data.id,
     resourceId: data.resourceId,
     channelExpiry: new Date(parseInt(data.expiration, 10)),
-  });
+  };
+
+  // store channel info on the calendars row when one matches the googleCalId.
+  // fall back to google_auth for legacy push channels where there is no
+  // corresponding calendars row (e.g. resolvedCalId is "primary").
+  const calendarRow = await db.getCalendarByGoogleCalId(resolvedCalId, userId);
+  if (calendarRow) {
+    await db.updateCalendar(calendarRow.id, channelInfo, userId);
+  } else {
+    await db.updateChannelInfo(userId, channelInfo);
+  }
 
   // bootstrap the sync token with a full sync so future incremental fetches
   // have a valid cursor to start from.
   try {
-    const { nextSyncToken } = await fetchIncrementalEvents(userId, null);
-    await db.updateSyncToken(userId, nextSyncToken);
+    const { nextSyncToken } = await fetchIncrementalEvents(userId, null, resolvedCalId);
+    if (calendarRow) {
+      await db.updateCalendar(calendarRow.id, { syncToken: nextSyncToken }, userId);
+    } else {
+      await db.updateSyncToken(userId, nextSyncToken);
+    }
   } catch (syncErr) {
     console.warn(`[googleCalendar] initial sync after registerWatch failed for ${userId}:`, syncErr.message);
   }
 }
 
 /**
- * Stops an existing watch channel. Called on disconnect and before re-registering
- * during renewal. Swallows errors since Google returns 404 for already-expired
- * channels, which is fine.
+ * Creates a new Google Calendar on the user's account and returns the calendar's
+ * ID and display name. The token is passed directly here (not userId) because
+ * the caller already has a fresh token from getTokenAndCalId and we don't want
+ * to fetch it twice.
+ *
+ * @param {string} token - valid Google access token
+ * @param {string} name - display name for the new calendar
+ * @returns {Promise<{ calId: string, calName: string }>}
+ */
+async function createDedicatedCalendar(token, name) {
+  const res = await fetch("https://www.googleapis.com/calendar/v3/calendars", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ summary: name, timeZone: "UTC" }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`createDedicatedCalendar failed (${res.status}): ${body}`);
+  }
+  const data = await res.json();
+  return { calId: data.id, calName: data.summary };
+}
+
+/**
+ * Stops the watch channel for a specific Google Calendar. Used by the cron job
+ * and the calendar delete route before re-registering or removing a two_way calendar.
+ * Looks up the channel info from the calendars row rather than google_auth, since
+ * per-calendar channels are stored there.
+ * Swallows errors -- a 404 from Google just means the channel already expired.
+ *
+ * @param {string} userId - Auth0 sub
+ * @param {string} calId - Google Calendar ID (google_cal_id column)
+ */
+async function stopWatchByCalId(userId, calId) {
+  try {
+    const calendar = await db.getCalendarByGoogleCalId(calId, userId);
+    if (!calendar?.channelId || !calendar?.resourceId) return;
+
+    const token = await getValidAccessToken(userId);
+
+    await fetch("https://www.googleapis.com/calendar/v3/channels/stop", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: calendar.channelId,
+        resourceId: calendar.resourceId,
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    // we don't check res.ok here, a 404 just means the channel already expired
+  } catch (err) {
+    console.warn(`[googleCalendar] stopWatchByCalId failed for ${userId} calId=${calId}:`, err.message);
+  }
+}
+
+/**
+ * Stops an existing watch channel for the user's legacy primary calendar.
+ * Called on disconnect and before re-registering during renewal.
+ * Swallows errors since Google returns 404 for already-expired channels.
  *
  * @param {string} userId - Auth0 sub
  */
@@ -295,6 +391,72 @@ async function stopWatch(userId) {
   }
 }
 
+/**
+ * Adds a user email to the Google Calendar ACL so the calendar appears in
+ * their Google Calendar app. Uses the calendar owner's OAuth token.
+ *
+ * @param {string} ownerUserId  - Auth0 sub of the calendar owner
+ * @param {string} googleCalId  - Google Calendar ID
+ * @param {string} memberEmail  - email address to grant access
+ * @param {'editor'|'viewer'} role
+ * @returns {Promise<Object>} parsed response body from Google
+ */
+async function addCalendarAclEntry(ownerUserId, googleCalId, memberEmail, role) {
+  const googleRole = role === "editor" ? "writer" : "reader";
+  const token = await getValidAccessToken(ownerUserId);
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/acl`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        role: googleRole,
+        scope: { type: "user", value: memberEmail },
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`addCalendarAclEntry ${res.status}: ${body}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Removes a user email from the Google Calendar ACL.
+ * Swallows 404 since the member may have already been removed from Google's side.
+ *
+ * @param {string} ownerUserId  - Auth0 sub of the calendar owner
+ * @param {string} googleCalId  - Google Calendar ID
+ * @param {string} memberEmail  - email address to revoke
+ */
+async function removeCalendarAclEntry(ownerUserId, googleCalId, memberEmail) {
+  const token = await getValidAccessToken(ownerUserId);
+  const ruleId = `user:${memberEmail}`;
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/acl/${encodeURIComponent(ruleId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
+  );
+
+  if (res.status === 404) return; // already gone, nothing to do
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`removeCalendarAclEntry ${res.status}: ${body}`);
+  }
+}
+
 module.exports = {
   createGoogleEvent,
   updateGoogleEvent,
@@ -302,4 +464,8 @@ module.exports = {
   fetchIncrementalEvents,
   registerWatch,
   stopWatch,
+  stopWatchByCalId,
+  createDedicatedCalendar,
+  addCalendarAclEntry,
+  removeCalendarAclEntry,
 };
