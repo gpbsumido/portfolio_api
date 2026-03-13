@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.4
+
+- refactored `utils/googleToken.js`: renamed core logic to `getTokenAndCalId(userId)` which now returns `{ token, calId }` where `calId` is `google_auth.google_cal_id`; kept `getValidAccessToken(userId)` as a thin wrapper for callers that only need the token; both are exported
+- removed `GCAL_BASE` constant from `utils/googleCalendar.js`; replaced with `calBase(calId)` helper that builds the per-calendar base URL with `encodeURIComponent`
+- updated `createGoogleEvent`, `updateGoogleEvent`, `deleteGoogleEvent`, `fetchIncrementalEvents`, and `registerWatch` to each accept an optional `calId` parameter; when omitted the function falls back to the user-level `calId` returned by `getTokenAndCalId`; the recursive full-sync call inside `fetchIncrementalEvents` now threads the original `calId` through
+- added `createDedicatedCalendar(token, name)` to `utils/googleCalendar.js`: POSTs to the Google Calendar API to create a new calendar, returns `{ calId, calName }`; takes a token directly to avoid double-fetching
+
 ## 2026-03-12 - version 1.3.3
 
 - updated `toCalendarEvent` in `utils/db.js` to include `calendarId` in the returned shape so route handlers and the frontend can read which calendar an event belongs to without a second query
