@@ -76,81 +76,135 @@ function fromGoogleEvent(item) {
   return fields;
 }
 
+// last-write wins buffer: a Google-side change must be at least this many ms
+// newer than our last write to be treated as a real inbound change and not an
+// echo of our own push. see comment in processItem for the full explanation.
+const SYNC_BUFFER_MS = 10_000;
+
+/**
+ * Applies a single Google Calendar item to our DB for an event that already
+ * exists (identified by google_event_id). Handles deletes and updates.
+ *
+ * @param {Object} item - Google Calendar Event resource from the incremental feed
+ * @param {string} userId - Auth0 sub
+ * @param {Object} existing - our DB row (raw, with updated_at) from getEventByGoogleId
+ */
+async function processExistingItem(item, userId, existing) {
+  if (item.status === "cancelled") {
+    console.log(`[googleWebhook] deleting event ${existing.id} (google_event_id=${item.id})`);
+    await db.deleteCalendarEvent(existing.id, userId);
+    return;
+  }
+
+  // last-write wins, but with a 10-second buffer. when we push an edit to
+  // Google, Google fires a webhook back almost immediately and item.updated
+  // ends up slightly after our updated_at (Google processes it after we write
+  // to DB). without the buffer, that echo would trip the comparison and write
+  // Google's version back over ours, flipping sync_source to 'google'. the
+  // buffer means a Google-side change needs to be at least 10s newer than our
+  // last write to be treated as a real inbound change.
+  const googleUpdated = new Date(item.updated);
+  const ourUpdated = new Date(existing.updated_at);
+
+  if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) {
+    console.log(`[googleWebhook] skipping update for ${existing.id}: googleUpdated=${googleUpdated.toISOString()} ourUpdated=${ourUpdated.toISOString()} (within buffer)`);
+    return;
+  }
+
+  const fields = fromGoogleEvent(item);
+  if (Object.keys(fields).length > 0) {
+    console.log(`[googleWebhook] updating event ${existing.id} from Google`);
+    await db.updateCalendarEventFromWebhook(existing.id, fields, userId);
+  }
+}
+
 /**
  * POST /api/google/webhook
  *
- * Google pushes a notification here whenever something changes on the user's
- * primary calendar. The body is always empty -- everything useful is in the
- * headers. We respond 200 no matter what, because a 4xx or 5xx tells Google to
- * retry and eventually blacklist the channel.
+ * Google pushes a notification here whenever something changes on a watched
+ * calendar. The body is always empty -- everything useful is in the headers.
+ * We respond 200 immediately no matter what; a 4xx or 5xx tells Google to retry
+ * and eventually blacklist the channel.
  *
- * We only act on events that exist in our DB (identified by google_event_id).
- * Anything Google created on its own (Gmail RSVPs, events typed directly in
- * Google Calendar, etc.) is ignored -- we don't import foreign events.
+ * Channel token format:
+ *   New: "userId:googleCalId" -- routes to the calendars row for per-calendar sync.
+ *   Old: "userId"             -- legacy push channels, falls back to google_auth.
+ *
+ * For two_way calendars, new events created directly in Google Calendar are
+ * imported into our DB. For push calendars, only events we already track are
+ * updated or deleted.
  */
 router.post("/webhook", async (req, res) => {
   // respond immediately so Google doesn't time out waiting for us
   res.sendStatus(200);
 
-  const userId = req.headers["x-goog-channel-token"];
+  const channelToken = req.headers["x-goog-channel-token"];
   const resourceState = req.headers["x-goog-resource-state"];
 
-  if (!userId) return;
+  if (!channelToken) return;
 
   // "sync" is Google's initial handshake ping right after channel registration.
   // there are no actual changes to process, just acknowledge it.
   if (resourceState === "sync") return;
 
+  // parse userId and optional googleCalId from the channel token.
+  // new format: "userId:googleCalId", old format: just "userId"
+  const colonIdx = channelToken.indexOf(":");
+  const userId = colonIdx !== -1 ? channelToken.slice(0, colonIdx) : channelToken;
+  const googleCalId = colonIdx !== -1 ? channelToken.slice(colonIdx + 1) : null;
+
   enqueueForUser(userId, async () => {
-    const auth = await db.getGoogleAuth(userId);
-    if (!auth) return;
-
-    const { items, nextSyncToken } = await fetchIncrementalEvents(
-      userId,
-      auth.sync_token,
-    );
-
-    console.log(`[googleWebhook] ${items.length} item(s) from incremental fetch for ${userId}`);
-
-    // save the new sync token before processing items so if we crash partway
-    // through we don't re-process the same batch on the next notification.
-    await db.updateSyncToken(userId, nextSyncToken);
-
-    for (const item of items) {
-      // look up by google_event_id scoped to this user.
-      // if we don't have it, it's a foreign event and we skip it.
-      const existing = await db.getEventByGoogleId(item.id, userId);
-      if (!existing) {
-        console.log(`[googleWebhook] skipping item ${item.id} (status=${item.status}): not in our DB`);
-        continue;
+    if (googleCalId) {
+      // new per-calendar channel path
+      const calendar = await db.getCalendarByGoogleCalId(googleCalId, userId);
+      if (!calendar) {
+        console.log(`[googleWebhook] orphaned channel for googleCalId=${googleCalId} userId=${userId}`);
+        return;
       }
 
-      if (item.status === "cancelled") {
-        console.log(`[googleWebhook] deleting event ${existing.id} (google_event_id=${item.id})`);
-        await db.deleteCalendarEvent(existing.id, userId);
-        continue;
+      const { items, nextSyncToken } = await fetchIncrementalEvents(userId, calendar.syncToken, googleCalId);
+      console.log(`[googleWebhook] ${items.length} item(s) for ${userId} calId=${googleCalId}`);
+
+      // save token before processing so a mid-batch crash doesn't replay the same batch
+      await db.updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
+
+      for (const item of items) {
+        const existing = await db.getEventByGoogleId(item.id, userId);
+
+        if (!existing) {
+          // new event created directly in Google Calendar -- only import for two_way
+          if (calendar.syncMode !== "two_way") {
+            console.log(`[googleWebhook] skipping ${item.id}: calendar is not two_way`);
+            continue;
+          }
+          if (item.status === "cancelled") continue;
+          const fields = fromGoogleEvent(item);
+          console.log(`[googleWebhook] importing new event ${item.id} into calendar ${calendar.id}`);
+          await db.createCalendarEventFromWebhook(fields, item.id, calendar.id, userId);
+          continue;
+        }
+
+        await processExistingItem(item, userId, existing);
       }
+    } else {
+      // legacy path: old-format channel token with no colon, userId only.
+      // uses google_auth.sync_token and does not import new foreign events.
+      const auth = await db.getGoogleAuth(userId);
+      if (!auth) return;
 
-      // last-write wins, but with a 10-second buffer. when we push an edit to
-      // Google, Google fires a webhook back almost immediately and item.updated
-      // ends up slightly after our updated_at (Google processes it after we write
-      // to DB). without the buffer, that echo would trip the comparison and write
-      // Google's version back over ours, flipping sync_source to 'google'. the
-      // buffer means a Google-side change needs to be at least 10s newer than our
-      // last write to be treated as a real inbound change.
-      const googleUpdated = new Date(item.updated);
-      const ourUpdated = new Date(existing.updated_at);
-      const SYNC_BUFFER_MS = 10_000;
+      const { items, nextSyncToken } = await fetchIncrementalEvents(userId, auth.sync_token);
+      console.log(`[googleWebhook] ${items.length} item(s) from incremental fetch for ${userId}`);
 
-      if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) {
-        console.log(`[googleWebhook] skipping update for ${existing.id}: googleUpdated=${googleUpdated.toISOString()} ourUpdated=${ourUpdated.toISOString()} (within buffer)`);
-        continue;
-      }
+      // save token before processing so a mid-batch crash doesn't replay the same batch
+      await db.updateSyncToken(userId, nextSyncToken);
 
-      const fields = fromGoogleEvent(item);
-      if (Object.keys(fields).length > 0) {
-        console.log(`[googleWebhook] updating event ${existing.id} from Google`);
-        await db.updateCalendarEventFromWebhook(existing.id, fields, userId);
+      for (const item of items) {
+        const existing = await db.getEventByGoogleId(item.id, userId);
+        if (!existing) {
+          console.log(`[googleWebhook] skipping item ${item.id} (status=${item.status}): not in our DB`);
+          continue;
+        }
+        await processExistingItem(item, userId, existing);
       }
     }
   });

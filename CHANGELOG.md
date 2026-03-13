@@ -1,5 +1,132 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.8
+
+- `middleware/upsertUser.js`: reads `X-User-Email` header as fallback when `email` is absent from the access token JWT — fixes sharing not working when Auth0 doesn't include email in the access token by default; primary fix is an Auth0 post-login Action that sets `email` as a custom claim, header is belt-and-suspenders
+- `GET /calendars/:id/members`: owner entry email now falls back to `req.auth.payload.email` (from the JWT) when `getUserBySub` returns null (e.g. first request after the sharing migration before the users table is populated)
+
+## 2026-03-13 - version 1.4.7
+
+- fixed `ValidationError: ERR_ERL_KEY_GEN_IPV6` in `routes/calendar.js`: custom `keyGenerator` was falling back to `req.ip` directly, which `express-rate-limit` v7+ rejects because raw IPv6 addresses can be used to bypass limits; replaced with `ipKeyGenerator(req)` from `express-rate-limit` which normalizes IPv6 correctly; also switched from `const rateLimit = require(...)` to named import `{ rateLimit, ipKeyGenerator }`
+- `DELETE /calendars/:id/members/:memberSub`: added self-removal path — any member can remove themselves using `"me"` or their own sub as `:memberSub`; performs best-effort Google ACL removal using the owner's credentials and returns `{ googleAclRemoved }` consistent with the owner-removal path
+
+## 2026-03-13 - version 1.4.6
+
+- `POST /calendars/:id/members`: fires `addCalendarAclEntry` as fire-and-forget after the DB insert so ACL latency never delays the HTTP response
+- `DELETE /calendars/:id/members/:memberSub`: awaits `removeCalendarAclEntry` and returns `{ googleAclRemoved: boolean }` (200) instead of 204 so the frontend can warn the user when Google access was not revoked
+- `DELETE /calendars/:id`: before the DB delete, calls `removeCalendarAclEntry` for all members via `Promise.allSettled` so one failure doesn't block the rest; runs before `stopWatchByCalId` so the channel is still alive for any retries
+
+## 2026-03-13 - version 1.4.5
+
+- added `addCalendarAclEntry(ownerUserId, googleCalId, memberEmail, role)` to `utils/googleCalendar.js`: maps 'editor' to 'writer' and 'viewer' to 'reader', POSTs to the Google ACL endpoint using the owner's token, throws on non-2xx
+- added `removeCalendarAclEntry(ownerUserId, googleCalId, memberEmail)` to `utils/googleCalendar.js`: DELETEs the user-scoped ACL rule, swallows 404, throws on other non-2xx responses
+
+## 2026-03-13 - version 1.4.4
+
+- added `GET /api/calendar/calendars/:id/members`: accessible by owner or any member; synthesizes an owner entry from the calendars row and prepends it to the member list
+- added `POST /api/calendar/calendars/:id/members`: owner-only invite by email; rate-limited to 20 requests per minute per user sub; returns generic 404 when email is not found to avoid enumeration; returns 400 when owner tries to invite themselves
+- added `PUT /api/calendar/calendars/:id/members/:memberSub`: owner-only role update ('editor' or 'viewer')
+- added `DELETE /api/calendar/calendars/:id/members/:memberSub`: owner-only member removal
+
+## 2026-03-13 - version 1.4.3
+
+- event create/update/delete: replaced `getCalendarById` with `getCalendarForMutation('editor')` for Google sync lookup so editors on shared calendars can write events and credentials always come from the owner's row
+- calendar update (`PUT /calendars/:id`): added `getCalendarForMutation('owner')` preflight, returns 403 if not owner
+- calendar delete (`DELETE /calendars/:id`): same preflight; also removes `getCalendarById` duplicate lookup
+- `POST /calendars/:id/connect-google`: owner preflight, returns 403 if not owner
+- `DELETE /calendars/:id/google`: owner preflight, returns 403 if not owner
+
+## 2026-03-13 - version 1.4.2
+
+- added `upsertUser`, `getUserBySub`, `getUserByEmail` to `utils/db.js`
+- added `toCalendarMember`, `getCalendarMembers`, `addCalendarMember` (single CTE, no N+1), `updateCalendarMemberRole`, `removeCalendarMember` to `utils/db.js`
+- updated `toCalendar` to include `role`, `ownerSub`, `ownerEmail` for the UNION query shape
+- replaced `getCalendars` with a UNION query returning owned and shared calendars; each row carries `role` ('owner'|'editor'|'viewer') and `ownerSub`/`ownerEmail` for shared rows
+- added `getCalendarForMutation(calendarId, userSub, requiredRole)` — single write-auth chokepoint; 'owner' checks `user_sub` only; 'editor' also accepts `calendar_members` rows with role='editor'
+- updated `getCalendarEvents` to use LEFT JOIN on `calendar_members` (replaces correlated subquery) so members see events on shared calendars
+- updated `getCalendarEventById` with same LEFT JOIN expansion
+- updated `updateCalendarEvent` to allow editors on shared calendars via subquery join
+- updated `deleteCalendarEvent` to allow editors on shared calendars
+
+## 2026-03-13 - version 1.4.1
+
+- added `middleware/upsertUser.js`: reads `sub` and `email` from the Auth0 JWT payload and upserts a `users` row; skips the write when the sub+email pair is already cached in a module-level Map (avoids a DB write on every request); guards against missing email claim (logs warning, calls next without upserting); DB errors are non-fatal
+- wired `upsertUser` into `routes/calendar.js` immediately after `checkJwt` so all calendar routes populate the user record automatically
+
+## 2026-03-13 - version 1.4.0
+
+- added `scripts/calendar/migrate_sharing.js`: creates `users` table (`sub PK`, `email UNIQUE`) with `idx_users_email`; creates `calendar_members` table (`id PK`, `calendar_id FK → calendars ON DELETE CASCADE`, `user_sub FK → users ON DELETE CASCADE`, `role CHECK('editor'|'viewer')`, `invited_by FK → users ON DELETE SET NULL`) with `idx_calendar_members_user` and `idx_calendar_members_calendar`
+
+## 2026-03-12 - version 1.3.11
+
+Multi-calendar + dedicated Google Calendar two-way sync release. Full breakdown across 1.3.0–1.3.10 below. Summary:
+
+- new `calendars` table with `sync_mode` (`none | push | two_way`), `google_cal_id`, and per-channel columns; `calendar_id` FK on `calendar_events` with cascade delete; migration at `scripts/calendar/migrate_calendars.js` backfills a "Personal" calendar per user and populates `calendar_id` on existing events
+- full calendar CRUD API (`GET`/`POST`/`PUT`/`DELETE /api/calendar/calendars`) with `POST /:id/connect-google` and `DELETE /:id/google` for linking and unlinking Google Calendars
+- per-calendar Google sync routing: event mutations look up the calendar's `syncMode` and target `primary` for push, the calendar's `google_cal_id` for two_way, or skip Google entirely for none
+- `createDedicatedCalendar`, `stopWatchByCalId`, per-calendar `registerWatch` with `userId:calId` channel tokens, and a webhook handler that routes notifications to the right calendar row by splitting the token on the colon
+- `renewWatchChannels` now queries `calendars` for `two_way` rows instead of `google_auth`
+- OAuth scope updated from `calendar.events` to `calendar` to allow creating and managing calendars
+
+## 2026-03-12 - version 1.3.10
+
+- added `DELETE /api/calendar/calendars/:id/google` to `routes/calendar.js`: stops the Google push channel via `stopWatchByCalId` (called before the update so the google_cal_id is still available for lookup), then sets `google_cal_id=null`, `google_cal_name=null`, `sync_mode='push'`; returns the updated calendar; the Google Calendar itself is not deleted
+
+## 2026-03-12 - version 1.3.9
+
+- added `POST /api/calendar/calendars/:id/connect-google` to `routes/calendar.js`: verifies calendar ownership, returns 200 as-is if already connected (idempotent), calls `createDedicatedCalendar` to create the Google Calendar, saves `googleCalId` and `googleCalName` to the calendar row, calls `registerWatch` to start the push channel (non-fatal on failure), returns the updated calendar
+
+## 2026-03-12 - version 1.3.8
+
+- added `stopWatchByCalId(userId, calId)` to `utils/googleCalendar.js`: looks up the channel info from the `calendars` row via `getCalendarByGoogleCalId`, POSTs to the Google channels/stop endpoint, swallows all errors; exported alongside the existing `stopWatch`
+- updated `utils/renewWatchChannels.js` to query `calendars` instead of `google_auth`: selects `two_way` calendars with a `google_cal_id` and a `channel_expiry` within 24 hours; calls `stopWatchByCalId` then `registerWatch` per calendar; imports `stopWatchByCalId` instead of `stopWatch`
+- wired up the real `stopWatchByCalId` in `routes/calendar.js`: removed the local stub, imported from `utils/googleCalendar`, fixed the call to pass `calendar.googleCalId` (the Google Calendar ID) instead of the calendar UUID
+
+## 2026-03-12 - version 1.3.7
+
+- updated `registerWatch` in `utils/googleCalendar.js` to set the channel token as `userId:googleCalId` instead of just `userId`; after registering, looks up the corresponding `calendars` row via `getCalendarByGoogleCalId` and stores channel info and bootstrap sync token there; falls back to `google_auth` when no matching calendar row exists (legacy push channels where `googleCalId` is "primary")
+- updated `routes/googleWebhook.js` to parse the new `userId:googleCalId` channel token format; new path looks up the `calendars` row by `googleCalId`, uses its `syncToken`, and saves the next token back to the calendar row after fetching; events not yet in our DB are imported via `createCalendarEventFromWebhook` for `two_way` calendars and skipped for all others; old single-userId token format falls back to the original `google_auth`-based flow for backward compatibility
+- extracted `processExistingItem` helper to deduplicate the update/delete logic shared by both the new and legacy webhook paths; moved `SYNC_BUFFER_MS` to module scope
+
+## 2026-03-12 - version 1.3.6
+
+- updated OAuth scope in `routes/google.js` from `calendar.events` to `calendar`; the broader scope is required to create and manage dedicated Google Calendars for two_way sync; users who already authorized with the old scope will need to reconnect
+
+## 2026-03-12 - version 1.3.5
+
+- updated `POST /api/calendar/events` to fetch the event's calendar after insert and route the Google sync by `syncMode`: `push` targets `primary`, `two_way` targets `calendar.googleCalId`, `none` skips Google entirely
+- updated `PUT /api/calendar/events/:id` with the same calendar-aware sync routing for updates
+- updated `DELETE /api/calendar/events/:id` to fetch the event (including `calendarId`) before deletion, then route the Google delete to the correct calendar by `syncMode` after the DB row is gone
+
+## 2026-03-12 - version 1.3.4
+
+- refactored `utils/googleToken.js`: renamed core logic to `getTokenAndCalId(userId)` which now returns `{ token, calId }` where `calId` is `google_auth.google_cal_id`; kept `getValidAccessToken(userId)` as a thin wrapper for callers that only need the token; both are exported
+- removed `GCAL_BASE` constant from `utils/googleCalendar.js`; replaced with `calBase(calId)` helper that builds the per-calendar base URL with `encodeURIComponent`
+- updated `createGoogleEvent`, `updateGoogleEvent`, `deleteGoogleEvent`, `fetchIncrementalEvents`, and `registerWatch` to each accept an optional `calId` parameter; when omitted the function falls back to the user-level `calId` returned by `getTokenAndCalId`; the recursive full-sync call inside `fetchIncrementalEvents` now threads the original `calId` through
+- added `createDedicatedCalendar(token, name)` to `utils/googleCalendar.js`: POSTs to the Google Calendar API to create a new calendar, returns `{ calId, calName }`; takes a token directly to avoid double-fetching
+
+## 2026-03-12 - version 1.3.3
+
+- updated `toCalendarEvent` in `utils/db.js` to include `calendarId` in the returned shape so route handlers and the frontend can read which calendar an event belongs to without a second query
+- updated `createCalendarEvent` to accept `calendarId` in the fields object and include it in the INSERT; if no `calendarId` is provided it falls back to the user's oldest calendar (the "Personal" calendar from migration) so existing callers do not break
+- updated `getCalendarEvents` to accept an optional `calendarId` filter that adds `AND ce.calendar_id = $N` to the WHERE clause
+- updated `GET /api/calendar/events` to read `calendarId` from `req.query` and pass it through; updated `POST /api/calendar/events` to read `calendarId` from `req.body` and pass it through
+
+## 2026-03-12 - version 1.3.2
+
+- added calendar CRUD routes to `routes/calendar.js` under `/api/calendar/calendars`: `GET` (list), `POST` (create, validates name), `PUT /:id` (partial update, strips undefined fields before passing to db helper), `DELETE /:id` (204, cascade via FK); delete calls `stopWatchByCalId` stub before removing the row and logs any failure without aborting the delete; the Google Calendar itself is intentionally not deleted on disconnect
+
+## 2026-03-12 - version 1.3.1
+
+- added calendar DB helpers to `utils/db.js`: `toCalendar` mapper, `getCalendars`, `getCalendarById`, `getCalendarByGoogleCalId`, `createCalendar`, `updateCalendar`, `deleteCalendar`; `updateCalendar` uses the same dynamic SET clause pattern as `updateCalendarEvent` and always bumps `updated_at`
+- added `createCalendarEventFromWebhook` helper: inserts a new `calendar_events` row with `sync_source='google'`, defaults title to `''` and color to `#3b82f6` so the webhook handler does not need to sanitize Google event fields before calling it
+
+## 2026-03-12 - version 1.3.0
+
+- added `calendars` table with `id`, `name`, `color`, `user_sub`, `google_cal_id`, `google_cal_name`, `sync_mode`, `channel_id`, `resource_id`, `channel_expiry`, `sync_token`; `sync_mode` is `none | push | two_way` -- this is the foundation for per-calendar Google sync config and eventual two-way dedicated calendar support
+- added `calendar_id` FK column on `calendar_events` referencing `calendars(id)` with cascade delete
+- migration script `scripts/calendar/migrate_calendars.js` creates a "Personal" calendar (`sync_mode='push'`) for every user that already has events and backfills `calendar_id` on all existing events, preserving current one-way sync behavior
+
 ## 2026-03-12 - version 1.2.10
 
 - fixed `FRONTEND_URL` being a single static env var in `routes/google.js`: the single API deployment at `api.paulsumido.com` serves both `paulsumido.com` and `develop.paulsumido.com`, so the OAuth callback always redirected to the same frontend regardless of which one initiated the flow; frontend now passes `?origin=` to `GET /api/google/auth/url`, the origin is embedded (signed) in the OAuth state param alongside the userId, and the callback reads it back to redirect to the correct frontend; unknown origins are rejected with 400; `FRONTEND_URL` kept as fallback for any in-flight old-format state params

@@ -490,20 +490,26 @@ function toCalendarEvent(row) {
     endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
     allDay: row.all_day,
     color: row.color,
+    calendarId: row.calendar_id ?? undefined,
     // included so route handlers can read it for Google push sync without a second query
     googleEventId: row.google_event_id ?? undefined,
   };
 }
 
-async function getCalendarEvents(userSub, start, end, cardId, cardName) {
+async function getCalendarEvents(userSub, start, end, cardId, cardName, calendarId) {
   const values = [userSub];
   const needsCardJoin = cardId || cardName;
 
+  // LEFT JOIN calendar_members so members can see events on shared calendars.
+  // Using a join instead of a correlated subquery lets the planner use
+  // idx_calendar_members_calendar in a single pass.
   let query = `
     SELECT DISTINCT ce.*
     FROM calendar_events ce
     ${needsCardJoin ? "JOIN event_cards ec ON ec.event_id = ce.id" : ""}
-    WHERE ce.user_sub = $1
+    LEFT JOIN calendar_members cm
+      ON cm.calendar_id = ce.calendar_id AND cm.user_sub = $1
+    WHERE (ce.user_sub = $1 OR cm.user_sub IS NOT NULL)
   `;
 
   if (start) {
@@ -522,6 +528,10 @@ async function getCalendarEvents(userSub, start, end, cardId, cardName) {
     values.push(`%${cardName}%`);
     query += ` AND ec.card_name ILIKE $${values.length}`;
   }
+  if (calendarId) {
+    values.push(calendarId);
+    query += ` AND ce.calendar_id = $${values.length}`;
+  }
 
   query += " ORDER BY ce.start_date ASC";
 
@@ -538,7 +548,11 @@ async function getCalendarEvents(userSub, start, end, cardId, cardName) {
  */
 async function getCalendarEventById(id, userSub) {
   const { rows } = await pool.query(
-    "SELECT * FROM calendar_events WHERE id = $1 AND user_sub = $2",
+    `SELECT ce.*
+     FROM   calendar_events ce
+     LEFT JOIN calendar_members cm
+       ON cm.calendar_id = ce.calendar_id AND cm.user_sub = $2
+     WHERE  ce.id = $1 AND (ce.user_sub = $2 OR cm.user_sub IS NOT NULL)`,
     [id, userSub],
   );
   return rows[0] ? toCalendarEvent(rows[0]) : null;
@@ -547,21 +561,36 @@ async function getCalendarEventById(id, userSub) {
 /**
  * Creates a new calendar event for the authenticated user.
  *
- * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string }} fields
+ * If calendarId is not provided we fall back to the user's oldest calendar
+ * (the "Personal" calendar created during migration) so existing callers
+ * don't need to be updated all at once.
+ *
+ * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string, calendarId?: string }} fields
  * @param {string} userSub
  * @returns {Promise<Object>} the newly created row
  */
 async function createCalendarEvent(
-  { title, description, startDate, endDate, allDay = false, color = "#3b82f6" },
+  { title, description, startDate, endDate, allDay = false, color = "#3b82f6", calendarId },
   userSub,
 ) {
   const id = uuidv4();
 
+  // resolve the target calendar -- use the provided id or fall back to the
+  // user's first calendar so we always have a non-null calendar_id
+  let resolvedCalendarId = calendarId;
+  if (!resolvedCalendarId) {
+    const { rows: calRows } = await pool.query(
+      "SELECT id FROM calendars WHERE user_sub = $1 ORDER BY created_at ASC LIMIT 1",
+      [userSub],
+    );
+    resolvedCalendarId = calRows[0]?.id ?? null;
+  }
+
   const { rows } = await pool.query(
-    `INSERT INTO calendar_events (id, title, description, start_date, end_date, all_day, color, user_sub)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO calendar_events (id, title, description, start_date, end_date, all_day, color, calendar_id, user_sub)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [id, title, description || null, startDate, endDate, allDay, color, userSub],
+    [id, title, description || null, startDate, endDate, allDay, color, resolvedCalendarId, userSub],
   );
 
   return toCalendarEvent(rows[0]);
@@ -607,13 +636,24 @@ async function updateCalendarEvent(id, fields, userSub) {
   values.push(new Date());
   setClauses.push(`updated_at = $${values.length}`);
 
+  // editors on shared calendars can also update events — join membership
   values.push(id, userSub);
+  const idIdx = values.length - 1;
+  const subIdx = values.length;
 
   const { rows } = await pool.query(
-    `UPDATE calendar_events
+    `UPDATE calendar_events ce
      SET ${setClauses.join(", ")}
-     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
-     RETURNING *`,
+     FROM (
+       SELECT ce2.id
+       FROM   calendar_events ce2
+       LEFT JOIN calendar_members cm
+         ON cm.calendar_id = ce2.calendar_id AND cm.user_sub = $${subIdx} AND cm.role = 'editor'
+       WHERE  ce2.id = $${idIdx}
+         AND  (ce2.user_sub = $${subIdx} OR cm.user_sub IS NOT NULL)
+     ) AS allowed
+     WHERE ce.id = allowed.id
+     RETURNING ce.*`,
     values,
   );
 
@@ -628,8 +668,19 @@ async function updateCalendarEvent(id, fields, userSub) {
  * @returns {Promise<Object|null>} the deleted row, or null if not found
  */
 async function deleteCalendarEvent(id, userSub) {
+  // editors on shared calendars can also delete events
   const { rows } = await pool.query(
-    "DELETE FROM calendar_events WHERE id = $1 AND user_sub = $2 RETURNING *",
+    `DELETE FROM calendar_events
+     WHERE id = $1
+       AND (
+         user_sub = $2
+         OR EXISTS (
+           SELECT 1 FROM calendar_members cm
+           JOIN calendar_events ce ON ce.id = $1
+           WHERE cm.calendar_id = ce.calendar_id AND cm.user_sub = $2 AND cm.role = 'editor'
+         )
+       )
+     RETURNING *`,
     [id, userSub],
   );
 
@@ -834,6 +885,415 @@ async function clearEventGoogleId(googleEventId, userSub) {
     "UPDATE calendar_events SET google_event_id = NULL WHERE google_event_id = $1 AND user_sub = $2",
     [googleEventId, userSub],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Calendars
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+/**
+ * Upserts a users row from Auth0 JWT claims. Called by upsertUser middleware.
+ *
+ * @param {string} sub   - Auth0 sub claim
+ * @param {string} email - Auth0 email claim
+ */
+async function upsertUser(sub, email) {
+  await pool.query(
+    `INSERT INTO users (sub, email, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (sub) DO UPDATE SET email = EXCLUDED.email, updated_at = NOW()`,
+    [sub, email],
+  );
+}
+
+/**
+ * Returns the users row for a given sub, or null.
+ *
+ * @param {string} sub
+ * @returns {Promise<Object|null>}
+ */
+async function getUserBySub(sub) {
+  const { rows } = await pool.query('SELECT * FROM users WHERE sub = $1', [sub]);
+  return rows[0] ?? null;
+}
+
+/**
+ * Returns the users row for a given email, or null.
+ * Used to resolve an invite email to a sub before inserting a calendar_members row.
+ *
+ * @param {string} email
+ * @returns {Promise<Object|null>}
+ */
+async function getUserByEmail(email) {
+  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+  return rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar members
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a raw calendar_members row (with a joined email column) to camelCase.
+ *
+ * @param {Object} row
+ * @returns {{ id: string, calendarId: string, userSub: string, email: string,
+ *             role: string, invitedBy: string|null, createdAt: string }}
+ */
+function toCalendarMember(row) {
+  return {
+    id: row.id,
+    calendarId: row.calendar_id,
+    userSub: row.user_sub,
+    email: row.email,
+    role: row.role,
+    invitedBy: row.invited_by ?? null,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  };
+}
+
+/**
+ * Returns all members of a calendar in creation order.
+ * Does NOT perform an ownership check — the route layer is responsible
+ * for verifying the caller is the owner or a member before calling this.
+ *
+ * @param {string} calendarId
+ * @returns {Promise<Array>}
+ */
+async function getCalendarMembers(calendarId) {
+  const { rows } = await pool.query(
+    `SELECT cm.*, u.email
+     FROM   calendar_members cm
+     JOIN   users u ON u.sub = cm.user_sub
+     WHERE  cm.calendar_id = $1
+     ORDER BY cm.created_at ASC`,
+    [calendarId],
+  );
+  return rows.map(toCalendarMember);
+}
+
+/**
+ * Adds (or updates the role of) a calendar member. Uses a single CTE to return
+ * the email without a second round-trip.
+ *
+ * @param {string} calendarId
+ * @param {string} userSub      - the sub of the user being invited
+ * @param {string} role         - 'editor' or 'viewer'
+ * @param {string} invitedBySub - the sub of the user sending the invite
+ * @returns {Promise<Object>} the inserted/updated toCalendarMember row
+ */
+async function addCalendarMember(calendarId, userSub, role, invitedBySub) {
+  const { rows } = await pool.query(
+    `WITH ins AS (
+       INSERT INTO calendar_members (id, calendar_id, user_sub, role, invited_by)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4)
+       ON CONFLICT (calendar_id, user_sub) DO UPDATE
+         SET role = EXCLUDED.role, updated_at = NOW()
+       RETURNING *
+     )
+     SELECT ins.*, u.email
+     FROM   ins
+     JOIN   users u ON u.sub = ins.user_sub`,
+    [calendarId, userSub, role, invitedBySub],
+  );
+  return toCalendarMember(rows[0]);
+}
+
+/**
+ * Updates the role of an existing calendar member. Owner-gated via EXISTS.
+ *
+ * @param {string} calendarId
+ * @param {string} memberSub
+ * @param {string} role     - 'editor' or 'viewer'
+ * @param {string} ownerSub
+ * @returns {Promise<Object|null>}
+ */
+async function updateCalendarMemberRole(calendarId, memberSub, role, ownerSub) {
+  const { rows } = await pool.query(
+    `UPDATE calendar_members SET role = $1, updated_at = NOW()
+     WHERE  calendar_id = $2 AND user_sub = $3
+     AND EXISTS (SELECT 1 FROM calendars WHERE id = $2 AND user_sub = $4)
+     RETURNING *`,
+    [role, calendarId, memberSub, ownerSub],
+  );
+  if (!rows[0]) return null;
+  // fetch email for the mapper
+  const user = await getUserBySub(memberSub);
+  return toCalendarMember({ ...rows[0], email: user?.email ?? null });
+}
+
+/**
+ * Removes a calendar member. Owner-gated via EXISTS.
+ *
+ * @param {string} calendarId
+ * @param {string} memberSub
+ * @param {string} ownerSub
+ * @returns {Promise<Object|null>}
+ */
+async function removeCalendarMember(calendarId, memberSub, ownerSub) {
+  const { rows } = await pool.query(
+    `DELETE FROM calendar_members
+     WHERE  calendar_id = $1 AND user_sub = $2
+     AND EXISTS (SELECT 1 FROM calendars WHERE id = $1 AND user_sub = $3)
+     RETURNING *`,
+    [calendarId, memberSub, ownerSub],
+  );
+  if (!rows[0]) return null;
+  const user = await getUserBySub(memberSub);
+  return toCalendarMember({ ...rows[0], email: user?.email ?? null });
+}
+
+// maps a raw calendars row (snake_case) to the camelCase shape the frontend expects.
+// the watch channel fields (channelId etc.) live here because each two_way calendar
+// has its own dedicated channel, unlike the old setup where channels were per-user.
+function toCalendar(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    userSub: row.user_sub,
+    googleCalId: row.google_cal_id ?? undefined,
+    googleCalName: row.google_cal_name ?? undefined,
+    syncMode: row.sync_mode,
+    channelId: row.channel_id ?? undefined,
+    resourceId: row.resource_id ?? undefined,
+    channelExpiry: row.channel_expiry instanceof Date ? row.channel_expiry.toISOString() : (row.channel_expiry ?? undefined),
+    syncToken: row.sync_token ?? undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    // sharing fields — present when the UNION query is used (getCalendars)
+    role: row.role ?? undefined,
+    ownerSub: row.owner_sub ?? undefined,
+    ownerEmail: row.owner_email ?? undefined,
+  };
+}
+
+/**
+ * Returns all calendars for a user in creation order (oldest first).
+ *
+ * @param {string} userSub
+ * @returns {Promise<Array>}
+ */
+/**
+ * Returns all calendars the user owns or is a member of, in creation order.
+ * Each row carries a `role` field ('owner' | 'editor' | 'viewer'). Shared
+ * calendars also include `ownerSub` and `ownerEmail` from the owner's users row.
+ *
+ * @param {string} userSub
+ * @returns {Promise<Array>}
+ */
+async function getCalendars(userSub) {
+  const { rows } = await pool.query(
+    `SELECT c.*, 'owner' AS role, NULL AS owner_sub, NULL AS owner_email
+     FROM   calendars c
+     WHERE  c.user_sub = $1
+     UNION ALL
+     SELECT c.*, cm.role, c.user_sub AS owner_sub, u.email AS owner_email
+     FROM   calendars c
+     JOIN   calendar_members cm ON cm.calendar_id = c.id AND cm.user_sub = $1
+     JOIN   users u ON u.sub = c.user_sub
+     ORDER  BY created_at ASC`,
+    [userSub],
+  );
+  return rows.map(toCalendar);
+}
+
+/**
+ * Fetches a single calendar by its UUID. Returns null if it doesn't exist
+ * or belongs to a different user.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarById(id, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendars WHERE id = $1 AND user_sub = $2",
+    [id, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Looks up a calendar by its Google Calendar ID. The webhook handler uses this
+ * to figure out which of our calendars a notification belongs to.
+ *
+ * @param {string} googleCalId
+ * @param {string} userSub
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarByGoogleCalId(googleCalId, userSub) {
+  const { rows } = await pool.query(
+    "SELECT * FROM calendars WHERE google_cal_id = $1 AND user_sub = $2",
+    [googleCalId, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Single choke-point for write authorization on calendars and their events.
+ *
+ * requiredRole:
+ *   'owner'  — calendar settings, sharing management, delete calendar.
+ *              Only the calendar's user_sub passes.
+ *   'editor' — event create/update/delete.
+ *              The owner and any calendar_members row with role='editor' pass.
+ *
+ * Returns the calendar row (via toCalendar, without role/ownerSub/ownerEmail)
+ * or null when the caller is not authorized. Route handlers treat null as 403/404.
+ *
+ * @param {string} calendarId
+ * @param {string} userSub
+ * @param {'owner'|'editor'} requiredRole
+ * @returns {Promise<Object|null>}
+ */
+async function getCalendarForMutation(calendarId, userSub, requiredRole) {
+  let query;
+  if (requiredRole === 'owner') {
+    query = 'SELECT * FROM calendars WHERE id = $1 AND user_sub = $2';
+  } else {
+    query = `SELECT c.* FROM calendars c
+             WHERE  c.id = $1
+             AND (
+               c.user_sub = $2
+               OR EXISTS (
+                 SELECT 1 FROM calendar_members
+                 WHERE calendar_id = $1 AND user_sub = $2 AND role = 'editor'
+               )
+             )`;
+  }
+  const { rows } = await pool.query(query, [calendarId, userSub]);
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Creates a new calendar for the authenticated user.
+ *
+ * @param {{ name: string, color?: string, syncMode?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCalendar({ name, color = "#3b82f6", syncMode = "none" }, userSub) {
+  const id = uuidv4();
+  const { rows } = await pool.query(
+    `INSERT INTO calendars (id, name, color, user_sub, sync_mode)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [id, name, color, userSub, syncMode],
+  );
+  return toCalendar(rows[0]);
+}
+
+/**
+ * Partially updates a calendar. Only the owner can modify it.
+ * Pass only the fields you want to change -- everything else stays as-is.
+ * Always bumps updated_at.
+ *
+ * @param {string} id
+ * @param {{ name?: string, color?: string, syncMode?: string, googleCalId?: string,
+ *           googleCalName?: string, channelId?: string, resourceId?: string,
+ *           channelExpiry?: string, syncToken?: string }} fields
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} updated row, or null if not found / not owned
+ */
+async function updateCalendar(id, fields, userSub) {
+  const colMap = {
+    name: "name",
+    color: "color",
+    syncMode: "sync_mode",
+    googleCalId: "google_cal_id",
+    googleCalName: "google_cal_name",
+    channelId: "channel_id",
+    resourceId: "resource_id",
+    channelExpiry: "channel_expiry",
+    syncToken: "sync_token",
+  };
+
+  const setClauses = [];
+  const values = [];
+
+  for (const [key, col] of Object.entries(colMap)) {
+    if (key in fields) {
+      values.push(fields[key]);
+      setClauses.push(`${col} = $${values.length}`);
+    }
+  }
+
+  if (setClauses.length === 0) return null;
+
+  // always bump updated_at so callers don't have to pass it explicitly
+  values.push(new Date());
+  setClauses.push(`updated_at = $${values.length}`);
+
+  values.push(id, userSub);
+
+  const { rows } = await pool.query(
+    `UPDATE calendars
+     SET ${setClauses.join(", ")}
+     WHERE id = $${values.length - 1} AND user_sub = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Deletes a calendar by ID. Only the owner can delete it.
+ * Events belonging to the calendar cascade-delete via the FK constraint.
+ *
+ * @param {string} id
+ * @param {string} userSub
+ * @returns {Promise<Object|null>} the deleted row, or null if not found
+ */
+async function deleteCalendar(id, userSub) {
+  const { rows } = await pool.query(
+    "DELETE FROM calendars WHERE id = $1 AND user_sub = $2 RETURNING *",
+    [id, userSub],
+  );
+  return rows[0] ? toCalendar(rows[0]) : null;
+}
+
+/**
+ * Inserts a calendar event that arrived from a Google webhook. Sets sync_source
+ * to 'google' so any subsequent user-driven mutation knows to push back out.
+ *
+ * Default color and title are applied here rather than in the webhook handler
+ * so this helper is safe to call without sanitizing the Google event first.
+ *
+ * @param {{ title?: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string }} fields
+ * @param {string} googleEventId
+ * @param {string} calendarId - UUID of our calendar row
+ * @param {string} userSub
+ * @returns {Promise<Object>} the newly created row
+ */
+async function createCalendarEventFromWebhook(fields, googleEventId, calendarId, userSub) {
+  const {
+    title = "",
+    description,
+    startDate,
+    endDate,
+    allDay = false,
+    color = "#3b82f6",
+  } = fields;
+
+  const id = uuidv4();
+
+  const { rows } = await pool.query(
+    `INSERT INTO calendar_events
+       (id, title, description, start_date, end_date, all_day, color,
+        calendar_id, user_sub, google_event_id, sync_source)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'google')
+     RETURNING *`,
+    [id, title, description || null, startDate, endDate, allDay, color,
+     calendarId, userSub, googleEventId],
+  );
+
+  return toCalendarEvent(rows[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,6 +1600,21 @@ module.exports = {
   createCountdown,
   updateCountdown,
   deleteCountdown,
+  upsertUser,
+  getUserBySub,
+  getUserByEmail,
+  getCalendarMembers,
+  addCalendarMember,
+  updateCalendarMemberRole,
+  removeCalendarMember,
+  getCalendars,
+  getCalendarById,
+  getCalendarByGoogleCalId,
+  getCalendarForMutation,
+  createCalendar,
+  updateCalendar,
+  deleteCalendar,
+  createCalendarEventFromWebhook,
   getEventByGoogleId,
   updateCalendarEventFromWebhook,
   getGoogleAuth,
