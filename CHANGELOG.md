@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.7
+
+- updated `registerWatch` in `utils/googleCalendar.js` to set the channel token as `userId:googleCalId` instead of just `userId`; after registering, looks up the corresponding `calendars` row via `getCalendarByGoogleCalId` and stores channel info and bootstrap sync token there; falls back to `google_auth` when no matching calendar row exists (legacy push channels where `googleCalId` is "primary")
+- updated `routes/googleWebhook.js` to parse the new `userId:googleCalId` channel token format; new path looks up the `calendars` row by `googleCalId`, uses its `syncToken`, and saves the next token back to the calendar row after fetching; events not yet in our DB are imported via `createCalendarEventFromWebhook` for `two_way` calendars and skipped for all others; old single-userId token format falls back to the original `google_auth`-based flow for backward compatibility
+- extracted `processExistingItem` helper to deduplicate the update/delete logic shared by both the new and legacy webhook paths; moved `SYNC_BUFFER_MS` to module scope
+
 ## 2026-03-12 - version 1.3.6
 
 - updated OAuth scope in `routes/google.js` from `calendar.events` to `calendar`; the broader scope is required to create and manage dedicated Google Calendars for two_way sync; users who already authorized with the old scope will need to reconnect

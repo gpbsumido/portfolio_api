@@ -252,7 +252,9 @@ async function registerWatch(userId, calId) {
       id: channelId,
       type: "web_hook",
       address: process.env.GOOGLE_WEBHOOK_URL,
-      token: userId,           // echoed back as X-Goog-Channel-Token on each ping
+      // "userId:googleCalId" format lets the webhook handler route the
+      // notification to the right calendar row. old channels used just userId.
+      token: `${userId}:${resolvedCalId}`,
       expiration,
     }),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -264,17 +266,31 @@ async function registerWatch(userId, calId) {
   }
 
   const data = await res.json();
-  await db.updateChannelInfo(userId, {
+  const channelInfo = {
     channelId: data.id,
     resourceId: data.resourceId,
     channelExpiry: new Date(parseInt(data.expiration, 10)),
-  });
+  };
+
+  // store channel info on the calendars row when one matches the googleCalId.
+  // fall back to google_auth for legacy push channels where there is no
+  // corresponding calendars row (e.g. resolvedCalId is "primary").
+  const calendarRow = await db.getCalendarByGoogleCalId(resolvedCalId, userId);
+  if (calendarRow) {
+    await db.updateCalendar(calendarRow.id, channelInfo, userId);
+  } else {
+    await db.updateChannelInfo(userId, channelInfo);
+  }
 
   // bootstrap the sync token with a full sync so future incremental fetches
   // have a valid cursor to start from.
   try {
     const { nextSyncToken } = await fetchIncrementalEvents(userId, null, resolvedCalId);
-    await db.updateSyncToken(userId, nextSyncToken);
+    if (calendarRow) {
+      await db.updateCalendar(calendarRow.id, { syncToken: nextSyncToken }, userId);
+    } else {
+      await db.updateSyncToken(userId, nextSyncToken);
+    }
   } catch (syncErr) {
     console.warn(`[googleCalendar] initial sync after registerWatch failed for ${userId}:`, syncErr.message);
   }
