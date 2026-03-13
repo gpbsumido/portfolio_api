@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.5
+
+- added `addCalendarAclEntry(ownerUserId, googleCalId, memberEmail, role)` to `utils/googleCalendar.js`: maps 'editor' to 'writer' and 'viewer' to 'reader', POSTs to the Google ACL endpoint using the owner's token, throws on non-2xx
+- added `removeCalendarAclEntry(ownerUserId, googleCalId, memberEmail)` to `utils/googleCalendar.js`: DELETEs the user-scoped ACL rule, swallows 404, throws on other non-2xx responses
+
 ## 2026-03-13 - version 1.4.4
 
 - added `GET /api/calendar/calendars/:id/members`: accessible by owner or any member; synthesizes an owner entry from the calendars row and prepends it to the member list

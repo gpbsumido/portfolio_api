@@ -391,6 +391,72 @@ async function stopWatch(userId) {
   }
 }
 
+/**
+ * Adds a user email to the Google Calendar ACL so the calendar appears in
+ * their Google Calendar app. Uses the calendar owner's OAuth token.
+ *
+ * @param {string} ownerUserId  - Auth0 sub of the calendar owner
+ * @param {string} googleCalId  - Google Calendar ID
+ * @param {string} memberEmail  - email address to grant access
+ * @param {'editor'|'viewer'} role
+ * @returns {Promise<Object>} parsed response body from Google
+ */
+async function addCalendarAclEntry(ownerUserId, googleCalId, memberEmail, role) {
+  const googleRole = role === "editor" ? "writer" : "reader";
+  const token = await getValidAccessToken(ownerUserId);
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/acl`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        role: googleRole,
+        scope: { type: "user", value: memberEmail },
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`addCalendarAclEntry ${res.status}: ${body}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Removes a user email from the Google Calendar ACL.
+ * Swallows 404 since the member may have already been removed from Google's side.
+ *
+ * @param {string} ownerUserId  - Auth0 sub of the calendar owner
+ * @param {string} googleCalId  - Google Calendar ID
+ * @param {string} memberEmail  - email address to revoke
+ */
+async function removeCalendarAclEntry(ownerUserId, googleCalId, memberEmail) {
+  const token = await getValidAccessToken(ownerUserId);
+  const ruleId = `user:${memberEmail}`;
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleCalId)}/acl/${encodeURIComponent(ruleId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
+  );
+
+  if (res.status === 404) return; // already gone, nothing to do
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`removeCalendarAclEntry ${res.status}: ${body}`);
+  }
+}
+
 module.exports = {
   createGoogleEvent,
   updateGoogleEvent,
@@ -400,4 +466,6 @@ module.exports = {
   stopWatch,
   stopWatchByCalId,
   createDedicatedCalendar,
+  addCalendarAclEntry,
+  removeCalendarAclEntry,
 };
