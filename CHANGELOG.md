@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.0
+
+- added `scripts/calendar/migrate_sharing.js`: creates `users` table (`sub PK`, `email UNIQUE`) with `idx_users_email`; creates `calendar_members` table (`id PK`, `calendar_id FK → calendars ON DELETE CASCADE`, `user_sub FK → users ON DELETE CASCADE`, `role CHECK('editor'|'viewer')`, `invited_by FK → users ON DELETE SET NULL`) with `idx_calendar_members_user` and `idx_calendar_members_calendar`
+
 ## 2026-03-12 - version 1.3.11
 
 Multi-calendar + dedicated Google Calendar two-way sync release. Full breakdown across 1.3.0–1.3.10 below. Summary:
