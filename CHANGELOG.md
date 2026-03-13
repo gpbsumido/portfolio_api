@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.7
+
+- fixed `ValidationError: ERR_ERL_KEY_GEN_IPV6` in `routes/calendar.js`: custom `keyGenerator` was falling back to `req.ip` directly, which `express-rate-limit` v7+ rejects because raw IPv6 addresses can be used to bypass limits; replaced with `ipKeyGenerator(req)` from `express-rate-limit` which normalizes IPv6 correctly; also switched from `const rateLimit = require(...)` to named import `{ rateLimit, ipKeyGenerator }`
+- `DELETE /calendars/:id/members/:memberSub`: added self-removal path — any member can remove themselves using `"me"` or their own sub as `:memberSub`; performs best-effort Google ACL removal using the owner's credentials and returns `{ googleAclRemoved }` consistent with the owner-removal path
+
 ## 2026-03-13 - version 1.4.6
 
 - `POST /calendars/:id/members`: fires `addCalendarAclEntry` as fire-and-forget after the DB insert so ACL latency never delays the HTTP response
