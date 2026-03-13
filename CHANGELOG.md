@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.3
+
+- event create/update/delete: replaced `getCalendarById` with `getCalendarForMutation('editor')` for Google sync lookup so editors on shared calendars can write events and credentials always come from the owner's row
+- calendar update (`PUT /calendars/:id`): added `getCalendarForMutation('owner')` preflight, returns 403 if not owner
+- calendar delete (`DELETE /calendars/:id`): same preflight; also removes `getCalendarById` duplicate lookup
+- `POST /calendars/:id/connect-google`: owner preflight, returns 403 if not owner
+- `DELETE /calendars/:id/google`: owner preflight, returns 403 if not owner
+
 ## 2026-03-13 - version 1.4.2
 
 - added `upsertUser`, `getUserBySub`, `getUserByEmail` to `utils/db.js`

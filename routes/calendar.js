@@ -89,8 +89,10 @@ router.post("/events", async (req, res) => {
     // push to Google after the DB write. the calendar's syncMode determines
     // which Google Calendar to target (or whether to skip entirely).
     // if the sync fails the event is still saved -- the DB write is the source of truth.
+    // getCalendarForMutation returns the owner's calendar row regardless of whether
+    // the acting user is the owner or an editor, so Google credentials are always correct.
     try {
-      const calendar = await db.getCalendarById(event.calendarId, userSub);
+      const calendar = await db.getCalendarForMutation(event.calendarId, userSub, 'editor');
       let googleEventId;
       if (calendar?.syncMode === "push") {
         googleEventId = await createGoogleEvent(userSub, event, "primary");
@@ -131,7 +133,7 @@ router.put("/events/:id", async (req, res) => {
     // pass the full updated event so Google gets the current state, not just the diff.
     // the calendar's syncMode tells us which Google Calendar to target.
     try {
-      const calendar = await db.getCalendarById(event.calendarId, userSub);
+      const calendar = await db.getCalendarForMutation(event.calendarId, userSub, 'editor');
       if (calendar?.syncMode === "push") {
         await updateGoogleEvent(userSub, event.googleEventId, event, "primary");
       } else if (calendar?.syncMode === "two_way" && calendar.googleCalId) {
@@ -166,7 +168,7 @@ router.delete("/events/:id", async (req, res) => {
     // clean up Google after the DB row is gone. the calendar's syncMode tells
     // us which Google Calendar to delete from.
     try {
-      const calendar = await db.getCalendarById(existing.calendarId, userSub);
+      const calendar = await db.getCalendarForMutation(existing.calendarId, userSub, 'editor');
       if (calendar?.syncMode === "push") {
         await deleteGoogleEvent(userSub, existing.googleEventId, "primary");
       } else if (calendar?.syncMode === "two_way" && calendar.googleCalId) {
@@ -244,6 +246,9 @@ router.put("/calendars/:id", async (req, res) => {
   }
 
   try {
+    const owned = await db.getCalendarForMutation(id, userSub, 'owner');
+    if (!owned) return res.status(403).json({ error: 'Not authorized' });
+
     const calendar = await db.updateCalendar(id, fields, userSub);
 
     if (!calendar) {
@@ -268,10 +273,10 @@ router.delete("/calendars/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const calendar = await db.getCalendarById(id, userSub);
+    const calendar = await db.getCalendarForMutation(id, userSub, 'owner');
 
     if (!calendar) {
-      return res.status(404).json({ error: "Calendar not found" });
+      return res.status(403).json({ error: "Not authorized" });
     }
 
     // stop the watch channel before deleting so Google stops sending notifications
@@ -303,10 +308,10 @@ router.post("/calendars/:id/connect-google", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const calendar = await db.getCalendarById(id, userSub);
+    const calendar = await db.getCalendarForMutation(id, userSub, 'owner');
 
     if (!calendar) {
-      return res.status(404).json({ error: "Calendar not found" });
+      return res.status(403).json({ error: "Not authorized" });
     }
 
     // already connected -- return as-is so the frontend can call this safely
@@ -347,10 +352,10 @@ router.delete("/calendars/:id/google", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const calendar = await db.getCalendarById(id, userSub);
+    const calendar = await db.getCalendarForMutation(id, userSub, 'owner');
 
     if (!calendar) {
-      return res.status(404).json({ error: "Calendar not found" });
+      return res.status(403).json({ error: "Not authorized" });
     }
 
     // stop the watch channel before we null out the google_cal_id, since
