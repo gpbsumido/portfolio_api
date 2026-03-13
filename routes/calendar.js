@@ -1,6 +1,7 @@
 const express = require("express");
 const db = require("../utils/db");
 const { checkJwt } = require("../middleware/auth");
+const upsertUser = require("../middleware/upsertUser");
 const {
   createGoogleEvent,
   updateGoogleEvent,
@@ -15,6 +16,8 @@ const router = express.Router();
 
 // all calendar routes require a valid Auth0 token
 router.use(checkJwt);
+// seed the users table from the JWT so sharing invite-by-email lookup works
+router.use(upsertUser);
 
 // log JWT errors
 router.use((err, req, res, next) => {

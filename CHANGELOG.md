@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.1
+
+- added `middleware/upsertUser.js`: reads `sub` and `email` from the Auth0 JWT payload and upserts a `users` row; skips the write when the sub+email pair is already cached in a module-level Map (avoids a DB write on every request); guards against missing email claim (logs warning, calls next without upserting); DB errors are non-fatal
+- wired `upsertUser` into `routes/calendar.js` immediately after `checkJwt` so all calendar routes populate the user record automatically
+
 ## 2026-03-13 - version 1.4.0
 
 - added `scripts/calendar/migrate_sharing.js`: creates `users` table (`sub PK`, `email UNIQUE`) with `idx_users_email`; creates `calendar_members` table (`id PK`, `calendar_id FK → calendars ON DELETE CASCADE`, `user_sub FK → users ON DELETE CASCADE`, `role CHECK('editor'|'viewer')`, `invited_by FK → users ON DELETE SET NULL`) with `idx_calendar_members_user` and `idx_calendar_members_calendar`
