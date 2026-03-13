@@ -79,13 +79,18 @@ router.post("/events", async (req, res) => {
       userSub,
     );
 
-    // push to Google after the DB write. if it fails the event is still saved
-    // here, the sync just won't have a Google counterpart yet.
+    // push to Google after the DB write. the calendar's syncMode determines
+    // which Google Calendar to target (or whether to skip entirely).
+    // if the sync fails the event is still saved -- the DB write is the source of truth.
     try {
-      const googleEventId = await createGoogleEvent(userSub, event);
-      if (googleEventId) {
-        await db.setEventGoogleId(event.id, googleEventId, userSub);
+      const calendar = await db.getCalendarById(event.calendarId, userSub);
+      let googleEventId;
+      if (calendar?.syncMode === "push") {
+        googleEventId = await createGoogleEvent(userSub, event, "primary");
+      } else if (calendar?.syncMode === "two_way" && calendar.googleCalId) {
+        googleEventId = await createGoogleEvent(userSub, event, calendar.googleCalId);
       }
+      if (googleEventId) await db.setEventGoogleId(event.id, googleEventId, userSub);
     } catch (syncErr) {
       console.error("POST /calendar/events Google sync failed:", syncErr.message);
     }
@@ -116,9 +121,15 @@ router.put("/events/:id", async (req, res) => {
     }
 
     // sync the change to Google if this event has been pushed there before.
-    // we pass the full updated event so Google gets the current state, not just the diff.
+    // pass the full updated event so Google gets the current state, not just the diff.
+    // the calendar's syncMode tells us which Google Calendar to target.
     try {
-      await updateGoogleEvent(userSub, event.googleEventId, event);
+      const calendar = await db.getCalendarById(event.calendarId, userSub);
+      if (calendar?.syncMode === "push") {
+        await updateGoogleEvent(userSub, event.googleEventId, event, "primary");
+      } else if (calendar?.syncMode === "two_way" && calendar.googleCalId) {
+        await updateGoogleEvent(userSub, event.googleEventId, event, calendar.googleCalId);
+      }
     } catch (syncErr) {
       console.error("PUT /calendar/events/:id Google sync failed:", syncErr.message);
     }
@@ -136,16 +147,24 @@ router.delete("/events/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    // deleteCalendarEvent returns the deleted row including googleEventId,
-    // so we can clean up Google after the DB row is gone.
-    const deleted = await db.deleteCalendarEvent(id, userSub);
+    // fetch the event first so we have calendarId available after deletion
+    const existing = await db.getCalendarEventById(id, userSub);
 
-    if (!deleted) {
+    if (!existing) {
       return res.status(404).json({ error: "Event not found" });
     }
 
+    await db.deleteCalendarEvent(id, userSub);
+
+    // clean up Google after the DB row is gone. the calendar's syncMode tells
+    // us which Google Calendar to delete from.
     try {
-      await deleteGoogleEvent(userSub, deleted.googleEventId);
+      const calendar = await db.getCalendarById(existing.calendarId, userSub);
+      if (calendar?.syncMode === "push") {
+        await deleteGoogleEvent(userSub, existing.googleEventId, "primary");
+      } else if (calendar?.syncMode === "two_way" && calendar.googleCalId) {
+        await deleteGoogleEvent(userSub, existing.googleEventId, calendar.googleCalId);
+      }
     } catch (syncErr) {
       console.error("DELETE /calendar/events/:id Google sync failed:", syncErr.message);
     }

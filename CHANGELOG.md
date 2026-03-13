@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.5
+
+- updated `POST /api/calendar/events` to fetch the event's calendar after insert and route the Google sync by `syncMode`: `push` targets `primary`, `two_way` targets `calendar.googleCalId`, `none` skips Google entirely
+- updated `PUT /api/calendar/events/:id` with the same calendar-aware sync routing for updates
+- updated `DELETE /api/calendar/events/:id` to fetch the event (including `calendarId`) before deletion, then route the Google delete to the correct calendar by `syncMode` after the DB row is gone
+
 ## 2026-03-12 - version 1.3.4
 
 - refactored `utils/googleToken.js`: renamed core logic to `getTokenAndCalId(userId)` which now returns `{ token, calId }` where `calId` is `google_auth.google_cal_id`; kept `getValidAccessToken(userId)` as a thin wrapper for callers that only need the token; both are exported
