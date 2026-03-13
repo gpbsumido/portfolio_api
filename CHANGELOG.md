@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.2
+
+- added `upsertUser`, `getUserBySub`, `getUserByEmail` to `utils/db.js`
+- added `toCalendarMember`, `getCalendarMembers`, `addCalendarMember` (single CTE, no N+1), `updateCalendarMemberRole`, `removeCalendarMember` to `utils/db.js`
+- updated `toCalendar` to include `role`, `ownerSub`, `ownerEmail` for the UNION query shape
+- replaced `getCalendars` with a UNION query returning owned and shared calendars; each row carries `role` ('owner'|'editor'|'viewer') and `ownerSub`/`ownerEmail` for shared rows
+- added `getCalendarForMutation(calendarId, userSub, requiredRole)` — single write-auth chokepoint; 'owner' checks `user_sub` only; 'editor' also accepts `calendar_members` rows with role='editor'
+- updated `getCalendarEvents` to use LEFT JOIN on `calendar_members` (replaces correlated subquery) so members see events on shared calendars
+- updated `getCalendarEventById` with same LEFT JOIN expansion
+- updated `updateCalendarEvent` to allow editors on shared calendars via subquery join
+- updated `deleteCalendarEvent` to allow editors on shared calendars
+
 ## 2026-03-13 - version 1.4.1
 
 - added `middleware/upsertUser.js`: reads `sub` and `email` from the Auth0 JWT payload and upserts a `users` row; skips the write when the sub+email pair is already cached in a module-level Map (avoids a DB write on every request); guards against missing email claim (logs warning, calls next without upserting); DB errors are non-fatal
