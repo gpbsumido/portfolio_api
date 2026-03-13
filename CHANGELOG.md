@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-13 - version 1.4.8
+
+- `middleware/upsertUser.js`: reads `X-User-Email` header as fallback when `email` is absent from the access token JWT — fixes sharing not working when Auth0 doesn't include email in the access token by default; primary fix is an Auth0 post-login Action that sets `email` as a custom claim, header is belt-and-suspenders
+- `GET /calendars/:id/members`: owner entry email now falls back to `req.auth.payload.email` (from the JWT) when `getUserBySub` returns null (e.g. first request after the sharing migration before the users table is populated)
+
 ## 2026-03-13 - version 1.4.7
 
 - fixed `ValidationError: ERR_ERL_KEY_GEN_IPV6` in `routes/calendar.js`: custom `keyGenerator` was falling back to `req.ip` directly, which `express-rate-limit` v7+ rejects because raw IPv6 addresses can be used to bypass limits; replaced with `ipKeyGenerator(req)` from `express-rate-limit` which normalizes IPv6 correctly; also switched from `const rateLimit = require(...)` to named import `{ rateLimit, ipKeyGenerator }`

@@ -25,10 +25,12 @@ const _seenUsers = new Map();
  */
 async function upsertUser(req, res, next) {
   const sub = req.auth?.payload?.sub;
-  const email = req.auth?.payload?.email;
+  // prefer the JWT claim; fall back to X-User-Email forwarded by the BFF from
+  // the Auth0 session (handles cases where email is absent from the access token)
+  const email = req.auth?.payload?.email ?? req.headers['x-user-email'] ?? null;
 
   if (!email) {
-    console.warn('[upsertUser] JWT missing email claim — sharing will not work for this user until email is present');
+    console.warn('[upsertUser] email not available from JWT or BFF header — sharing will not work for this user');
     return next();
   }
 

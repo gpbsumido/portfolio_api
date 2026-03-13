@@ -436,10 +436,15 @@ router.get("/calendars/:id/members", async (req, res) => {
     if (!cal) return res.status(404).json({ error: "Calendar not found" });
 
     const ownerUser = await db.getUserBySub(cal.user_sub);
+    // fall back to the JWT email if the owner is the requester and the users
+    // table doesn't have their row yet (e.g. first request after migration)
+    const ownerEmail =
+      ownerUser?.email ??
+      (cal.user_sub === userSub ? (req.auth.payload.email ?? null) : null);
     const ownerEntry = {
       id: null,
       userSub: cal.user_sub,
-      email: ownerUser?.email ?? null,
+      email: ownerEmail,
       role: "owner",
     };
 
