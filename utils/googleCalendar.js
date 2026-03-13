@@ -325,9 +325,44 @@ async function createDedicatedCalendar(token, name) {
 }
 
 /**
- * Stops an existing watch channel. Called on disconnect and before re-registering
- * during renewal. Swallows errors since Google returns 404 for already-expired
- * channels, which is fine.
+ * Stops the watch channel for a specific Google Calendar. Used by the cron job
+ * and the calendar delete route before re-registering or removing a two_way calendar.
+ * Looks up the channel info from the calendars row rather than google_auth, since
+ * per-calendar channels are stored there.
+ * Swallows errors -- a 404 from Google just means the channel already expired.
+ *
+ * @param {string} userId - Auth0 sub
+ * @param {string} calId - Google Calendar ID (google_cal_id column)
+ */
+async function stopWatchByCalId(userId, calId) {
+  try {
+    const calendar = await db.getCalendarByGoogleCalId(calId, userId);
+    if (!calendar?.channelId || !calendar?.resourceId) return;
+
+    const token = await getValidAccessToken(userId);
+
+    await fetch("https://www.googleapis.com/calendar/v3/channels/stop", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: calendar.channelId,
+        resourceId: calendar.resourceId,
+      }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    // we don't check res.ok here, a 404 just means the channel already expired
+  } catch (err) {
+    console.warn(`[googleCalendar] stopWatchByCalId failed for ${userId} calId=${calId}:`, err.message);
+  }
+}
+
+/**
+ * Stops an existing watch channel for the user's legacy primary calendar.
+ * Called on disconnect and before re-registering during renewal.
+ * Swallows errors since Google returns 404 for already-expired channels.
  *
  * @param {string} userId - Auth0 sub
  */
@@ -363,5 +398,6 @@ module.exports = {
   fetchIncrementalEvents,
   registerWatch,
   stopWatch,
+  stopWatchByCalId,
   createDedicatedCalendar,
 };

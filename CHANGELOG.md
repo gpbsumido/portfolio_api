@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.8
+
+- added `stopWatchByCalId(userId, calId)` to `utils/googleCalendar.js`: looks up the channel info from the `calendars` row via `getCalendarByGoogleCalId`, POSTs to the Google channels/stop endpoint, swallows all errors; exported alongside the existing `stopWatch`
+- updated `utils/renewWatchChannels.js` to query `calendars` instead of `google_auth`: selects `two_way` calendars with a `google_cal_id` and a `channel_expiry` within 24 hours; calls `stopWatchByCalId` then `registerWatch` per calendar; imports `stopWatchByCalId` instead of `stopWatch`
+- wired up the real `stopWatchByCalId` in `routes/calendar.js`: removed the local stub, imported from `utils/googleCalendar`, fixed the call to pass `calendar.googleCalId` (the Google Calendar ID) instead of the calendar UUID
+
 ## 2026-03-12 - version 1.3.7
 
 - updated `registerWatch` in `utils/googleCalendar.js` to set the channel token as `userId:googleCalId` instead of just `userId`; after registering, looks up the corresponding `calendars` row via `getCalendarByGoogleCalId` and stores channel info and bootstrap sync token there; falls back to `google_auth` when no matching calendar row exists (legacy push channels where `googleCalId` is "primary")

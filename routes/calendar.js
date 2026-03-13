@@ -5,6 +5,7 @@ const {
   createGoogleEvent,
   updateGoogleEvent,
   deleteGoogleEvent,
+  stopWatchByCalId,
 } = require("../utils/googleCalendar");
 
 const router = express.Router();
@@ -181,18 +182,6 @@ router.delete("/events/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * Stub -- stopWatchByCalId will be wired up in Prompt 9 when the cron/watch
- * renewal is refactored to track channels per calendar rather than per user.
- * For now, logging the intent is enough so the delete route can call it safely.
- *
- * @param {string} _userId
- * @param {string} _calId
- */
-async function stopWatchByCalId(_userId, _calId) {
-  console.log(`[calendar] stopWatchByCalId stub called for calId=${_calId} -- will implement in Prompt 9`);
-}
-
-/**
  * GET /api/calendar/calendars
  * Returns all calendars for the authenticated user.
  */
@@ -283,7 +272,7 @@ router.delete("/calendars/:id", async (req, res) => {
     // for an ID we no longer have a record for. non-fatal if it fails.
     if (calendar.googleCalId) {
       try {
-        await stopWatchByCalId(userSub, id);
+        await stopWatchByCalId(userSub, calendar.googleCalId);
       } catch (watchErr) {
         console.error("DELETE /calendar/calendars/:id -- stopWatchByCalId failed:", watchErr.message);
       }
