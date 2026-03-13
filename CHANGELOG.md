@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.11
+
+Multi-calendar + dedicated Google Calendar two-way sync release. Full breakdown across 1.3.0–1.3.10 below. Summary:
+
+- new `calendars` table with `sync_mode` (`none | push | two_way`), `google_cal_id`, and per-channel columns; `calendar_id` FK on `calendar_events` with cascade delete; migration at `scripts/calendar/migrate_calendars.js` backfills a "Personal" calendar per user and populates `calendar_id` on existing events
+- full calendar CRUD API (`GET`/`POST`/`PUT`/`DELETE /api/calendar/calendars`) with `POST /:id/connect-google` and `DELETE /:id/google` for linking and unlinking Google Calendars
+- per-calendar Google sync routing: event mutations look up the calendar's `syncMode` and target `primary` for push, the calendar's `google_cal_id` for two_way, or skip Google entirely for none
+- `createDedicatedCalendar`, `stopWatchByCalId`, per-calendar `registerWatch` with `userId:calId` channel tokens, and a webhook handler that routes notifications to the right calendar row by splitting the token on the colon
+- `renewWatchChannels` now queries `calendars` for `two_way` rows instead of `google_auth`
+- OAuth scope updated from `calendar.events` to `calendar` to allow creating and managing calendars
+
 ## 2026-03-12 - version 1.3.10
 
 - added `DELETE /api/calendar/calendars/:id/google` to `routes/calendar.js`: stops the Google push channel via `stopWatchByCalId` (called before the update so the google_cal_id is still available for lookup), then sets `google_cal_id=null`, `google_cal_name=null`, `sync_mode='push'`; returns the updated calendar; the Google Calendar itself is not deleted
