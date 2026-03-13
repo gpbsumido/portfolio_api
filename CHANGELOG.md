@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.3
+
+- updated `toCalendarEvent` in `utils/db.js` to include `calendarId` in the returned shape so route handlers and the frontend can read which calendar an event belongs to without a second query
+- updated `createCalendarEvent` to accept `calendarId` in the fields object and include it in the INSERT; if no `calendarId` is provided it falls back to the user's oldest calendar (the "Personal" calendar from migration) so existing callers do not break
+- updated `getCalendarEvents` to accept an optional `calendarId` filter that adds `AND ce.calendar_id = $N` to the WHERE clause
+- updated `GET /api/calendar/events` to read `calendarId` from `req.query` and pass it through; updated `POST /api/calendar/events` to read `calendarId` from `req.body` and pass it through
+
 ## 2026-03-12 - version 1.3.2
 
 - added calendar CRUD routes to `routes/calendar.js` under `/api/calendar/calendars`: `GET` (list), `POST` (create, validates name), `PUT /:id` (partial update, strips undefined fields before passing to db helper), `DELETE /:id` (204, cascade via FK); delete calls `stopWatchByCalId` stub before removing the row and logs any failure without aborting the delete; the Google Calendar itself is intentionally not deleted on disconnect

@@ -490,12 +490,13 @@ function toCalendarEvent(row) {
     endDate: row.end_date instanceof Date ? row.end_date.toISOString() : row.end_date,
     allDay: row.all_day,
     color: row.color,
+    calendarId: row.calendar_id ?? undefined,
     // included so route handlers can read it for Google push sync without a second query
     googleEventId: row.google_event_id ?? undefined,
   };
 }
 
-async function getCalendarEvents(userSub, start, end, cardId, cardName) {
+async function getCalendarEvents(userSub, start, end, cardId, cardName, calendarId) {
   const values = [userSub];
   const needsCardJoin = cardId || cardName;
 
@@ -522,6 +523,10 @@ async function getCalendarEvents(userSub, start, end, cardId, cardName) {
     values.push(`%${cardName}%`);
     query += ` AND ec.card_name ILIKE $${values.length}`;
   }
+  if (calendarId) {
+    values.push(calendarId);
+    query += ` AND ce.calendar_id = $${values.length}`;
+  }
 
   query += " ORDER BY ce.start_date ASC";
 
@@ -547,21 +552,36 @@ async function getCalendarEventById(id, userSub) {
 /**
  * Creates a new calendar event for the authenticated user.
  *
- * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string }} fields
+ * If calendarId is not provided we fall back to the user's oldest calendar
+ * (the "Personal" calendar created during migration) so existing callers
+ * don't need to be updated all at once.
+ *
+ * @param {{ title: string, description?: string, startDate: string, endDate: string, allDay?: boolean, color?: string, calendarId?: string }} fields
  * @param {string} userSub
  * @returns {Promise<Object>} the newly created row
  */
 async function createCalendarEvent(
-  { title, description, startDate, endDate, allDay = false, color = "#3b82f6" },
+  { title, description, startDate, endDate, allDay = false, color = "#3b82f6", calendarId },
   userSub,
 ) {
   const id = uuidv4();
 
+  // resolve the target calendar -- use the provided id or fall back to the
+  // user's first calendar so we always have a non-null calendar_id
+  let resolvedCalendarId = calendarId;
+  if (!resolvedCalendarId) {
+    const { rows: calRows } = await pool.query(
+      "SELECT id FROM calendars WHERE user_sub = $1 ORDER BY created_at ASC LIMIT 1",
+      [userSub],
+    );
+    resolvedCalendarId = calRows[0]?.id ?? null;
+  }
+
   const { rows } = await pool.query(
-    `INSERT INTO calendar_events (id, title, description, start_date, end_date, all_day, color, user_sub)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO calendar_events (id, title, description, start_date, end_date, all_day, color, calendar_id, user_sub)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [id, title, description || null, startDate, endDate, allDay, color, userSub],
+    [id, title, description || null, startDate, endDate, allDay, color, resolvedCalendarId, userSub],
   );
 
   return toCalendarEvent(rows[0]);

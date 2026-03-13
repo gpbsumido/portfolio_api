@@ -26,14 +26,14 @@ router.use((err, req, res, next) => {
   next(err);
 });
 
-// GET /api/calendar/events?start=<ISO>&end=<ISO>&cardId=<id>&cardName=<name>
-// returns events for the authenticated user with optional date range and card filters
+// GET /api/calendar/events?start=<ISO>&end=<ISO>&cardId=<id>&cardName=<name>&calendarId=<uuid>
+// returns events for the authenticated user with optional date range, card, and calendar filters
 router.get("/events", async (req, res) => {
   const userSub = req.auth.payload.sub;
-  const { start, end, cardId, cardName } = req.query;
+  const { start, end, cardId, cardName, calendarId } = req.query;
 
   try {
-    const events = await db.getCalendarEvents(userSub, start, end, cardId, cardName);
+    const events = await db.getCalendarEvents(userSub, start, end, cardId, cardName, calendarId);
     res.json({ events });
   } catch (err) {
     console.error("GET /calendar/events failed:", err.message);
@@ -62,10 +62,10 @@ router.get("/events/:id", async (req, res) => {
 });
 
 // POST /api/calendar/events
-// body: { title, description?, startDate, endDate, allDay?, color? }
+// body: { title, description?, startDate, endDate, allDay?, color?, calendarId? }
 router.post("/events", async (req, res) => {
   const userSub = req.auth.payload.sub;
-  const { title, description, startDate, endDate, allDay, color } = req.body;
+  const { title, description, startDate, endDate, allDay, color, calendarId } = req.body;
 
   if (!title || !startDate || !endDate) {
     return res
@@ -75,7 +75,7 @@ router.post("/events", async (req, res) => {
 
   try {
     const event = await db.createCalendarEvent(
-      { title, description, startDate, endDate, allDay, color },
+      { title, description, startDate, endDate, allDay, color, calendarId },
       userSub,
     );
 
