@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-12 - version 1.3.9
+
+- added `POST /api/calendar/calendars/:id/connect-google` to `routes/calendar.js`: verifies calendar ownership, returns 200 as-is if already connected (idempotent), calls `createDedicatedCalendar` to create the Google Calendar, saves `googleCalId` and `googleCalName` to the calendar row, calls `registerWatch` to start the push channel (non-fatal on failure), returns the updated calendar
+
 ## 2026-03-12 - version 1.3.8
 
 - added `stopWatchByCalId(userId, calId)` to `utils/googleCalendar.js`: looks up the channel info from the `calendars` row via `getCalendarByGoogleCalId`, POSTs to the Google channels/stop endpoint, swallows all errors; exported alongside the existing `stopWatch`

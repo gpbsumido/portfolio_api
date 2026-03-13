@@ -6,7 +6,10 @@ const {
   updateGoogleEvent,
   deleteGoogleEvent,
   stopWatchByCalId,
+  createDedicatedCalendar,
+  registerWatch,
 } = require("../utils/googleCalendar");
+const { getValidAccessToken } = require("../utils/googleToken");
 
 const router = express.Router();
 
@@ -283,6 +286,50 @@ router.delete("/calendars/:id", async (req, res) => {
   } catch (err) {
     console.error("DELETE /calendar/calendars/:id failed:", err.message);
     res.status(500).json({ error: "Failed to delete calendar" });
+  }
+});
+
+/**
+ * POST /api/calendar/calendars/:id/connect-google
+ * Creates a dedicated Google Calendar for the calendar row and registers a
+ * push notification channel. Idempotent: if googleCalId is already set, returns
+ * the existing calendar without creating a duplicate.
+ */
+router.post("/calendars/:id/connect-google", async (req, res) => {
+  const userSub = req.auth.payload.sub;
+  const { id } = req.params;
+
+  try {
+    const calendar = await db.getCalendarById(id, userSub);
+
+    if (!calendar) {
+      return res.status(404).json({ error: "Calendar not found" });
+    }
+
+    // already connected -- return as-is so the frontend can call this safely
+    if (calendar.googleCalId) {
+      return res.json({ calendar });
+    }
+
+    const token = await getValidAccessToken(userSub);
+    const { calId, calName } = await createDedicatedCalendar(token, calendar.name);
+
+    const updated = await db.updateCalendar(id, { googleCalId: calId, googleCalName: calName }, userSub);
+
+    // register the watch channel after saving the calId so registerWatch can
+    // look up the calendar row by google_cal_id to store channel info
+    try {
+      await registerWatch(userSub, calId);
+    } catch (watchErr) {
+      console.error("POST /calendar/calendars/:id/connect-google -- registerWatch failed:", watchErr.message);
+      // non-fatal: the calendar is linked to Google, sync just won't push until
+      // the cron renewal next runs or the user triggers a reconnect
+    }
+
+    res.json({ calendar: updated });
+  } catch (err) {
+    console.error("POST /calendar/calendars/:id/connect-google failed:", err.message);
+    res.status(500).json({ error: "Failed to connect Google Calendar" });
   }
 });
 
