@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-16 - version 1.4.9
+
+- `routes/google.js`: updated Google Calendar OAuth callback redirect URLs from `{origin}/protected/settings?gcal=*` to `{origin}/settings?gcal=*` to match the frontend route restructure that eliminated the `/protected` prefix
+
 ## 2026-03-13 - version 1.4.8
 
 - `middleware/upsertUser.js`: reads `X-User-Email` header as fallback when `email` is absent from the access token JWT — fixes sharing not working when Auth0 doesn't include email in the access token by default; primary fix is an Auth0 post-login Action that sets `email` as a custom claim, header is belt-and-suspenders
