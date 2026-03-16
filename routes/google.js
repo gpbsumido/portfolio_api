@@ -160,7 +160,7 @@ router.get("/auth/callback", async (req, res) => {
   // user clicked "deny" on the Google consent screen
   if (error) {
     console.warn("[google] OAuth denied by user:", error);
-    return res.redirect(`${origin}/protected/settings?gcal=denied`);
+    return res.redirect(`${origin}/settings?gcal=denied`);
   }
 
   if (!parsed) {
@@ -187,7 +187,7 @@ router.get("/auth/callback", async (req, res) => {
     if (!tokenRes.ok) {
       const body = await tokenRes.text();
       console.error("[google] Token exchange failed:", body);
-      return res.redirect(`${origin}/protected/settings?gcal=error`);
+      return res.redirect(`${origin}/settings?gcal=error`);
     }
 
     const { access_token, refresh_token, expires_in } = await tokenRes.json();
@@ -208,10 +208,10 @@ router.get("/auth/callback", async (req, res) => {
       console.error("[google] registerWatch failed after connect:", watchErr.message);
     }
 
-    res.redirect(`${origin}/protected/settings?gcal=connected`);
+    res.redirect(`${origin}/settings?gcal=connected`);
   } catch (err) {
     console.error("[google] Callback error:", err.message);
-    res.redirect(`${origin}/protected/settings?gcal=error`);
+    res.redirect(`${origin}/settings?gcal=error`);
   }
 });
 
