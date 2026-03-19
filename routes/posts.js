@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const sharp = require('sharp');
 const { fileTypeFromBuffer } = require('file-type');
-const { S3Client } = require('@aws-sdk/client-s3');
+const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
@@ -295,6 +295,13 @@ router.delete('/:id', checkJwt, async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Grab S3 keys before the delete so we can clean up the files.
+    // Full keys are stored; thumbnail keys share the same path but end in _thumb.webp.
+    const { rows: mediaRows } = await pool.query(
+      `SELECT s3_key FROM post_media WHERE post_id = $1`,
+      [id],
+    );
+
     const { rowCount } = await pool.query(
       `DELETE FROM posts WHERE id = $1 AND user_sub = $2`,
       [id, sub],
@@ -302,6 +309,19 @@ router.delete('/:id', checkJwt, async (req, res) => {
     if (rowCount === 0) {
       return res.status(404).json({ error: 'Post not found' });
     }
+
+    // Best-effort S3 cleanup — don't let a failed delete block the 204.
+    // The DB row is the source of truth; S3 orphans are a storage leak, not a data leak.
+    if (mediaRows.length > 0) {
+      const bucket = process.env.AWS_S3_BUCKET_NAME;
+      await Promise.allSettled(
+        mediaRows.flatMap(({ s3_key }) => [
+          s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3_key })),
+          s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3_key.replace('_full.webp', '_thumb.webp') })),
+        ]),
+      );
+    }
+
     res.status(204).end();
   } catch (err) {
     console.error('[posts] DELETE /:id error:', err.message);

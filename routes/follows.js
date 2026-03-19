@@ -100,7 +100,7 @@ router.put('/:id/reject', async (req, res) => {
 
 // ── DELETE /api/follows/:username ─────────────────────────────────────────────
 // Unfollow a user (delete the row where I am the follower)
-router.delete('/:username', async (req, res) => {
+router.delete('/:username', validateParams(usernameParam), async (req, res) => {
   const followerSub = req.auth.payload.sub;
   const { username } = req.params;
 
