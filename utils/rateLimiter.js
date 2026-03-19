@@ -1,4 +1,5 @@
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const pThrottle = require("p-throttle");
 
 // IP-based limiter for inbound requests to our NBA proxy routes
@@ -27,7 +28,7 @@ function makeUserRateLimiter(max, windowMs) {
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.auth?.payload?.sub ?? req.ip ?? "unknown",
+    keyGenerator: (req) => req.auth?.payload?.sub ?? ipKeyGenerator(req),
   });
 }
 
