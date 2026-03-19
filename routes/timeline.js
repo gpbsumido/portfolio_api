@@ -2,6 +2,9 @@ const express = require('express');
 const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
+const { makeUserRateLimiter } = require('../utils/rateLimiter');
+
+const timelineLimiter = makeUserRateLimiter(120, 60 * 1000); // 120/min
 
 const router = express.Router();
 
@@ -88,7 +91,7 @@ const TIMELINE_QUERY = `
 `;
 
 // ── GET /api/timeline ─────────────────────────────────────────────────────────
-router.get('/', checkJwt, upsertUser, async (req, res) => {
+router.get('/', checkJwt, timelineLimiter, upsertUser, async (req, res) => {
   const sub = req.auth.payload.sub;
   const { cursor } = req.query;
 

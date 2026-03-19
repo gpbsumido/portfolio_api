@@ -7,6 +7,9 @@ const { Upload } = require('@aws-sdk/lib-storage');
 const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
+const { makeUserRateLimiter } = require('../utils/rateLimiter');
+
+const postsLimiter = makeUserRateLimiter(20, 60 * 60 * 1000); // 20/hr
 
 const router = express.Router();
 
@@ -87,7 +90,7 @@ async function processImage(buffer) {
 }
 
 // ── POST /api/posts ───────────────────────────────────────────────────────────
-router.post('/', checkJwt, upsertUser, async (req, res) => {
+router.post('/', checkJwt, postsLimiter, upsertUser, async (req, res) => {
   // Run multer first so req.body and req.files are populated for both types
   try {
     await runMulter(req, res);

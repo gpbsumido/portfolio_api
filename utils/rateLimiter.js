@@ -14,4 +14,21 @@ const nbaIpLimiter = rateLimit({
 const throttle = pThrottle({ limit: 1, interval: 1000 });
 const throttledFetch = throttle((url, options) => fetch(url, options));
 
-module.exports = { nbaIpLimiter, throttledFetch };
+/**
+ * Creates a rate limiter keyed by the authenticated user's sub claim,
+ * falling back to the request IP when no auth is present.
+ *
+ * @param {number} max - maximum requests allowed in the window
+ * @param {number} windowMs - time window in milliseconds
+ */
+function makeUserRateLimiter(max, windowMs) {
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.auth?.payload?.sub ?? req.ip ?? "unknown",
+  });
+}
+
+module.exports = { nbaIpLimiter, throttledFetch, makeUserRateLimiter };
