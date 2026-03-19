@@ -32,11 +32,10 @@ async function s3Upload(buffer, key, contentType) {
       Key: key,
       Body: buffer,
       ContentType: contentType,
-      ACL: 'public-read',
     },
   });
-  const result = await up.done();
-  return result.Location;
+  await up.done();
+  return `${process.env.CDN_BASE_URL}/${key}`;
 }
 
 // ── Multer ────────────────────────────────────────────────────────────────────
