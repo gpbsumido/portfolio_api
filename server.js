@@ -25,6 +25,7 @@ const googleWebhookRoutes = require("./routes/googleWebhook");
 const profilesRoutes = require("./routes/profiles");
 const postsRoutes = require("./routes/posts");
 const followsRoutes = require("./routes/follows");
+const timelineRoutes = require("./routes/timeline");
 // watch channel renewal runs as a Railway cron job (utils/renewWatchChannels.js)
 // not as a setInterval here, since deploys restart the process and would reset the timer
 
@@ -79,6 +80,7 @@ app.use("/api/google", googleWebhookRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use("/api/posts", postsRoutes);
 app.use("/api/follows", followsRoutes);
+app.use("/api/timeline", timelineRoutes);
 app.use("/api", dbRoutes);
 
 // Error handling middleware
