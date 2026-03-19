@@ -88,11 +88,10 @@ router.post("/", checkJwt, upload.single("file"), async (req, res) => {
                 Key: key,
                 Body: optimizedBuffer,
                 ContentType: contentType,
-                ACL: "public-read",
             },
         });
-        const s3Response = await upload.done();
-        const imageUrl = s3Response.Location;
+        await upload.done();
+        const imageUrl = `${process.env.CDN_BASE_URL}/${key}`;
 
         const savedData = await addGalleryItem({
             text,
