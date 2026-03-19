@@ -8,6 +8,8 @@ const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
 const { makeUserRateLimiter } = require('../utils/rateLimiter');
+const { validateBody } = require('../middleware/validateBody');
+const { createPost } = require('../schemas');
 
 const postsLimiter = makeUserRateLimiter(20, 60 * 60 * 1000); // 20/hr
 
@@ -104,26 +106,29 @@ router.post('/', checkJwt, postsLimiter, upsertUser, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
+  // ── Zod validation (after multer so req.body is populated) ──────────────────
+  const parseResult = createPost.safeParse(req.body);
+  if (!parseResult.success) {
+    const details = parseResult.error.errors.map((e) => ({
+      field: e.path.join('.'),
+      message: e.message,
+    }));
+    return res.status(400).json({ error: 'Validation failed', details });
+  }
+  const validated = parseResult.data;
+
   const sub = req.auth.payload.sub;
-  const { type, caption } = req.body;
+  const { type, caption } = validated;
 
   // ── text post ──────────────────────────────────────────────────────────────
   if (type === 'text') {
-    const { content } = req.body;
-    if (!content || typeof content !== 'string') {
-      return res.status(400).json({ error: 'content is required' });
-    }
-    const trimmed = content.trim();
-    if (trimmed.length < 1 || trimmed.length > 500) {
-      return res.status(400).json({ error: 'content must be 1–500 characters' });
-    }
-
+    const { content } = validated;
     try {
       const { rows } = await pool.query(
         `INSERT INTO posts (user_sub, type, content)
          VALUES ($1, $2, $3)
          RETURNING id, user_sub, type, caption, content, created_at, updated_at`,
-        [sub, 'text', trimmed],
+        [sub, 'text', content],
       );
       return res.status(201).json({ ...rows[0], media: [] });
     } catch (err) {
@@ -137,6 +142,9 @@ router.post('/', checkJwt, postsLimiter, upsertUser, async (req, res) => {
     const files = req.files || [];
     if (files.length === 0) {
       return res.status(400).json({ error: 'At least one file is required for a photo post' });
+    }
+    if (files.length > 10) {
+      return res.status(400).json({ error: 'Maximum 10 files allowed' });
     }
 
     const db = await pool.connect();

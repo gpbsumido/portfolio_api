@@ -2,6 +2,8 @@ const express = require('express');
 const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
+const { validateBody } = require('../middleware/validateBody');
+const { updateProfile, setupProfile } = require('../schemas');
 
 const router = express.Router();
 
@@ -26,13 +28,9 @@ router.get('/me', checkJwt, upsertUser, async (req, res) => {
 });
 
 // PUT /api/profiles/me — update own profile fields
-router.put('/me', checkJwt, upsertUser, async (req, res) => {
+router.put('/me', checkJwt, upsertUser, validateBody(updateProfile), async (req, res) => {
   const sub = req.auth.payload.sub;
   const { display_name, bio, avatar_url } = req.body;
-
-  if (bio !== undefined && bio !== null && bio.length > 160) {
-    return res.status(400).json({ error: 'bio must be 160 characters or fewer' });
-  }
 
   try {
     const { rows } = await pool.query(
@@ -53,19 +51,9 @@ router.put('/me', checkJwt, upsertUser, async (req, res) => {
 });
 
 // POST /api/profiles/setup — create initial profile
-router.post('/setup', checkJwt, upsertUser, async (req, res) => {
+router.post('/setup', checkJwt, upsertUser, validateBody(setupProfile), async (req, res) => {
   const sub = req.auth.payload.sub;
   const { username, display_name, bio, avatar_url } = req.body;
-
-  if (!username) return res.status(400).json({ error: 'username is required' });
-  if (!USERNAME_RE.test(username)) {
-    return res.status(400).json({
-      error: 'username must be 3–30 characters and contain only lowercase letters, numbers, and underscores',
-    });
-  }
-  if (bio !== undefined && bio !== null && bio.length > 160) {
-    return res.status(400).json({ error: 'bio must be 160 characters or fewer' });
-  }
 
   try {
     const { rows } = await pool.query(

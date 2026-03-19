@@ -3,6 +3,8 @@ const { pool } = require('../config/database');
 const { checkJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
 const { makeUserRateLimiter } = require('../utils/rateLimiter');
+const { validateParams } = require('../middleware/validateBody');
+const { usernameParam } = require('../schemas');
 
 const followsLimiter = makeUserRateLimiter(50, 60 * 60 * 1000); // 50/hr
 
@@ -13,7 +15,7 @@ router.use(checkJwt, upsertUser);
 
 // ── POST /api/follows/:username ───────────────────────────────────────────────
 // Send a follow request (inserts with status 'pending')
-router.post('/:username', followsLimiter, async (req, res) => {
+router.post('/:username', followsLimiter, validateParams(usernameParam), async (req, res) => {
   const followerSub = req.auth.payload.sub;
   const { username } = req.params;
 
