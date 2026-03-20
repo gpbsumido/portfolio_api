@@ -55,6 +55,7 @@ const TIMELINE_QUERY = `
     p.content,
     p.created_at,
     p.updated_at,
+    p.user_sub AS sub,
     up.username,
     up.display_name,
     up.avatar_url,
@@ -113,8 +114,12 @@ router.get('/', checkJwt, timelineLimiter, upsertUser, async (req, res) => {
     ]);
 
     const hasMore = rows.length > LIMIT;
-    const posts = hasMore ? rows.slice(0, LIMIT) : rows;
-    const nextCursor = hasMore ? posts[posts.length - 1].created_at.toISOString() : null;
+    const rawPosts = hasMore ? rows.slice(0, LIMIT) : rows;
+    const nextCursor = hasMore ? rawPosts[rawPosts.length - 1].created_at.toISOString() : null;
+    const posts = rawPosts.map(({ sub, username, display_name, avatar_url, ...post }) => ({
+      ...post,
+      author: { sub, username, display_name, avatar_url },
+    }));
 
     return res.json({ posts, nextCursor });
   } catch (err) {
