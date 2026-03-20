@@ -228,21 +228,43 @@ router.get('/user/:username', async (req, res) => {
          p.content,
          p.created_at,
          p.updated_at,
+         p.user_sub AS sub,
          up.username,
          up.display_name,
-         up.avatar_url
+         up.avatar_url,
+         COALESCE(
+           JSON_AGG(
+             JSON_BUILD_OBJECT(
+               'id',            pm.id,
+               's3_key',        pm.s3_key,
+               'url',           pm.url,
+               'width',         pm.width,
+               'height',        pm.height,
+               'position',      pm.position,
+               'blur_data_url', pm.blur_data_url,
+               'created_at',    pm.created_at
+             ) ORDER BY pm.position ASC
+           ) FILTER (WHERE pm.id IS NOT NULL),
+           '[]'
+         ) AS media
        FROM posts p
        JOIN user_profiles up ON up.user_sub = p.user_sub
+       LEFT JOIN post_media pm ON pm.post_id = p.id
        WHERE up.username = $1
          AND ($2::timestamptz IS NULL OR p.created_at < $2)
+       GROUP BY p.id, up.username, up.display_name, up.avatar_url
        ORDER BY p.created_at DESC
        LIMIT $3`,
       [username, cursorDate ? cursorDate.toISOString() : null, LIMIT + 1],
     );
 
     const hasMore = rows.length > LIMIT;
-    const posts = hasMore ? rows.slice(0, LIMIT) : rows;
-    const nextCursor = hasMore ? posts[posts.length - 1].created_at.toISOString() : null;
+    const rawPosts = hasMore ? rows.slice(0, LIMIT) : rows;
+    const nextCursor = hasMore ? rawPosts[rawPosts.length - 1].created_at.toISOString() : null;
+    const posts = rawPosts.map(({ sub, username: u, display_name, avatar_url, ...post }) => ({
+      ...post,
+      author: { sub, username: u, display_name, avatar_url },
+    }));
 
     res.json({ posts, nextCursor });
   } catch (err) {
@@ -264,6 +286,7 @@ router.get('/:id', async (req, res) => {
          p.content,
          p.created_at,
          p.updated_at,
+         p.user_sub AS sub,
          up.username,
          up.display_name,
          up.avatar_url
@@ -282,7 +305,8 @@ router.get('/:id', async (req, res) => {
       [id],
     );
 
-    res.json({ ...postRows[0], media: mediaRows });
+    const { sub, username, display_name, avatar_url, ...postData } = postRows[0];
+    res.json({ ...postData, author: { sub, username, display_name, avatar_url }, media: mediaRows });
   } catch (err) {
     console.error('[posts] GET /:id error:', err.message);
     res.status(500).json({ error: 'Failed to fetch post' });
