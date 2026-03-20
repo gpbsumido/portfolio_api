@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-03-16 - version 1.4.9
+## 2026-03-16 - version 1.5.1
 
 - actually count follows,following, and posts for ketsup :username endpoint
 
