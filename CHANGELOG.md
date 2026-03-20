@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-16 - version 1.5.1
+
+- actually count follows,following, and posts for ketsup :username endpoint
+
 ## 2026-03-16 - version 1.4.9
 
 - `routes/google.js`: updated Google Calendar OAuth callback redirect URLs from `{origin}/protected/settings?gcal=*` to `{origin}/settings?gcal=*` to match the frontend route restructure that eliminated the `/protected` prefix
