@@ -188,9 +188,9 @@ router.get('/:username', async (req, res) => {
          p.bio,
          p.avatar_url,
          p.created_at,
-         0::int AS post_count,
-         0::int AS follower_count,
-         0::int AS following_count
+         (SELECT COUNT(*) FROM posts WHERE user_sub = p.user_sub)::int AS post_count,
+         (SELECT COUNT(*) FROM follows WHERE following_sub = p.user_sub AND status = 'accepted')::int AS follower_count,
+         (SELECT COUNT(*) FROM follows WHERE follower_sub = p.user_sub AND status = 'accepted')::int AS following_count
        FROM user_profiles p
        WHERE p.username = $1`,
       [username],
