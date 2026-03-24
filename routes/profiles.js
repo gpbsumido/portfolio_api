@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const sharp = require("sharp");
-const { fileTypeFromBuffer } = require("file-type");
+const { fromBuffer: fileTypeFromBuffer } = require("file-type");
 const { S3Client } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { pool } = require("../config/database");

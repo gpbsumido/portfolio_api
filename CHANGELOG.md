@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-24 - version 1.5.4
+
+- fix buffer causing server crash
+
 ## 2026-03-24 - version 1.5.3
 
 - update for public profiles and discover page
