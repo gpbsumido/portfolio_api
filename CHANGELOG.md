@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-24 - version 1.5.3
+
+- update for public profiles and discover page
+
 ## 2026-03-16 - version 1.5.2
 
 - add migration script for public accounts
