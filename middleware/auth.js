@@ -30,7 +30,16 @@ const checkPermissions = (requiredPermissions) => {
   };
 };
 
+// Optional variant — populates req.auth if a valid token is present, but never blocks the request
+const optionalCheckJwt = (req, res, next) => {
+  checkJwt(req, res, (err) => {
+    // Ignore auth errors — just continue without req.auth populated
+    next();
+  });
+};
+
 module.exports = {
   checkJwt,
-  checkPermissions
+  checkPermissions,
+  optionalCheckJwt,
 }; 
