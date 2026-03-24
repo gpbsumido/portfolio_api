@@ -5,7 +5,7 @@ const { fromBuffer: fileTypeFromBuffer } = require('file-type');
 const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const { pool } = require('../config/database');
-const { checkJwt } = require('../middleware/auth');
+const { checkJwt, optionalCheckJwt } = require('../middleware/auth');
 const upsertUser = require('../middleware/upsertUser');
 const { makeUserRateLimiter } = require('../utils/rateLimiter');
 const { validateBody } = require('../middleware/validateBody');
@@ -206,10 +206,11 @@ router.post('/', checkJwt, postsLimiter, upsertUser, async (req, res) => {
 });
 
 // ── GET /api/posts/user/:username ─────────────────────────────────────────────
-router.get('/user/:username', async (req, res) => {
+router.get('/user/:username', optionalCheckJwt, async (req, res) => {
   const { username } = req.params;
   const { cursor } = req.query;
   const LIMIT = 20;
+  const viewerSub = req.auth?.payload?.sub ?? null;
 
   let cursorDate = null;
   if (cursor) {
@@ -220,6 +221,32 @@ router.get('/user/:username', async (req, res) => {
   }
 
   try {
+    // Check visibility: private accounts only show posts to accepted followers
+    const { rows: profileRows } = await pool.query(
+      `SELECT user_sub, is_public FROM user_profiles WHERE username = $1`,
+      [username],
+    );
+    if (!profileRows.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { user_sub: targetSub, is_public } = profileRows[0];
+
+    if (!is_public && viewerSub !== targetSub) {
+      if (viewerSub) {
+        const { rowCount } = await pool.query(
+          `SELECT 1 FROM follows
+           WHERE follower_sub = $1 AND following_sub = $2 AND status = 'accepted'`,
+          [viewerSub, targetSub],
+        );
+        if (rowCount === 0) {
+          return res.json({ posts: [], nextCursor: null });
+        }
+      } else {
+        // Unauthenticated viewer cannot see private account posts
+        return res.json({ posts: [], nextCursor: null });
+      }
+    }
+
     const { rows } = await pool.query(
       `SELECT
          p.id,

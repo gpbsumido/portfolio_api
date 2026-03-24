@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-16 - version 1.5.2
+
+- add migration script for public accounts
+- add optionalCheckJwt in middleware (try jwt validation, but allow failire so public routes can have req.auth)
+- add is_public to schema and routes (profile, follow, posts)
+
 ## 2026-03-16 - version 1.5.1
 
 - actually count follows,following, and posts for ketsup :username endpoint
