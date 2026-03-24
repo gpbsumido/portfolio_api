@@ -47,6 +47,9 @@ const updateProfile = z.object({
   avatar_url: z
     .union([z.string().url('avatar_url must be a valid URL'), z.literal('')])
     .optional(),
+  is_public: z
+    .boolean()
+    .optional(),
 });
 
 const setupProfile = z.object({

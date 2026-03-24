@@ -20,25 +20,28 @@ router.post('/:username', followsLimiter, validateParams(usernameParam), async (
   const { username } = req.params;
 
   try {
-    // Look up the target user's sub by username
+    // Look up the target user's sub and visibility setting by username
     const { rows: targetRows } = await pool.query(
-      `SELECT user_sub FROM user_profiles WHERE username = $1`,
+      `SELECT user_sub, is_public FROM user_profiles WHERE username = $1`,
       [username],
     );
     if (!targetRows.length) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const followingSub = targetRows[0].user_sub;
+    const { user_sub: followingSub, is_public } = targetRows[0];
 
     if (followerSub === followingSub) {
       return res.status(400).json({ error: 'Cannot follow yourself' });
     }
 
+    // Public accounts auto-accept; private accounts start as pending
+    const status = is_public ? 'accepted' : 'pending';
+
     const { rows } = await pool.query(
-      `INSERT INTO follows (follower_sub, following_sub)
-       VALUES ($1, $2)
+      `INSERT INTO follows (follower_sub, following_sub, status)
+       VALUES ($1, $2, $3)
        RETURNING id, follower_sub, following_sub, status, created_at, updated_at`,
-      [followerSub, followingSub],
+      [followerSub, followingSub, status],
     );
     return res.status(201).json(rows[0]);
   } catch (err) {
