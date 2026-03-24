@@ -1,14 +1,14 @@
-const express = require('express');
-const multer = require('multer');
-const sharp = require('sharp');
-const { fileTypeFromBuffer } = require('file-type');
-const { S3Client } = require('@aws-sdk/client-s3');
-const { Upload } = require('@aws-sdk/lib-storage');
-const { pool } = require('../config/database');
-const { checkJwt, optionalCheckJwt } = require('../middleware/auth');
-const upsertUser = require('../middleware/upsertUser');
-const { validateBody } = require('../middleware/validateBody');
-const { updateProfile, setupProfile } = require('../schemas');
+const express = require("express");
+const multer = require("multer");
+const sharp = require("sharp");
+const { fileTypeFromBuffer } = require("file-type");
+const { S3Client } = require("@aws-sdk/client-s3");
+const { Upload } = require("@aws-sdk/lib-storage");
+const { pool } = require("../config/database");
+const { checkJwt, optionalCheckJwt } = require("../middleware/auth");
+const upsertUser = require("../middleware/upsertUser");
+const { validateBody } = require("../middleware/validateBody");
+const { updateProfile, setupProfile } = require("../schemas");
 
 const router = express.Router();
 
@@ -35,77 +35,93 @@ async function s3Upload(buffer, key, contentType) {
   return `${process.env.CDN_BASE_URL}/${key}`;
 }
 
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
-}).single('avatar');
+}).single("avatar");
 
 const USERNAME_RE = /^[a-z0-9_]{3,30}$/;
 
 // POST /api/profiles/me/avatar — upload and replace profile avatar
-router.post('/me/avatar', checkJwt, upsertUser, (req, res, next) => {
-  avatarUpload(req, res, (err) => {
-    if (err?.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'Avatar must be 10 MB or smaller' });
+router.post(
+  "/me/avatar",
+  checkJwt,
+  upsertUser,
+  (req, res, next) => {
+    avatarUpload(req, res, (err) => {
+      if (err?.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ error: "Avatar must be 10 MB or smaller" });
+      }
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+    const sub = req.auth.payload.sub;
+
+    const detected = await fileTypeFromBuffer(req.file.buffer).catch(
+      () => null,
+    );
+    if (!detected || !ALLOWED_MIME.has(detected.mime)) {
+      return res.status(400).json({ error: "Unsupported image type" });
     }
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  });
-}, async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-  const sub = req.auth.payload.sub;
+    let avatarBuffer;
+    try {
+      // 200px square, auto-orient, strip EXIF, WebP
+      avatarBuffer = await sharp(req.file.buffer)
+        .rotate()
+        .resize({ width: 200, height: 200, fit: "cover" })
+        .webp({ quality: 85 })
+        .toBuffer();
+    } catch (err) {
+      console.error("[profiles] avatar sharp error:", err.message);
+      return res.status(400).json({ error: "Failed to process image" });
+    }
 
-  const detected = await fileTypeFromBuffer(req.file.buffer).catch(() => null);
-  if (!detected || !ALLOWED_MIME.has(detected.mime)) {
-    return res.status(400).json({ error: 'Unsupported image type' });
-  }
+    // Use the sub as the key so re-uploading replaces the old file
+    const safeKey = sub.replace(/[^a-zA-Z0-9_\-|]/g, "_");
+    const key = `avatars/${safeKey}/avatar.webp`;
 
-  let avatarBuffer;
-  try {
-    // 200px square, auto-orient, strip EXIF, WebP
-    avatarBuffer = await sharp(req.file.buffer)
-      .rotate()
-      .resize({ width: 200, height: 200, fit: 'cover' })
-      .webp({ quality: 85 })
-      .toBuffer();
-  } catch (err) {
-    console.error('[profiles] avatar sharp error:', err.message);
-    return res.status(400).json({ error: 'Failed to process image' });
-  }
+    let avatarUrl;
+    try {
+      avatarUrl = await s3Upload(avatarBuffer, key, "image/webp");
+    } catch (err) {
+      console.error("[profiles] avatar S3 upload error:", err.message);
+      return res.status(500).json({ error: "Failed to upload avatar" });
+    }
 
-  // Use the sub as the key so re-uploading replaces the old file
-  const safeKey = sub.replace(/[^a-zA-Z0-9_\-|]/g, '_');
-  const key = `avatars/${safeKey}/avatar.webp`;
-
-  let avatarUrl;
-  try {
-    avatarUrl = await s3Upload(avatarBuffer, key, 'image/webp');
-  } catch (err) {
-    console.error('[profiles] avatar S3 upload error:', err.message);
-    return res.status(500).json({ error: 'Failed to upload avatar' });
-  }
-
-  try {
-    const { rows } = await pool.query(
-      `UPDATE user_profiles
+    try {
+      const { rows } = await pool.query(
+        `UPDATE user_profiles
        SET avatar_url = $2
        WHERE user_sub = $1
        RETURNING user_sub, username, display_name, bio, avatar_url`,
-      [sub, avatarUrl],
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Profile not set up yet' });
-    res.json(rows[0]);
-  } catch (err) {
-    console.error('[profiles] avatar DB update error:', err.message);
-    res.status(500).json({ error: 'Failed to save avatar URL' });
-  }
-});
+        [sub, avatarUrl],
+      );
+      if (!rows.length)
+        return res.status(404).json({ error: "Profile not set up yet" });
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[profiles] avatar DB update error:", err.message);
+      res.status(500).json({ error: "Failed to save avatar URL" });
+    }
+  },
+);
 
 // GET /api/profiles/me — own profile (must come before /:username)
-router.get('/me', checkJwt, upsertUser, async (req, res) => {
+router.get("/me", checkJwt, upsertUser, async (req, res) => {
   const sub = req.auth.payload.sub;
   try {
     const { rows } = await pool.query(
@@ -114,70 +130,132 @@ router.get('/me', checkJwt, upsertUser, async (req, res) => {
        WHERE user_sub = $1`,
       [sub],
     );
-    if (!rows.length) return res.status(404).json({ error: 'Profile not set up yet' });
+    if (!rows.length)
+      return res.status(404).json({ error: "Profile not set up yet" });
     res.json(rows[0]);
   } catch (err) {
-    console.error('[profiles] GET /me error:', err.message);
-    res.status(500).json({ error: 'Failed to fetch profile' });
+    console.error("[profiles] GET /me error:", err.message);
+    res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
 
 // PUT /api/profiles/me — update own profile fields
-router.put('/me', checkJwt, upsertUser, validateBody(updateProfile), async (req, res) => {
-  const sub = req.auth.payload.sub;
-  const { display_name, bio, avatar_url, is_public } = req.body;
+router.put(
+  "/me",
+  checkJwt,
+  upsertUser,
+  validateBody(updateProfile),
+  async (req, res) => {
+    const sub = req.auth.payload.sub;
+    const { display_name, bio, avatar_url, is_public } = req.body;
 
-  try {
-    const { rows } = await pool.query(
-      `UPDATE user_profiles
+    try {
+      // see if we're switching from private to public
+      const { rows: current } = await pool.query(
+        `SELECT is_public FROM user_profiles WHERE user_sub = $1`,
+        [sub],
+      );
+      if (!current.length)
+        return res.status(404).json({ error: "Profile not set up yet" });
+      const wasPrivate = !current[0].is_public;
+
+      const { rows } = await pool.query(
+        `UPDATE user_profiles
        SET display_name = COALESCE($2, display_name),
            bio          = COALESCE($3, bio),
            avatar_url   = COALESCE($4, avatar_url),
            is_public    = COALESCE($5, is_public)
        WHERE user_sub = $1
        RETURNING user_sub, username, display_name, bio, avatar_url, is_public, created_at, updated_at`,
-      [sub, display_name ?? null, bio ?? null, avatar_url ?? null, is_public ?? null],
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Profile not set up yet' });
-    res.json(rows[0]);
-  } catch (err) {
-    console.error('[profiles] PUT /me error:', err.message);
-    res.status(500).json({ error: 'Failed to update profile' });
-  }
-});
+        [
+          sub,
+          display_name ?? null,
+          bio ?? null,
+          avatar_url ?? null,
+          is_public ?? null,
+        ],
+      );
+      if (!rows.length)
+        return res.status(404).json({ error: "Profile not set up yet" });
+
+      // auto-accept follows if switching to public
+      if (wasPrivate && rows[0].is_public) {
+        await pool.query(
+          `UPDATE follows
+         SET status = 'accepted', updated_at = NOW()
+         WHERE following_sub = $1 AND status = 'pending'`,
+          [sub],
+        );
+      }
+
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[profiles] PUT /me error:", err.message);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  },
+);
 
 // POST /api/profiles/setup — create initial profile
-router.post('/setup', checkJwt, upsertUser, validateBody(setupProfile), async (req, res) => {
-  const sub = req.auth.payload.sub;
-  const { username, display_name, bio, avatar_url } = req.body;
+router.post(
+  "/setup",
+  checkJwt,
+  upsertUser,
+  validateBody(setupProfile),
+  async (req, res) => {
+    const sub = req.auth.payload.sub;
+    const { username, display_name, bio, avatar_url } = req.body;
 
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO user_profiles (user_sub, username, display_name, bio, avatar_url)
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO user_profiles (user_sub, username, display_name, bio, avatar_url)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING user_sub, username, display_name, bio, avatar_url, created_at, updated_at`,
-      [sub, username, display_name ?? null, bio ?? null, avatar_url ?? null],
-    );
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    if (err.code === '23505') {
-      // unique_violation — could be user_sub (already set up) or username (taken)
-      const detail = err.detail ?? '';
-      if (detail.includes('user_sub')) {
-        return res.status(409).json({ error: 'Profile already set up' });
+        [sub, username, display_name ?? null, bio ?? null, avatar_url ?? null],
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      if (err.code === "23505") {
+        // unique_violation — could be user_sub (already set up) or username (taken)
+        const detail = err.detail ?? "";
+        if (detail.includes("user_sub")) {
+          return res.status(409).json({ error: "Profile already set up" });
+        }
+        return res.status(409).json({ error: "Username already taken" });
       }
-      return res.status(409).json({ error: 'Username already taken' });
+      console.error("[profiles] POST /setup error:", err.message);
+      res.status(500).json({ error: "Failed to create profile" });
     }
-    console.error('[profiles] POST /setup error:', err.message);
-    res.status(500).json({ error: 'Failed to create profile' });
+  },
+);
+
+// GET /api/profiles/discover — paginated list of public accounts
+router.get("/discover", optionalCheckJwt, async (req, res) => {
+  const limit = 20;
+  const offset = parseInt(req.query.offset, 10) || 0;
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.username, p.display_name, p.avatar_url,
+              (SELECT COUNT(*) FROM posts WHERE user_sub = p.user_sub)::int AS post_count,
+              (SELECT COUNT(*) FROM follows WHERE following_sub = p.user_sub AND status = 'accepted')::int AS follower_count
+       FROM user_profiles p
+       WHERE p.is_public = true
+       ORDER BY p.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    );
+    res.json({ accounts: rows, offset, limit, hasMore: rows.length === limit });
+  } catch (err) {
+    console.error("[profiles] GET /discover error:", err.message);
+    res.status(500).json({ error: "Failed to fetch discover list" });
   }
 });
 
 // GET /api/profiles/:username — public profile
-router.get('/:username', optionalCheckJwt, async (req, res) => {
+router.get("/:username", optionalCheckJwt, async (req, res) => {
   const { username } = req.params;
   if (!USERNAME_RE.test(username)) {
-    return res.status(400).json({ error: 'Invalid username format' });
+    return res.status(400).json({ error: "Invalid username format" });
   }
 
   const viewerSub = req.auth?.payload?.sub ?? null;
@@ -203,7 +281,8 @@ router.get('/:username', optionalCheckJwt, async (req, res) => {
        WHERE p.username = $1`,
       [username, viewerSub],
     );
-    if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
+    if (!rows.length)
+      return res.status(404).json({ error: "Profile not found" });
 
     const profile = rows[0];
     const isOwn = viewerSub && viewerSub === profile.user_sub;
@@ -211,11 +290,12 @@ router.get('/:username', optionalCheckJwt, async (req, res) => {
     res.json({
       ...profile,
       // null for own profile or unauthenticated; 'none' if no follow row exists
-      follow_status: isOwn || !viewerSub ? null : (profile.follow_status ?? 'none'),
+      follow_status:
+        isOwn || !viewerSub ? null : (profile.follow_status ?? "none"),
     });
   } catch (err) {
-    console.error('[profiles] GET /:username error:', err.message);
-    res.status(500).json({ error: 'Failed to fetch profile' });
+    console.error("[profiles] GET /:username error:", err.message);
+    res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
 
