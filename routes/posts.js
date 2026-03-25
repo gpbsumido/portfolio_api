@@ -1,6 +1,13 @@
 const express = require("express");
 const multer = require("multer");
 const sharp = require("sharp");
+const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require("ffmpeg-static");
+const ffprobePath = require("ffprobe-static").path;
+const os = require("os");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
 const { fromBuffer: fileTypeFromBuffer } = require("file-type");
 const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
@@ -10,6 +17,9 @@ const upsertUser = require("../middleware/upsertUser");
 const { makeUserRateLimiter } = require("../utils/rateLimiter");
 const { validateBody } = require("../middleware/validateBody");
 const { createPost } = require("../schemas");
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
 
 const postsLimiter = makeUserRateLimiter(20, 60 * 60 * 1000); // 20/hr
 
@@ -39,14 +49,21 @@ async function s3Upload(buffer, key, contentType) {
 }
 
 // ── Multer ────────────────────────────────────────────────────────────────────
-const ALLOWED_MIME = new Set([
+const ALLOWED_IMAGE_MIME = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
 ]);
+const ALLOWED_VIDEO_MIME = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-matroska",
+]);
 const MAX_FILES = 10;
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+// 200 MB limit covers both images (10 MB validated per-file in handler) and videos
+const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -64,8 +81,14 @@ function runMulter(req, res) {
 async function processImage(buffer) {
   // 1. Validate MIME from magic bytes (not the header)
   const detected = await fileTypeFromBuffer(buffer);
-  if (!detected || !ALLOWED_MIME.has(detected.mime)) {
+  if (!detected || !ALLOWED_IMAGE_MIME.has(detected.mime)) {
     throw Object.assign(new Error("Unsupported image type"), { status: 400 });
+  }
+
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw Object.assign(new Error("Each image must be 10 MB or smaller"), {
+      status: 400,
+    });
   }
 
   // 2. Full-size: max 1080px wide, WebP, strip EXIF via .rotate() then withMetadata(false)
@@ -95,6 +118,57 @@ async function processImage(buffer) {
   return { fullBuffer, thumbBuffer, blurDataUrl, width, height };
 }
 
+// ── Video processing ──────────────────────────────────────────────────────────
+async function processVideo(buffer) {
+  const tmpId = crypto.randomBytes(8).toString("hex");
+  const inputPath = path.join(os.tmpdir(), `${tmpId}_input`);
+  const thumbPath = path.join(os.tmpdir(), `${tmpId}_thumb.jpg`);
+
+  await fs.promises.writeFile(inputPath, buffer);
+
+  try {
+    // Probe for dimensions and duration
+    const metadata = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(inputPath, (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    });
+
+    const videoStream = metadata.streams.find((s) => s.codec_type === "video");
+    const width = videoStream?.width ?? 0;
+    const height = videoStream?.height ?? 0;
+    const duration = parseFloat(metadata.format?.duration ?? 0);
+
+    // Extract a thumbnail frame at 1s (or halfway through for very short clips)
+    const seekTime = Math.min(1, duration / 2);
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .seekInput(seekTime)
+        .frames(1)
+        .output(thumbPath)
+        .on("end", resolve)
+        .on("error", reject)
+        .run();
+    });
+
+    const thumbJpeg = await fs.promises.readFile(thumbPath);
+
+    // Resize thumbnail to 640px wide WebP
+    const thumbBuffer = await sharp(thumbJpeg)
+      .resize({ width: 640, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    return { thumbBuffer, width, height, duration };
+  } finally {
+    await Promise.allSettled([
+      fs.promises.unlink(inputPath),
+      fs.promises.unlink(thumbPath).catch(() => {}),
+    ]);
+  }
+}
+
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 router.post("/", checkJwt, postsLimiter, upsertUser, async (req, res) => {
   // Run multer first so req.body and req.files are populated for both types
@@ -102,9 +176,7 @@ router.post("/", checkJwt, postsLimiter, upsertUser, async (req, res) => {
     await runMulter(req, res);
   } catch (err) {
     if (err.code === "LIMIT_FILE_SIZE") {
-      return res
-        .status(400)
-        .json({ error: "Each file must be 10 MB or smaller" });
+      return res.status(400).json({ error: "File too large" });
     }
     if (err.code === "LIMIT_FILE_COUNT") {
       return res
@@ -145,13 +217,13 @@ router.post("/", checkJwt, postsLimiter, upsertUser, async (req, res) => {
     }
   }
 
-  // ── photo post ─────────────────────────────────────────────────────────────
+  // ── photo post (photos and/or videos mixed) ───────────────────────────────
   if (type === "photo") {
     const files = req.files || [];
     if (files.length === 0) {
       return res
         .status(400)
-        .json({ error: "At least one file is required for a photo post" });
+        .json({ error: "At least one file is required for a media post" });
     }
     if (files.length > 10) {
       return res.status(400).json({ error: "Maximum 10 files allowed" });
@@ -171,42 +243,71 @@ router.post("/", checkJwt, postsLimiter, upsertUser, async (req, res) => {
       const post = postRows[0];
       const postId = post.id;
 
-      // Process and upload each file in order
+      // Process and upload each file — images through processImage, videos through processVideo
       const mediaRows = [];
       for (let i = 0; i < files.length; i++) {
-        let processed;
-        try {
-          processed = await processImage(files[i].buffer);
-        } catch (imgErr) {
-          await db.query("ROLLBACK");
-          return res
-            .status(imgErr.status || 400)
-            .json({ error: imgErr.message });
+        const fileBuffer = files[i].buffer;
+        const detected = await fileTypeFromBuffer(fileBuffer.slice(0, 4100));
+
+        if (detected && ALLOWED_VIDEO_MIME.has(detected.mime)) {
+          // ── video file ────────────────────────────────────────────────────
+          let vidProcessed;
+          try {
+            vidProcessed = await processVideo(fileBuffer);
+          } catch (vidErr) {
+            await db.query("ROLLBACK");
+            console.error("[posts] video processing error:", vidErr.message);
+            return res.status(400).json({ error: "Failed to process video" });
+          }
+
+          const { thumbBuffer, width, height, duration } = vidProcessed;
+          const videoKey = `posts/${postId}/${i}_video${path.extname(files[i].originalname) || ".mp4"}`;
+          const thumbKey = `posts/${postId}/${i}_thumb.webp`;
+
+          const [videoUrl, thumbUrl] = await Promise.all([
+            s3Upload(fileBuffer, videoKey, detected.mime),
+            s3Upload(thumbBuffer, thumbKey, "image/webp"),
+          ]);
+
+          const { rows: mediaInsert } = await db.query(
+            `INSERT INTO post_media
+               (post_id, s3_key, url, width, height, position, blur_data_url, media_type, thumbnail_url, duration)
+             VALUES ($1, $2, $3, $4, $5, $6, '', 'video', $7, $8)
+             RETURNING id, s3_key, url, width, height, position, blur_data_url, media_type, thumbnail_url, duration, created_at`,
+            [postId, videoKey, videoUrl, width, height, i, thumbUrl, duration],
+          );
+          mediaRows.push(mediaInsert[0]);
+        } else {
+          // ── image file ────────────────────────────────────────────────────
+          let processed;
+          try {
+            processed = await processImage(fileBuffer);
+          } catch (imgErr) {
+            await db.query("ROLLBACK");
+            return res
+              .status(imgErr.status || 400)
+              .json({ error: imgErr.message });
+          }
+
+          const { fullBuffer, thumbBuffer, blurDataUrl, width, height } =
+            processed;
+          const fullKey = `posts/${postId}/${i}_full.webp`;
+          const thumbKey = `posts/${postId}/${i}_thumb.webp`;
+
+          const [fullUrl, thumbUrl] = await Promise.all([
+            s3Upload(fullBuffer, fullKey, "image/webp"),
+            s3Upload(thumbBuffer, thumbKey, "image/webp"),
+          ]);
+
+          const { rows: mediaInsert } = await db.query(
+            `INSERT INTO post_media
+               (post_id, s3_key, url, width, height, position, blur_data_url, media_type, thumbnail_url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'image', $8)
+             RETURNING id, s3_key, url, width, height, position, blur_data_url, media_type, thumbnail_url, duration, created_at`,
+            [postId, fullKey, fullUrl, width, height, i, blurDataUrl, thumbUrl],
+          );
+          mediaRows.push(mediaInsert[0]);
         }
-
-        const { fullBuffer, thumbBuffer, blurDataUrl, width, height } =
-          processed;
-        const fullKey = `posts/${postId}/${i}_full.webp`;
-        const thumbKey = `posts/${postId}/${i}_thumb.webp`;
-
-        const [fullUrl, thumbUrl] = await Promise.all([
-          s3Upload(fullBuffer, fullKey, "image/webp"),
-          s3Upload(thumbBuffer, thumbKey, "image/webp"),
-        ]);
-
-        const { rows: mediaInsert } = await db.query(
-          `INSERT INTO post_media (post_id, s3_key, url, width, height, position, blur_data_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id, s3_key, url, width, height, position, blur_data_url, created_at`,
-          [postId, fullKey, fullUrl, width, height, i, blurDataUrl],
-        );
-
-        // Store thumb info as extra fields (not persisted separately — no thumb table yet)
-        mediaRows.push({
-          ...mediaInsert[0],
-          thumb_url: thumbUrl,
-          thumb_s3_key: thumbKey,
-        });
       }
 
       await db.query("COMMIT");
@@ -287,6 +388,9 @@ router.get("/user/:username", optionalCheckJwt, async (req, res) => {
                'height',        pm.height,
                'position',      pm.position,
                'blur_data_url', pm.blur_data_url,
+               'media_type',    pm.media_type,
+               'thumbnail_url', pm.thumbnail_url,
+               'duration',      pm.duration,
                'created_at',    pm.created_at
              ) ORDER BY pm.position ASC
            ) FILTER (WHERE pm.id IS NOT NULL),
@@ -346,7 +450,10 @@ router.get("/discover", optionalCheckJwt, async (req, res) => {
                'width',         pm.width,
                'height',        pm.height,
                'position',      pm.position,
-               'blur_data_url', pm.blur_data_url
+               'blur_data_url', pm.blur_data_url,
+               'media_type',    pm.media_type,
+               'thumbnail_url', pm.thumbnail_url,
+               'duration',      pm.duration
              ) ORDER BY pm.position ASC
            ) FILTER (WHERE pm.id IS NOT NULL),
            '[]'
@@ -401,7 +508,8 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
 
     const { rows: mediaRows } = await pool.query(
-      `SELECT id, s3_key, url, width, height, position, blur_data_url, created_at
+      `SELECT id, s3_key, url, width, height, position, blur_data_url,
+              media_type, thumbnail_url, duration, created_at
        FROM post_media
        WHERE post_id = $1
        ORDER BY position ASC`,

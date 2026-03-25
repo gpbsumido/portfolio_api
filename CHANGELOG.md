@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-24 - version 1.5.5
+
+- video upload support, photos and videos can be mixed in a single post
+- video: thumbnail extracted via ffmpeg, dimensions and duration probed automatically
+- post_media queries updated to return media_type, thumbnail_url, and duration across all endpoints
+
 ## 2026-03-24 - version 1.5.4
 
 - fix buffer causing server crash

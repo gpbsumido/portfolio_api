@@ -1,8 +1,8 @@
-const express = require('express');
-const { pool } = require('../config/database');
-const { checkJwt } = require('../middleware/auth');
-const upsertUser = require('../middleware/upsertUser');
-const { makeUserRateLimiter } = require('../utils/rateLimiter');
+const express = require("express");
+const { pool } = require("../config/database");
+const { checkJwt } = require("../middleware/auth");
+const upsertUser = require("../middleware/upsertUser");
+const { makeUserRateLimiter } = require("../utils/rateLimiter");
 
 const timelineLimiter = makeUserRateLimiter(120, 60 * 1000); // 120/min
 
@@ -69,6 +69,9 @@ const TIMELINE_QUERY = `
           'height',        pm.height,
           'position',      pm.position,
           'blur_data_url', pm.blur_data_url,
+          'media_type',    pm.media_type,
+          'thumbnail_url', pm.thumbnail_url,
+          'duration',      pm.duration,
           'created_at',    pm.created_at
         ) ORDER BY pm.position ASC
       ) FILTER (WHERE pm.id IS NOT NULL),
@@ -92,7 +95,7 @@ const TIMELINE_QUERY = `
 `;
 
 // ── GET /api/timeline ─────────────────────────────────────────────────────────
-router.get('/', checkJwt, timelineLimiter, upsertUser, async (req, res) => {
+router.get("/", checkJwt, timelineLimiter, upsertUser, async (req, res) => {
   const sub = req.auth.payload.sub;
   const { cursor } = req.query;
 
@@ -100,7 +103,7 @@ router.get('/', checkJwt, timelineLimiter, upsertUser, async (req, res) => {
   if (cursor) {
     cursorDate = new Date(cursor);
     if (isNaN(cursorDate.getTime())) {
-      return res.status(400).json({ error: 'Invalid cursor' });
+      return res.status(400).json({ error: "Invalid cursor" });
     }
   } else {
     cursorDate = new Date();
@@ -115,16 +118,20 @@ router.get('/', checkJwt, timelineLimiter, upsertUser, async (req, res) => {
 
     const hasMore = rows.length > LIMIT;
     const rawPosts = hasMore ? rows.slice(0, LIMIT) : rows;
-    const nextCursor = hasMore ? rawPosts[rawPosts.length - 1].created_at.toISOString() : null;
-    const posts = rawPosts.map(({ sub, username, display_name, avatar_url, ...post }) => ({
-      ...post,
-      author: { sub, username, display_name, avatar_url },
-    }));
+    const nextCursor = hasMore
+      ? rawPosts[rawPosts.length - 1].created_at.toISOString()
+      : null;
+    const posts = rawPosts.map(
+      ({ sub, username, display_name, avatar_url, ...post }) => ({
+        ...post,
+        author: { sub, username, display_name, avatar_url },
+      }),
+    );
 
     return res.json({ posts, nextCursor });
   } catch (err) {
-    console.error('[timeline] GET / error:', err.message);
-    return res.status(500).json({ error: 'Failed to fetch timeline' });
+    console.error("[timeline] GET / error:", err.message);
+    return res.status(500).json({ error: "Failed to fetch timeline" });
   }
 });
 
