@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-30 - version 1.5.7
+
+- endpoint `/api/nba/shots/:playerId` with deterministic mock data per player
+
 ## 2026-03-30 - version 1.5.6
 
 - add geo route for getting client ip address and location

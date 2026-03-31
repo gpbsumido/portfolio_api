@@ -30,8 +30,7 @@ router.get("/teams", nbaIpLimiter, async (req, res, next) => {
     const data = await getCachedData("teams", async () => {
       const startTime = Date.now();
       const season = getCurrentSeason();
-      const url =
-        `https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=${season}&SeasonType=Regular+Season`;
+      const url = `https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=${season}&SeasonType=Regular+Season`;
       const response = await throttledFetch(url, {
         headers: NBA_API.HEADERS,
       });
@@ -296,6 +295,72 @@ router.get("/stats/:playerId", nbaIpLimiter, async (req, res, next) => {
         },
       };
     });
+
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Shot chart endpoint
+// TODO: Replace mock data with real shotchartdetail API call once endpoint
+// access is confirmed. The NBA Stats API blocks shotchartdetail from some
+// environments. When switching to live data, aggregate individual shots into
+// the 6 zone buckets below and keep the same response shape.
+router.get("/shots/:playerId", nbaIpLimiter, async (req, res, next) => {
+  try {
+    const playerId = parseInt(req.params.playerId);
+
+    if (isNaN(playerId)) {
+      return res.status(400).json({ error: "Invalid player ID" });
+    }
+
+    const data = await getCachedData(
+      `shots-${playerId}`,
+      async () => {
+        // Seed a deterministic random from the playerId so each player gets
+        // consistent but varied mock data across requests.
+        const seed = (n) => {
+          const x = Math.sin(playerId * 1000 + n) * 10000;
+          return x - Math.floor(x);
+        };
+
+        const gp = 60 + Math.floor(seed(0) * 22);
+        const zones = [
+          { zone: "paint", base: 0.58, att: 6.2 },
+          { zone: "mid-left", base: 0.42, att: 2.8 },
+          { zone: "mid-right", base: 0.44, att: 2.6 },
+          { zone: "corner-3-left", base: 0.38, att: 1.8 },
+          { zone: "corner-3-right", base: 0.37, att: 1.9 },
+          { zone: "above-break-3", base: 0.36, att: 4.5 },
+        ].map((z, i) => {
+          const variance = (seed(i + 1) - 0.5) * 0.12;
+          const fgPct = Math.max(0.2, Math.min(0.7, z.base + variance));
+          const attVariance = (seed(i + 10) - 0.5) * 2;
+          const attPerGame = Math.max(0.5, z.att + attVariance);
+          const makesPerGame = attPerGame * fgPct;
+          const fga = Math.round(attPerGame * gp);
+          const fgm = Math.round(makesPerGame * gp);
+          return {
+            zone: z.zone,
+            fgPct: parseFloat(fgPct.toFixed(3)),
+            fgm,
+            fga,
+            attPerGame: parseFloat(attPerGame.toFixed(1)),
+            makesPerGame: parseFloat(makesPerGame.toFixed(1)),
+          };
+        });
+
+        return {
+          data: {
+            playerId,
+            season: getCurrentSeason(),
+            zones,
+          },
+        };
+      },
+      86400,
+    );
 
     res.status(200).json(data);
   } catch (error) {
