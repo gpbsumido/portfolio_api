@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-30 - version 1.5.6
+
+- add geo route for getting client ip address and location
+
 ## 2026-03-24 - version 1.5.5
 
 - video upload support, photos and videos can be mixed in a single post
