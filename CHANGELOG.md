@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-04-16 - version 1.5.8
+
+- `routes/nba-playoffs.js`: NBA playoff bracket API — `GET /api/nba/playoffs/picks/:season` and `PUT /api/nba/playoffs/picks/:season` for authenticated users to read/save picks; `GET /api/nba/playoffs/leaderboard/:season` (public) scores all brackets against the official results row and returns ranked entries with max-possible score
+- `utils/playoffScoring.js`: playoff bracket scoring engine (`scoreBracket`, `MAX_POSSIBLE`)
+- `migrations/006_nba_playoffs.sql`: `nba_playoff_brackets` table with `(user_sub, season)` unique constraint; official results stored as a reserved `OFFICIAL_RESULTS` row
+- `scripts/run-migration.js`: generic migration runner — `node scripts/run-migration.js <sql-file>`
+- `server.js`: moved `express.json()` before route registration (fixes body parsing for all routes); mounted `/api/nba/playoffs` before the NBA 1-hour cache so picks endpoints are never cached
+
 ## 2026-03-30 - version 1.5.7
 
 - endpoint `/api/nba/shots/:playerId` with deterministic mock data per player

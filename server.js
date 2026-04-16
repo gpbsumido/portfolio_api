@@ -10,6 +10,7 @@ const apicache = require("apicache");
 
 // Local imports
 const nbaRoutes = require("./routes/nba");
+const nbaPlayoffsRoutes = require("./routes/nba-playoffs");
 const dbRoutes = require("./routes/db");
 const youtubeRoutes = require("./routes/youtube");
 const f1Routes = require("./routes/f1");
@@ -49,17 +50,21 @@ app.use(
 // Performance middleware
 app.use(compression());
 
+// Request parsing middleware — must come before any route that reads req.body
+app.use(express.json());
+
 // Caching middleware
 const cache = apicache.middleware;
 const oneHourCache = cache("1 hour");
+
+// Playoffs picks are user-specific and mutable — must be mounted before the nba cache
+app.use("/api/nba/playoffs", nbaPlayoffsRoutes);
 
 // Apply 1-hour cache to specific API routes
 app.use("/api/nba", oneHourCache);
 app.use("/api/f1", oneHourCache);
 app.use("/api/fantasy", oneHourCache);
 
-// Request parsing middleware
-app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Logging middleware
