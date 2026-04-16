@@ -16,7 +16,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 | Feature         | Description                                                                     |
 | --------------- | ------------------------------------------------------------------------------- |
-| NBA             | Live standings, team rosters, and player stats via NBA Stats API                |
+| NBA             | Live standings, team rosters, player stats, shot charts, and playoff bracket picks/leaderboard |
 | F1              | Race schedules, results, telemetry, weather, and championship points via FastF1 |
 | Fantasy F1      | Custom fantasy scoring engine based on qualifying, race results, and overtakes  |
 | YouTube         | Recent videos from a YouTube channel via RSS feed                               |
@@ -37,6 +37,15 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | GET    | `/teams`           | Current season standings            |
 | GET    | `/players/:teamId` | Roster for a team                   |
 | GET    | `/stats/:playerId` | Player stats for the current season |
+| GET    | `/shots/:playerId` | Deterministic mock shot chart data  |
+
+### NBA Playoffs — `/api/nba/playoffs`
+
+| Method | Path                    | Auth     | Description                                                             |
+| ------ | ----------------------- | -------- | ----------------------------------------------------------------------- |
+| GET    | `/picks/:season`        | Required | Fetch the authenticated user's bracket picks for a season               |
+| PUT    | `/picks/:season`        | Required | Save (upsert) the authenticated user's bracket picks for a season       |
+| GET    | `/leaderboard/:season`  | —        | Score all user brackets against official results; returns ranked entries |
 
 ### F1 — `/api/f1`
 
@@ -281,6 +290,9 @@ node scripts/calendar/migrate_countdowns.js
 
 # Create users + calendar_members tables (required for calendar sharing)
 node scripts/calendar/migrate_sharing.js
+
+# Create nba_playoff_brackets table
+node scripts/run-migration.js migrations/006_nba_playoffs.sql
 ```
 
 > **Auth0 setup for sharing**: add a post-login Action that sets `api.accessToken.setCustomClaim("email", event.user.email)` so the backend `upsertUser` middleware can populate the users table from the JWT email claim.
