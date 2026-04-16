@@ -50,6 +50,9 @@ app.use(
 // Performance middleware
 app.use(compression());
 
+// Request parsing middleware — must come before any route that reads req.body
+app.use(express.json());
+
 // Caching middleware
 const cache = apicache.middleware;
 const oneHourCache = cache("1 hour");
@@ -62,8 +65,6 @@ app.use("/api/nba", oneHourCache);
 app.use("/api/f1", oneHourCache);
 app.use("/api/fantasy", oneHourCache);
 
-// Request parsing middleware
-app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Logging middleware
