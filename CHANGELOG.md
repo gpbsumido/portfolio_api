@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-04-20 - version 1.5.10
+
+- `migrations/007_bracket_display_name.sql`: adds `display_name TEXT` column to `nba_playoff_brackets` so users without a `user_profiles` entry can still show a name on the leaderboard instead of falling back to "Anonymous"
+- `routes/nba-playoffs.js`: `GET /api/nba/playoffs/picks/:season/public` now accepts `?username=` (profiled users) or `?bracketId=<uuid>` (anonymous users) instead of `?sub=`; `PUT /picks/:season` accepts optional `displayName` in the body and stores it on the bracket row (preserved on conflict via COALESCE); leaderboard entries now include `bracketId`, `username`, and fall back to the stored `display_name` before "Anonymous"
+
 ## 2026-04-20 - version 1.5.9
 
 - `routes/nba-playoffs.js`: `GET /api/nba/playoffs/picks/:season/public?sub=<auth0_sub>` — public endpoint to fetch any user's submitted picks by Auth0 sub; returns 404 when the user has no picks or sub is the reserved `OFFICIAL_RESULTS` sentinel
