@@ -35,33 +35,57 @@ router.get("/picks/:season", checkJwt, async (req, res) => {
   }
 });
 
-// GET /api/nba/playoffs/picks/:season/public?sub=<auth0_sub>
-// Public — returns any user's submitted picks by Auth0 sub.
-// Returns 404 if the user has no picks or the sub is the official results row.
+// GET /api/nba/playoffs/picks/:season/public?username=<username>
+// GET /api/nba/playoffs/picks/:season/public?bracketId=<uuid>
+// Public — returns any user's submitted picks.
+// Accepts either a username (profiled users) or a bracket UUID (anonymous users).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.get("/picks/:season/public", async (req, res) => {
   const { season } = req.params;
   if (!SEASON_RE.test(season)) {
     return res.status(400).json({ error: "season must be a 4-digit year" });
   }
 
-  const { sub } = req.query;
-  if (!sub || typeof sub !== "string" || sub === OFFICIAL_RESULTS_SUB) {
-    return res.status(400).json({ error: "valid sub is required" });
-  }
+  const { username, bracketId } = req.query;
 
   try {
-    const result = await pool.query(
-      "SELECT picks FROM nba_playoff_brackets WHERE user_sub = $1 AND season = $2",
-      [sub, Number(season)],
-    );
+    let result;
+
+    if (bracketId && typeof bracketId === "string" && UUID_RE.test(bracketId)) {
+      result = await pool.query(
+        "SELECT picks FROM nba_playoff_brackets WHERE id = $1 AND season = $2",
+        [bracketId, Number(season)],
+      );
+    } else if (username && typeof username === "string") {
+      const profileResult = await pool.query(
+        "SELECT user_sub FROM user_profiles WHERE username = $1",
+        [username],
+      );
+      if (!profileResult.rows[0]) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      result = await pool.query(
+        "SELECT picks FROM nba_playoff_brackets WHERE user_sub = $1 AND season = $2",
+        [profileResult.rows[0].user_sub, Number(season)],
+      );
+    } else {
+      return res
+        .status(400)
+        .json({ error: "username or bracketId is required" });
+    }
 
     if (!result.rows[0]) {
-      return res.status(404).json({ error: "No picks found for this user" });
+      return res.status(404).json({ error: "No picks found" });
     }
 
     res.json({ picks: result.rows[0].picks });
   } catch (err) {
-    console.error("[nba-playoffs] GET /picks/:season/public failed:", err.message);
+    console.error(
+      "[nba-playoffs] GET /picks/:season/public failed:",
+      err.message,
+    );
     res.status(500).json({ error: "Failed to fetch picks" });
   }
 });
@@ -74,20 +98,24 @@ router.put("/picks/:season", checkJwt, async (req, res) => {
     return res.status(400).json({ error: "season must be a 4-digit year" });
   }
 
-  const { picks } = req.body;
+  const { picks, displayName } = req.body;
   if (!isPlainObject(picks)) {
     return res.status(400).json({ error: "picks must be a plain object" });
   }
 
   const userSub = req.auth.payload.sub;
+  const storedName =
+    typeof displayName === "string" && displayName.trim()
+      ? displayName.trim().slice(0, 100)
+      : null;
 
   try {
     await pool.query(
-      `INSERT INTO nba_playoff_brackets (id, user_sub, season, picks)
-       VALUES (gen_random_uuid(), $1, $2, $3)
+      `INSERT INTO nba_playoff_brackets (id, user_sub, season, picks, display_name)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4)
        ON CONFLICT (user_sub, season)
-       DO UPDATE SET picks = EXCLUDED.picks, updated_at = now()`,
-      [userSub, Number(season), JSON.stringify(picks)],
+       DO UPDATE SET picks = EXCLUDED.picks, display_name = COALESCE(EXCLUDED.display_name, nba_playoff_brackets.display_name), updated_at = now()`,
+      [userSub, Number(season), JSON.stringify(picks), storedName],
     );
     res.json({ ok: true });
   } catch (err) {
@@ -113,49 +141,65 @@ router.get("/leaderboard/:season", async (req, res) => {
     const officialPicks = officialResult.rows[0]?.picks ?? null;
 
     const userBrackets = await pool.query(
-      "SELECT user_sub, picks, updated_at FROM nba_playoff_brackets WHERE user_sub != $1 AND season = $2",
+      "SELECT id, user_sub, picks, display_name, updated_at FROM nba_playoff_brackets WHERE user_sub != $1 AND season = $2",
       [OFFICIAL_RESULTS_SUB, Number(season)],
     );
 
     const entries = await Promise.all(
-      userBrackets.rows.map(async ({ user_sub, picks, updated_at }) => {
-        const profileResult = await pool.query(
-          "SELECT display_name, username FROM user_profiles WHERE user_sub = $1",
-          [user_sub],
-        );
-        const profile = profileResult.rows[0];
-        const displayName =
-          profile?.display_name ?? profile?.username ?? "Anonymous";
+      userBrackets.rows.map(
+        async ({
+          id,
+          user_sub,
+          picks,
+          display_name: bracketDisplayName,
+          updated_at,
+        }) => {
+          const profileResult = await pool.query(
+            "SELECT display_name, username FROM user_profiles WHERE user_sub = $1",
+            [user_sub],
+          );
+          const profile = profileResult.rows[0];
+          const displayName =
+            profile?.display_name ??
+            profile?.username ??
+            bracketDisplayName ??
+            "Anonymous";
+          const username = profile?.username ?? null;
 
-        if (!officialPicks) {
+          if (!officialPicks) {
+            return {
+              userSub: user_sub,
+              bracketId: id,
+              username,
+              displayName,
+              score: 0,
+              maxPossible: MAX_POSSIBLE,
+              breakdown: {
+                r1: 0,
+                r2: 0,
+                cf: 0,
+                finals: 0,
+                bonuses: 0,
+                mvp: 0,
+                combinedScoreDiff: null,
+              },
+              updatedAt: updated_at,
+            };
+          }
+
+          const { total, breakdown } = scoreBracket(picks, officialPicks);
           return {
             userSub: user_sub,
+            bracketId: id,
+            username,
             displayName,
-            score: 0,
+            score: total,
             maxPossible: MAX_POSSIBLE,
-            breakdown: {
-              r1: 0,
-              r2: 0,
-              cf: 0,
-              finals: 0,
-              bonuses: 0,
-              mvp: 0,
-              combinedScoreDiff: null,
-            },
+            breakdown,
             updatedAt: updated_at,
           };
-        }
-
-        const { total, breakdown } = scoreBracket(picks, officialPicks);
-        return {
-          userSub: user_sub,
-          displayName,
-          score: total,
-          maxPossible: MAX_POSSIBLE,
-          breakdown,
-          updatedAt: updated_at,
-        };
-      }),
+        },
+      ),
     );
 
     entries.sort((a, b) => {
