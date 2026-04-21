@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-20 - version 1.5.9
+
+- `routes/nba-playoffs.js`: `GET /api/nba/playoffs/picks/:season/public?sub=<auth0_sub>` — public endpoint to fetch any user's submitted picks by Auth0 sub; returns 404 when the user has no picks or sub is the reserved `OFFICIAL_RESULTS` sentinel
+
 ## 2026-04-16 - version 1.5.8
 
 - `routes/nba-playoffs.js`: NBA playoff bracket API — `GET /api/nba/playoffs/picks/:season` and `PUT /api/nba/playoffs/picks/:season` for authenticated users to read/save picks; `GET /api/nba/playoffs/leaderboard/:season` (public) scores all brackets against the official results row and returns ranked entries with max-possible score
