@@ -35,6 +35,37 @@ router.get("/picks/:season", checkJwt, async (req, res) => {
   }
 });
 
+// GET /api/nba/playoffs/picks/:season/public?sub=<auth0_sub>
+// Public — returns any user's submitted picks by Auth0 sub.
+// Returns 404 if the user has no picks or the sub is the official results row.
+router.get("/picks/:season/public", async (req, res) => {
+  const { season } = req.params;
+  if (!SEASON_RE.test(season)) {
+    return res.status(400).json({ error: "season must be a 4-digit year" });
+  }
+
+  const { sub } = req.query;
+  if (!sub || typeof sub !== "string" || sub === OFFICIAL_RESULTS_SUB) {
+    return res.status(400).json({ error: "valid sub is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT picks FROM nba_playoff_brackets WHERE user_sub = $1 AND season = $2",
+      [sub, Number(season)],
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: "No picks found for this user" });
+    }
+
+    res.json({ picks: result.rows[0].picks });
+  } catch (err) {
+    console.error("[nba-playoffs] GET /picks/:season/public failed:", err.message);
+    res.status(500).json({ error: "Failed to fetch picks" });
+  }
+});
+
 // PUT /api/nba/playoffs/picks/:season
 // Upserts the authenticated user's picks for the season.
 router.put("/picks/:season", checkJwt, async (req, res) => {
