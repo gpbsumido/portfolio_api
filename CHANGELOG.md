@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-07 - version 1.5.11
+
+- `routes/vitals.js`: added `buildVersionConditions` helper and `mode` query param support (`major`, `minor`, or exact match) to `GET /summary`, `GET /by-page`, and `GET /by-version` endpoints — replaces the old semver "from version onwards" filter with scoped filtering by major version, minor version, or exact version
+- `GET /by-version` now returns up to 10 versions by default (was 5), or up to 30 for minor mode to show all patches within a minor version
+
 ## 2026-04-20 - version 1.5.10
 
 - `migrations/007_bracket_display_name.sql`: adds `display_name TEXT` column to `nba_playoff_brackets` so users without a `user_profiles` entry can still show a name on the leaderboard instead of falling back to "Anonymous"
