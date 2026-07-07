@@ -12,10 +12,54 @@ const VALID_RATINGS = new Set(["good", "needs-improvement", "poor"]);
 // to avoid one-visit noise skewing the numbers
 const MIN_PAGE_SAMPLES = 5;
 
+/**
+ * Builds SQL AND-conditions for version filtering based on the mode param.
+ * - mode=major: filter by major version number (v=0 matches all 0.x.y)
+ * - mode=minor: filter by major.minor (v=0.12 matches all 0.12.x)
+ * - no mode: exact version match (v=0.11.3 matches only that version)
+ */
+function buildVersionConditions(v, mode, startParam = 1) {
+  if (!v) return { conditions: "", params: [], nextParam: startParam };
+
+  if (mode === "major") {
+    return {
+      conditions: `AND app_version != 'unknown'
+         AND split_part(app_version, '.', 1)::int = $${startParam}`,
+      params: [parseInt(v, 10)],
+      nextParam: startParam + 1,
+    };
+  }
+
+  if (mode === "minor") {
+    const parts = v.split(".");
+    return {
+      conditions: `AND app_version != 'unknown'
+         AND split_part(app_version, '.', 1)::int = $${startParam}
+         AND split_part(app_version, '.', 2)::int = $${startParam + 1}`,
+      params: [parseInt(parts[0], 10), parseInt(parts[1], 10)],
+      nextParam: startParam + 2,
+    };
+  }
+
+  // exact version match (default when mode is not specified)
+  return {
+    conditions: `AND app_version = $${startParam}`,
+    params: [v],
+    nextParam: startParam + 1,
+  };
+}
+
 // POST /api/vitals
 // open ingestion, no auth — vitals are non-sensitive and anonymous collection is fine
 router.post("/", async (req, res) => {
-  const { metric, value, rating, page, nav_type, app_version = "unknown" } = req.body;
+  const {
+    metric,
+    value,
+    rating,
+    page,
+    nav_type,
+    app_version = "unknown",
+  } = req.body;
 
   if (!metric || value === undefined || value === null || !rating || !page) {
     return res
@@ -57,14 +101,8 @@ router.post("/", async (req, res) => {
 // P75 value + rating distribution + total count per metric — auth required
 // optional ?v=X.Y.Z filters to rows from that version onwards (semver-aware)
 router.get("/summary", checkJwt, async (req, res) => {
-  const { v } = req.query;
-  // semver filter: cast "X.Y.Z" to int[] for correct ordering (e.g. 0.10.0 > 0.9.0)
-  // unknown rows are pre-feature data and are excluded when a version filter is active
-  const whereClause = v
-    ? `WHERE app_version != 'unknown'
-         AND string_to_array(app_version, '.')::int[] >= string_to_array($1, '.')::int[]`
-    : "";
-  const params = v ? [v] : [];
+  const { v, mode } = req.query;
+  const { conditions, params } = buildVersionConditions(v, mode);
 
   try {
     const result = await pool.query(
@@ -76,7 +114,7 @@ router.get("/summary", checkJwt, async (req, res) => {
         COUNT(*) FILTER (WHERE rating = 'poor')              AS poor,
         COUNT(*)                                             AS total
       FROM web_vitals
-      ${whereClause}
+      WHERE TRUE ${conditions}
       GROUP BY metric`,
       params,
     );
@@ -105,14 +143,14 @@ router.get("/summary", checkJwt, async (req, res) => {
 // so one-off visits don't show up as permanent data points — auth required
 // optional ?v=X.Y.Z filters to rows from that version onwards (semver-aware)
 router.get("/by-page", checkJwt, async (req, res) => {
-  const { v } = req.query;
-  const versionFilter = v
-    ? `AND app_version != 'unknown'
-       AND string_to_array(app_version, '.')::int[] >= string_to_array($1, '.')::int[]`
-    : "";
-  // MIN_PAGE_SAMPLES is $1 without a version, $2 with one
-  const minSamplesParam = v ? "$2" : "$1";
-  const params = v ? [v, MIN_PAGE_SAMPLES] : [MIN_PAGE_SAMPLES];
+  const { v, mode } = req.query;
+  const {
+    conditions,
+    params: versionParams,
+    nextParam,
+  } = buildVersionConditions(v, mode);
+  const minSamplesParam = `$${nextParam}`;
+  const params = [...versionParams, MIN_PAGE_SAMPLES];
 
   try {
     const result = await pool.query(
@@ -120,7 +158,7 @@ router.get("/by-page", checkJwt, async (req, res) => {
       WITH page_totals AS (
         SELECT page, COUNT(*) AS total
         FROM web_vitals
-        WHERE TRUE ${versionFilter}
+        WHERE TRUE ${conditions}
         GROUP BY page
         HAVING COUNT(*) >= ${minSamplesParam}
       )
@@ -132,7 +170,7 @@ router.get("/by-page", checkJwt, async (req, res) => {
         pt.total                                               AS page_total
       FROM web_vitals w
       JOIN page_totals pt ON pt.page = w.page
-      WHERE TRUE ${versionFilter}
+      WHERE TRUE ${conditions}
       GROUP BY w.page, w.metric, pt.total
       ORDER BY pt.total DESC, w.page, w.metric
       `,
@@ -166,16 +204,24 @@ router.get("/by-page", checkJwt, async (req, res) => {
 // GET /api/vitals/by-version
 // P75 per metric for the last 5 distinct versions, sorted oldest→newest so
 // chart x-axis reads left=old, right=new — auth required
-router.get("/by-version", checkJwt, async (_req, res) => {
+router.get("/by-version", checkJwt, async (req, res) => {
+  const { v, mode } = req.query;
+  const { conditions, params } = buildVersionConditions(v, mode);
+  // minor mode shows all patches within a minor; others show the last 10
+  const limit = mode === "minor" ? 30 : 10;
+
   try {
-    const versionsResult = await pool.query(`
+    const versionsResult = await pool.query(
+      `
       SELECT app_version
       FROM web_vitals
-      WHERE app_version != 'unknown'
+      WHERE app_version != 'unknown' ${conditions}
       GROUP BY app_version
       ORDER BY string_to_array(app_version, '.')::int[] DESC
-      LIMIT 5
-    `);
+      LIMIT ${limit}
+    `,
+      params,
+    );
     const versions = versionsResult.rows.map((r) => r.app_version);
     if (versions.length === 0) return res.json({ byVersion: [] });
 
@@ -206,7 +252,7 @@ router.get("/by-version", checkJwt, async (_req, res) => {
     const byVersion = versions
       .slice()
       .reverse()
-      .map((v) => versionMap[v])
+      .map((ver) => versionMap[ver])
       .filter(Boolean);
 
     res.json({ byVersion });
