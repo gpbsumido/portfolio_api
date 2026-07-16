@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-16 - version 2.0.3
+
+- `src/config/env.ts`: Zod schema validating all env vars at startup — crashes fast on missing required vars, typed `env` export
+- `src/config/database.ts`: typed pg Pool setup with generic `query<T>()` helper and `checkDatabaseHealth()`
+- `src/config/auth.ts`: Auth0 JWT middleware (`checkJwt`, `optionalCheckJwt`, `checkPermissions`) using typed env
+- `src/config/s3.ts`: configured S3Client export with typed bucket/CDN constants
+
 ## 2026-07-16 - version 2.0.2
 
 - `src/shared/errors/AppError.ts`: base `AppError` class and subclasses — `NotFoundError` (404), `ValidationError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `ConflictError` (409), `RateLimitError` (429)
