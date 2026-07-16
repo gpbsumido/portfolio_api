@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-16 - version 2.1.0
+
+- `src/modules/nba/`: full TypeScript migration of NBA and playoffs modules using raw SQL repository pattern
+  - `types.ts`: interfaces for teams, players, stats, shot charts, playoffs brackets, leaderboard
+  - `repository.ts`: NBA Stats API proxy with throttled fetch + raw SQL for playoff brackets
+  - `service.ts`: business logic layer with fantasy point calculations and bracket scoring
+  - `controller.ts`: HTTP handlers with Express 5 param typing
+  - `routes.ts`: thin router wiring all NBA + playoff endpoints
+- `src/shared/utils/cache.ts`: typed in-memory cache utility with TTL and LRU eviction
+
 ## 2026-07-16 - version 2.0.3
 
 - `src/config/env.ts`: Zod schema validating all env vars at startup — crashes fast on missing required vars, typed `env` export
