@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-16 - version 2.0.3
+
+- `src/config/env.ts`: Zod schema validating all env vars at startup — crashes fast on missing required vars, typed `env` export
+- `src/config/database.ts`: typed pg Pool setup with generic `query<T>()` helper and `checkDatabaseHealth()`
+- `src/config/auth.ts`: Auth0 JWT middleware (`checkJwt`, `optionalCheckJwt`, `checkPermissions`) using typed env
+- `src/config/s3.ts`: configured S3Client export with typed bucket/CDN constants
+
+## 2026-07-16 - version 2.0.2
+
+- `src/shared/errors/AppError.ts`: base `AppError` class and subclasses — `NotFoundError` (404), `ValidationError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `ConflictError` (409), `RateLimitError` (429)
+- `src/middleware/errorHandler.ts`: global error handler that catches `AppError`, `ZodError`, auth errors, and unknown errors with consistent JSON responses
+
+## 2026-07-16 - version 2.0.1
+
+- scaffold `src/` directory structure: `config/`, `middleware/`, `shared/` (errors, types, utils), and 17 feature modules under `modules/`
+- each directory has an empty barrel `index.ts` for future exports
+- `src/index.ts` entry point with architecture documentation
+
+## 2026-07-16 - version 2.0.0
+
+- add TypeScript toolchain alongside existing JS: `typescript`, `ts-node`, type definitions for all dependencies
+- `tsconfig.json`: strict mode, ES2022 target, NodeNext module resolution, output to `dist/`
+- new `dev:ts` and `build` scripts in `package.json`
+- `dist/` added to `.gitignore`
+
 ## 2026-07-07 - version 1.5.11
 
 - `routes/vitals.js`: added `buildVersionConditions` helper and `mode` query param support (`major`, `minor`, or exact match) to `GET /summary`, `GET /by-page`, and `GET /by-version` endpoints — replaces the old semver "from version onwards" filter with scoped filtering by major version, minor version, or exact version
