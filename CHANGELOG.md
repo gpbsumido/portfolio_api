@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-16 - version 2.0.1
+
+- scaffold `src/` directory structure: `config/`, `middleware/`, `shared/` (errors, types, utils), and 17 feature modules under `modules/`
+- each directory has an empty barrel `index.ts` for future exports
+- `src/index.ts` entry point with architecture documentation
+
 ## 2026-07-16 - version 2.0.0
 
 - add TypeScript toolchain alongside existing JS: `typescript`, `ts-node`, type definitions for all dependencies
