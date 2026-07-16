@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-16 - version 2.0.2
+
+- `src/shared/errors/AppError.ts`: base `AppError` class and subclasses — `NotFoundError` (404), `ValidationError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `ConflictError` (409), `RateLimitError` (429)
+- `src/middleware/errorHandler.ts`: global error handler that catches `AppError`, `ZodError`, auth errors, and unknown errors with consistent JSON responses
+
 ## 2026-07-16 - version 2.0.1
 
 - scaffold `src/` directory structure: `config/`, `middleware/`, `shared/` (errors, types, utils), and 17 feature modules under `modules/`
