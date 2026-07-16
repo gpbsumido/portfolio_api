@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-16 - version 2.0.0
+
+- add TypeScript toolchain alongside existing JS: `typescript`, `ts-node`, type definitions for all dependencies
+- `tsconfig.json`: strict mode, ES2022 target, NodeNext module resolution, output to `dist/`
+- new `dev:ts` and `build` scripts in `package.json`
+- `dist/` added to `.gitignore`
+
 ## 2026-07-07 - version 1.5.11
 
 - `routes/vitals.js`: added `buildVersionConditions` helper and `mode` query param support (`major`, `minor`, or exact match) to `GET /summary`, `GET /by-page`, and `GET /by-version` endpoints — replaces the old semver "from version onwards" filter with scoped filtering by major version, minor version, or exact version

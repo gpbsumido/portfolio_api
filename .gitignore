@@ -2,6 +2,9 @@
 node_modules/
 npm-debug.log*
 
+# TypeScript build output
+dist/
+
 # Python
 __pycache__/
 *.py[cod]
