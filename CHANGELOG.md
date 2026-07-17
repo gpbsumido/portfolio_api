@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-17 - version 2.6.1
+
+- Integration tests for health, vitals, and profiles endpoints using supertest
+- Extract `src/app.ts` from `src/index.ts` so the Express app is importable for testing
+- Health: verify ok/degraded status, readiness probe, shutdown behavior
+- Vitals: POST ingestion, Zod validation rejection, GET summary/versions with mocked auth
+- Profiles: GET /me, POST /setup with username validation, discover pagination, public profile lookup
+
+## 2026-07-17 - version 2.6.0
+
+- Replace Jest with Vitest for TypeScript-native testing (`vitest.config.ts`, test scripts)
+- `src/shared/testing/setup.ts`: pool cleanup, `src/shared/testing/factories.ts`: test data factories for users, posts, events, vitals, profiles
+- Migrate `tests/fantasy.test.js` → `src/modules/f1/fantasyScoring.test.ts` with vitest imports
+- `src/middleware/errorHandler.test.ts`: unit tests for AppError, ZodError, auth errors, and unknown error handling
+
 ## 2026-07-17 - version 2.5.1
 
 - Remove all legacy JavaScript source files: 19 route files, 3 middleware files, 6 utility files, schemas, constants, and `server.js`
