@@ -14,6 +14,8 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { s3, S3_BUCKET, CDN_BASE } from '../../config/s3.js';
 import {
+  type ProcessedImage,
+  type ProcessedVideo,
   processImage,
   processVideo,
   ALLOWED_VIDEO_MIME,
@@ -165,7 +167,7 @@ export class PostsController {
 
           if (detected && ALLOWED_VIDEO_MIME.has(detected.mime)) {
             // ── video file ─────────────────────────────────────────────────
-            let vidProcessed;
+            let vidProcessed: ProcessedVideo;
             try {
               vidProcessed = await processVideo(fileBuffer);
             } catch (vidErr: any) {
@@ -197,7 +199,7 @@ export class PostsController {
             mediaRows.push(mediaRow);
           } else {
             // ── image file ─────────────────────────────────────────────────
-            let processed;
+            let processed: ProcessedImage;
             try {
               processed = await processImage(fileBuffer);
             } catch (imgErr: any) {

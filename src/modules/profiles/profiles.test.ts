@@ -56,9 +56,12 @@ vi.mock('../../shared/utils/logger.js', () => ({
 }));
 
 import { pool } from '../../config/database.js';
-import { db } from '../../config/drizzle/index.js';
+import { db as _db } from '../../config/drizzle/index.js';
 import { errorHandler } from '../../middleware/errorHandler.js';
 import profilesRoutes from './routes.js';
+
+// Cast to any so mock chain methods (limit, returning, etc.) don't conflict with Drizzle types
+const db = _db as any;
 
 function createApp() {
   const app = express();
