@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-17 - version 2.6.1
+
+- Integration tests for health, vitals, and profiles endpoints using supertest
+- Extract `src/app.ts` from `src/index.ts` so the Express app is importable for testing
+- Health: verify ok/degraded status, readiness probe, shutdown behavior
+- Vitals: POST ingestion, Zod validation rejection, GET summary/versions with mocked auth
+- Profiles: GET /me, POST /setup with username validation, discover pagination, public profile lookup
+
 ## 2026-07-17 - version 2.6.0
 
 - Replace Jest with Vitest for TypeScript-native testing (`vitest.config.ts`, test scripts)
