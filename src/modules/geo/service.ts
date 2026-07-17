@@ -1,10 +1,5 @@
 import type { GeoLocation, IpApiResponse } from './types.js';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { getCachedData, CACHE_TTL } = require('../../../utils/cache') as {
-  getCachedData: <T>(key: string, fetchFn: () => Promise<T>, ttl?: number) => Promise<T>;
-  CACHE_TTL: { SHORT: number; MEDIUM: number; LONG: number };
-};
+import { getCachedData, CACHE_TTL } from '../../shared/utils/cache.js';
 
 export class GeoService {
   async lookup(ip: string): Promise<GeoLocation> {
