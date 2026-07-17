@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '../../config/env.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('google-auth');
 import {
   db,
   registerWatch,
@@ -20,7 +23,7 @@ function enqueueForUser(userId: string, fn: () => Promise<void>): Promise<void> 
   const curr = prev
     .then(() => fn())
     .catch((err: Error) => {
-      console.error(`[googleWebhook] handler error for ${userId}:`, err.message);
+      log.error({ err, userId }, 'webhook handler error');
     });
   userQueues.set(userId, curr);
   curr.finally(() => {
@@ -40,7 +43,7 @@ export class GoogleAuthController {
         res.json({ connected: false });
       }
     } catch (err: any) {
-      console.error('[google] GET /auth/status failed:', err.message);
+      log.error({ err }, 'GET /auth/status failed');
       res.status(500).json({ error: 'Failed to check connection status' });
     }
   }
@@ -67,7 +70,7 @@ export class GoogleAuthController {
       });
       res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
     } catch (err: any) {
-      console.error('[google] GET /auth/url failed:', err.message);
+      log.error({ err }, 'GET /auth/url failed');
       res.status(500).json({ error: 'Failed to generate authorization URL' });
     }
   }
@@ -79,13 +82,13 @@ export class GoogleAuthController {
     const origin = parsed?.origin ?? env.FRONTEND_URL;
 
     if (error) {
-      console.warn('[google] OAuth denied by user:', error);
+      log.warn({ error }, 'OAuth denied by user');
       res.redirect(`${origin}/settings?gcal=denied`);
       return;
     }
 
     if (!parsed) {
-      console.warn('[google] Invalid state param in callback');
+      log.warn('invalid state param in callback');
       res.status(400).json({ error: 'Invalid state parameter' });
       return;
     }
@@ -107,7 +110,7 @@ export class GoogleAuthController {
 
       if (!tokenRes.ok) {
         const body = await tokenRes.text();
-        console.error('[google] Token exchange failed:', body);
+        log.error({ body }, 'token exchange failed');
         res.redirect(`${origin}/settings?gcal=error`);
         return;
       }
@@ -124,12 +127,12 @@ export class GoogleAuthController {
       try {
         await registerWatch(userId);
       } catch (watchErr: any) {
-        console.error('[google] registerWatch failed after connect:', watchErr.message);
+        log.error({ err: watchErr }, 'registerWatch failed after connect');
       }
 
       res.redirect(`${origin}/settings?gcal=connected`);
     } catch (err: any) {
-      console.error('[google] Callback error:', err.message);
+      log.error({ err }, 'callback error');
       res.redirect(`${origin}/settings?gcal=error`);
     }
   }
@@ -140,12 +143,12 @@ export class GoogleAuthController {
       try {
         await stopWatch(userId);
       } catch (watchErr: any) {
-        console.warn('[google] stopWatch failed on disconnect:', watchErr.message);
+        log.warn({ err: watchErr }, 'stopWatch failed on disconnect');
       }
       await db.deleteGoogleAuth(userId);
       res.sendStatus(204);
     } catch (err: any) {
-      console.error('[google] DELETE /auth/disconnect failed:', err.message);
+      log.error({ err }, 'DELETE /auth/disconnect failed');
       res.status(500).json({ error: 'Failed to disconnect Google Calendar' });
     }
   }
@@ -168,7 +171,7 @@ export class GoogleAuthController {
       if (googleCalId) {
         const calendar = await db.getCalendarByGoogleCalId(googleCalId, userId);
         if (!calendar) {
-          console.log(`[googleWebhook] orphaned channel for googleCalId=${googleCalId} userId=${userId}`);
+          log.info({ googleCalId, userId }, 'orphaned channel');
           return;
         }
 
@@ -177,7 +180,7 @@ export class GoogleAuthController {
           calendar.syncToken,
           googleCalId,
         );
-        console.log(`[googleWebhook] ${items.length} item(s) for ${userId} calId=${googleCalId}`);
+        log.info({ count: items.length, userId, googleCalId }, 'webhook items received');
 
         await db.updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
 
@@ -186,12 +189,12 @@ export class GoogleAuthController {
 
           if (!existing) {
             if (calendar.syncMode !== 'two_way') {
-              console.log(`[googleWebhook] skipping ${item.id}: calendar is not two_way`);
+              log.info({ itemId: item.id }, 'skipping item: calendar is not two_way');
               continue;
             }
             if (item.status === 'cancelled') continue;
             const fields = fromGoogleEvent(item);
-            console.log(`[googleWebhook] importing new event ${item.id} into calendar ${calendar.id}`);
+            log.info({ itemId: item.id, calendarId: calendar.id }, 'importing new event');
             await db.createCalendarEventFromWebhook(fields, item.id, calendar.id, userId);
             continue;
           }
@@ -203,14 +206,14 @@ export class GoogleAuthController {
         if (!auth) return;
 
         const { items, nextSyncToken } = await fetchIncrementalEvents(userId, auth.sync_token);
-        console.log(`[googleWebhook] ${items.length} item(s) from incremental fetch for ${userId}`);
+        log.info({ count: items.length, userId }, 'incremental fetch items received');
 
         await db.updateSyncToken(userId, nextSyncToken);
 
         for (const item of items) {
           const existing = await db.getEventByGoogleId(item.id, userId);
           if (!existing) {
-            console.log(`[googleWebhook] skipping item ${item.id} (status=${item.status}): not in our DB`);
+            log.info({ itemId: item.id, status: item.status }, 'skipping item: not in our DB');
             continue;
           }
           await processExistingItem(item, userId, existing);

@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ForumRepository } from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('forum');
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -87,7 +90,7 @@ export class ForumController {
       const marker = await repo.createMarker(latitude, longitude, text);
       res.status(201).json(marker);
     } catch (error) {
-      console.error('Error saving marker:', (error as Error).message);
+      log.error({ err: error }, 'failed to save marker');
       next(error);
     }
   }
@@ -97,7 +100,7 @@ export class ForumController {
       const markers = await repo.getMarkers();
       res.status(200).json(markers);
     } catch (error) {
-      console.error('Error fetching markers:', (error as Error).message);
+      log.error({ err: error }, 'failed to fetch markers');
       next(error);
     }
   }

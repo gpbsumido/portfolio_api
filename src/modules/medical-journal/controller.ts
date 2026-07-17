@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { MedJournalRepository } from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('medical-journal');
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -20,7 +23,7 @@ export class MedJournalController {
       const savedEntry = await repo.saveOrUpdate(entry, userSub);
       res.status(200).json({ success: true, entry: savedEntry });
     } catch (error) {
-      console.error(error);
+      log.error({ err: error }, 'failed to save entry');
       res.status(500).json({ error: 'Failed to save entry' });
     }
   }
@@ -33,7 +36,7 @@ export class MedJournalController {
       await repo.delete(id, userSub);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error(error);
+      log.error({ err: error }, 'failed to delete entry');
       res.status(500).json({ error: 'Failed to delete entry' });
     }
   }
@@ -50,7 +53,7 @@ export class MedJournalController {
       }
       res.status(200).json({ success: true, entry });
     } catch (error) {
-      console.error(error);
+      log.error({ err: error }, 'failed to fetch entry');
       res.status(500).json({ error: 'Failed to fetch entry' });
     }
   }
@@ -69,7 +72,7 @@ export class MedJournalController {
       );
       res.status(200).json({ success: true, entries });
     } catch (error) {
-      console.error(error);
+      log.error({ err: error }, 'failed to fetch entries');
       res.status(500).json({ error: 'Failed to fetch entries' });
     }
   }

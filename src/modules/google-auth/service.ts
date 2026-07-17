@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 import { env } from '../../config/env.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
 import type { OAuthState, GoogleCalendarItem, WebhookEventFields } from './types.js';
+
+const log = createModuleLogger('google-auth');
 
 // JS utils not yet migrated — typed loosely
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -105,7 +108,7 @@ export async function processExistingItem(
   existing: any,
 ): Promise<void> {
   if (item.status === 'cancelled') {
-    console.log(`[googleWebhook] deleting event ${existing.id} (google_event_id=${item.id})`);
+    log.info({ eventId: existing.id, googleEventId: item.id }, 'deleting event');
     await db.deleteCalendarEvent(existing.id, userId);
     return;
   }
@@ -114,15 +117,16 @@ export async function processExistingItem(
   const ourUpdated = new Date(existing.updated_at);
 
   if (googleUpdated <= new Date(ourUpdated.getTime() + SYNC_BUFFER_MS)) {
-    console.log(
-      `[googleWebhook] skipping update for ${existing.id}: googleUpdated=${googleUpdated.toISOString()} ourUpdated=${ourUpdated.toISOString()} (within buffer)`,
+    log.info(
+      { eventId: existing.id, googleUpdated: googleUpdated.toISOString(), ourUpdated: ourUpdated.toISOString() },
+      'skipping update (within buffer)',
     );
     return;
   }
 
   const fields = fromGoogleEvent(item);
   if (Object.keys(fields).length > 0) {
-    console.log(`[googleWebhook] updating event ${existing.id} from Google`);
+    log.info({ eventId: existing.id }, 'updating event from Google');
     await db.updateCalendarEventFromWebhook(existing.id, fields, userId);
   }
 }

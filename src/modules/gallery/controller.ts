@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import sharp from 'sharp';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('gallery');
 import { Upload } from '@aws-sdk/lib-storage';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { s3, S3_BUCKET, CDN_BASE } from '../../config/s3.js';
@@ -87,7 +90,7 @@ export class GalleryController {
 
       res.status(201).json(savedData);
     } catch (error) {
-      console.error('Error uploading image or saving data:', error);
+      log.error({ err: error }, 'failed to upload image or save data');
       res.status(500).json({ error: 'Failed to upload image or save data.' });
     }
   }
@@ -117,7 +120,7 @@ export class GalleryController {
 
       res.status(200).json(images);
     } catch (error) {
-      console.error('Error fetching gallery items from database:', error);
+      log.error({ err: error }, 'failed to fetch gallery items');
       res.status(500).json({ error: 'Failed to fetch gallery items from database.' });
     }
   }
@@ -146,7 +149,7 @@ export class GalleryController {
 
       res.status(200).json({ message: 'Record and image deleted successfully.' });
     } catch (error) {
-      console.error('Error deleting gallery item:', error);
+      log.error({ err: error }, 'failed to delete gallery item');
       res.status(500).json({ error: 'Failed to delete record.' });
     }
   }

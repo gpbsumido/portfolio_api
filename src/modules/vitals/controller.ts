@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { VitalsRepository, VALID_METRICS, VALID_RATINGS } from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('vitals');
 
 const repo = new VitalsRepository();
 
@@ -49,7 +52,7 @@ export class VitalsController {
       });
       res.status(201).json(row);
     } catch (err: any) {
-      console.error('POST /vitals failed:', err.message);
+      log.error({ err }, 'POST /vitals failed');
       res.status(500).json({ error: 'Failed to store vital' });
     }
   }
@@ -60,7 +63,7 @@ export class VitalsController {
       const summary = await repo.getSummary(v, mode);
       res.json({ summary });
     } catch (err: any) {
-      console.error('GET /vitals/summary failed:', err.message);
+      log.error({ err }, 'GET /vitals/summary failed');
       res.status(500).json({ error: 'Failed to fetch vitals summary' });
     }
   }
@@ -71,7 +74,7 @@ export class VitalsController {
       const byPage = await repo.getByPage(v, mode);
       res.json({ byPage });
     } catch (err: any) {
-      console.error('GET /vitals/by-page failed:', err.message);
+      log.error({ err }, 'GET /vitals/by-page failed');
       res.status(500).json({ error: 'Failed to fetch vitals by page' });
     }
   }
@@ -82,7 +85,7 @@ export class VitalsController {
       const byVersion = await repo.getByVersion(v, mode);
       res.json({ byVersion });
     } catch (err: any) {
-      console.error('GET /vitals/by-version failed:', err.message);
+      log.error({ err }, 'GET /vitals/by-version failed');
       res.status(500).json({ error: 'Failed to fetch vitals by version' });
     }
   }
@@ -92,7 +95,7 @@ export class VitalsController {
       const versions = await repo.getVersions();
       res.json({ versions });
     } catch (err: any) {
-      console.error('GET /vitals/versions failed:', err.message);
+      log.error({ err }, 'GET /vitals/versions failed');
       res.status(500).json({ error: 'Failed to fetch versions' });
     }
   }

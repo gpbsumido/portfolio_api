@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { YouTubeService } from './service.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('youtube');
 
 const service = new YouTubeService();
 
@@ -15,7 +18,7 @@ export class YouTubeController {
       const videos = await service.getRecentVideos(channelId);
       res.status(200).send(videos);
     } catch (error) {
-      console.error('YouTube API Error:', error);
+      log.error({ err: error }, 'YouTube API error');
       next(error);
     }
   }

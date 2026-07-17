@@ -4,6 +4,9 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import * as repo from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('timeline');
 
 const LIMIT = 20;
 
@@ -47,7 +50,7 @@ export class TimelineController {
 
       return res.json({ posts, nextCursor });
     } catch (err: any) {
-      console.error('[timeline] GET / error:', err.message);
+      log.error({ err }, 'GET / failed');
       return res.status(500).json({ error: 'Failed to fetch timeline' });
     }
   }

@@ -3,6 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { CalendarRepository } from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('calendar');
 import {
   NotFoundError,
   ValidationError,
@@ -125,10 +128,7 @@ export class CalendarService {
           await repo.setEventGoogleId(event.id, googleEventId, userSub);
         }
       } catch (syncErr) {
-        console.error(
-          'CalendarService.createEvent Google sync failed:',
-          (syncErr as Error).message,
-        );
+        log.error({ err: syncErr }, 'createEvent Google sync failed');
       }
     }
 
@@ -174,10 +174,7 @@ export class CalendarService {
           );
         }
       } catch (syncErr) {
-        console.error(
-          'CalendarService.updateEvent Google sync failed:',
-          (syncErr as Error).message,
-        );
+        log.error({ err: syncErr }, 'updateEvent Google sync failed');
       }
     }
 
@@ -215,10 +212,7 @@ export class CalendarService {
           );
         }
       } catch (syncErr) {
-        console.error(
-          'CalendarService.deleteEvent Google sync failed:',
-          (syncErr as Error).message,
-        );
+        log.error({ err: syncErr }, 'deleteEvent Google sync failed');
       }
     }
   }
@@ -291,10 +285,7 @@ export class CalendarService {
       try {
         await this.google.stopWatchByCalId(userSub, calendar.googleCalId);
       } catch (watchErr) {
-        console.error(
-          'CalendarService.deleteCalendar stopWatchByCalId failed:',
-          (watchErr as Error).message,
-        );
+        log.error({ err: watchErr }, 'deleteCalendar stopWatchByCalId failed');
       }
     }
 
@@ -331,10 +322,7 @@ export class CalendarService {
     try {
       await this.google.registerWatch(userSub, calId);
     } catch (watchErr) {
-      console.error(
-        'CalendarService.connectGoogle registerWatch failed:',
-        (watchErr as Error).message,
-      );
+      log.error({ err: watchErr }, 'connectGoogle registerWatch failed');
     }
 
     return updated!;
@@ -351,10 +339,7 @@ export class CalendarService {
       try {
         await this.google.stopWatchByCalId(userSub, calendar.googleCalId);
       } catch (watchErr) {
-        console.error(
-          'CalendarService.disconnectGoogle stopWatchByCalId failed:',
-          (watchErr as Error).message,
-        );
+        log.error({ err: watchErr }, 'disconnectGoogle stopWatchByCalId failed');
       }
     }
 
@@ -439,10 +424,7 @@ export class CalendarService {
       this.google
         .addCalendarAclEntry(ownerSub, cal.googleCalId, email, member.role)
         .catch((err: Error) =>
-          console.warn(
-            '[calendar] addCalendarAclEntry failed (non-fatal):',
-            err.message,
-          ),
+          log.warn({ err }, 'addCalendarAclEntry failed (non-fatal)'),
         );
     }
 

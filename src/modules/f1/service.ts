@@ -1,6 +1,9 @@
 import path from 'path';
 import fs from 'fs';
 import { env } from '../../config/env.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('f1');
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires -- JS util, not yet migrated
 const requestQueue = require('../../../utils/queue') as {
@@ -31,13 +34,13 @@ export class F1Service {
       try {
         fs.mkdirSync(this.cacheDir, { recursive: true });
       } catch (err) {
-        console.error('Failed to create FastF1 cache directory:', err);
+        log.error({ err }, 'failed to create FastF1 cache directory');
       }
     }
     try {
       fs.chmodSync(this.cacheDir, '777');
     } catch (err) {
-      console.error('Failed to update cache directory permissions:', err);
+      log.error({ err }, 'failed to update cache directory permissions');
     }
   }
 
