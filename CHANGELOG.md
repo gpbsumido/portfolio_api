@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.3.2
+
+- `src/shared/utils/shutdown.ts`: graceful shutdown with SIGTERM/SIGINT handling, 30s drain timeout, pg and Knex pool cleanup
+- `src/modules/health/routes.ts`: readiness probe (`GET /ready`) returns 503 once shutdown begins
+
 ## 2026-07-17 - version 2.3.1
 
 - `src/shared/utils/cache.ts`: tag-based invalidation, updated TTL tiers (SHORT/MEDIUM/LONG/DAY), LRU cleanup on eviction
