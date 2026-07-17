@@ -9,6 +9,7 @@ export {
 export {
   cacheMiddleware,
   invalidateCacheByPrefix,
+  invalidateResponseCacheByTag,
   clearResponseCache,
 } from './cache.js';
 export { requestLogger } from './requestLogger.js';

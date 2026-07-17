@@ -1,4 +1,10 @@
-export { getCachedData, invalidateCache, clearCache, CACHE_TTL } from './cache.js';
+export {
+  getCachedData,
+  invalidateCache,
+  invalidateCacheByTag,
+  clearCache,
+  CACHE_TTL,
+} from './cache.js';
 export {
   processImage,
   processVideo,
@@ -7,3 +13,4 @@ export {
 } from './mediaProcessor.js';
 export type { ProcessedImage, ProcessedVideo } from './mediaProcessor.js';
 export { logger, createModuleLogger } from './logger.js';
+export { setupGracefulShutdown, isShutdown } from './shutdown.js';

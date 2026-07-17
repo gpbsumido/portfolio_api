@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-17 - version 2.3.2
+
+- `src/shared/utils/shutdown.ts`: graceful shutdown with SIGTERM/SIGINT handling, 30s drain timeout, pg and Knex pool cleanup
+- `src/modules/health/routes.ts`: readiness probe (`GET /ready`) returns 503 once shutdown begins
+
+## 2026-07-17 - version 2.3.1
+
+- `src/shared/utils/cache.ts`: tag-based invalidation, updated TTL tiers (SHORT/MEDIUM/LONG/DAY), LRU cleanup on eviction
+- `src/middleware/cache.ts`: typed cache options with `varyByUser`, ETag support with 304 responses, `Cache-Control` headers, tag-based response cache invalidation
+
+## 2026-07-17 - version 2.3.0
+
+- `src/config/database.ts`: explicit pool settings (max 20, idle/connection timeouts), pool event logging, slow query warnings (>100ms)
+- `src/config/drizzle/index.ts`: centralized Drizzle instance shared by posts, profiles, and follows repositories
+- `src/modules/calendar/repository.ts`: Knex pool configuration (min 2, max 10) with exported instance for shutdown
+- `src/modules/health/routes.ts`: health check endpoint returning status, uptime, DB connectivity, and version
+
 ## 2026-07-17 - version 2.2.1
 
 - `src/shared/utils/logger.ts`: pino-based structured logger with pretty-print in dev, JSON in production
