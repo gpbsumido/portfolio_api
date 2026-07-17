@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-16 - version 2.1.2
+
+- install `drizzle-orm` and `drizzle-kit`
+- `src/config/drizzle/schema.ts`: Drizzle table definitions for users, user_profiles, posts, post_media, follows with proper column types and relations
+- `src/modules/posts/`: TypeScript migration with Drizzle ORM for post CRUD, multer file uploads, image/video processing, S3 uploads
+- `src/modules/profiles/`: TypeScript migration with Drizzle ORM for profile setup, avatar upload, public/discover endpoints
+- `src/modules/follows/`: TypeScript migration with Drizzle ORM for follow/accept/reject/unfollow and follower/following lists
+- `src/modules/timeline/`: TypeScript migration with cursor-based pagination and JSON_AGG timeline query
+- `src/shared/utils/mediaProcessor.ts`: extracted typed image and video processing utilities (sharp, ffmpeg)
+- add `yarn.lock` to `.gitignore` (project uses npm)
+
 ## 2026-07-16 - version 2.1.1
 
 - install `knex` as a dependency
