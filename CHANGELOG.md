@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-17 - version 2.7.1
+
+- `knexfile.ts`: Knex migration configuration with pg connection from env vars
+- `src/migrations/000_baseline.ts`: baseline migration capturing full schema (15 tables, all indexes, triggers)
+- `package.json`: add `migrate`, `migrate:rollback`, `migrate:make` scripts
+- Existing databases should mark the baseline as already-run (see knexfile.ts comment)
+
 ## 2026-07-17 - version 2.7.0
 
 - Add Biome linter with TypeScript support (replaces ESLint which doesn't support TypeScript 7)

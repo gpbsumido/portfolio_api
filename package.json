@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -14,6 +14,9 @@
     "lint": "biome lint src/",
     "lint:fix": "biome lint src/ --fix",
     "typecheck": "tsc --noEmit",
+    "migrate": "knex migrate:latest --knexfile knexfile.ts",
+    "migrate:rollback": "knex migrate:rollback --knexfile knexfile.ts",
+    "migrate:make": "knex migrate:make --knexfile knexfile.ts -x ts",
     "prepare": "husky"
   },
   "lint-staged": {
