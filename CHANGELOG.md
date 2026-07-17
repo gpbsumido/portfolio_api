@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-17 - version 2.7.2
+
+- Remove unused dependencies left over from the overhaul: `apicache` (replaced by the custom typed cache manager), `jest` (replaced by Vitest), and `ts-node` (replaced by `tsx` for the dev server)
+
 ## 2026-07-17 - version 2.7.1
 
 - `knexfile.ts`: Knex migration configuration with pg connection from env vars
