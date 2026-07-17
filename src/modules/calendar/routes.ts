@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { CalendarController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { upsertUser } from '../../middleware/upsertUser.js';
 import { validateBody } from '../../middleware/validate.js';
 import {
   createEventSchema,
@@ -22,11 +23,9 @@ import {
 const router = Router();
 const ctrl = new CalendarController();
 
-// All calendar routes require a valid Auth0 token.
-// The JS version also uses upsertUser middleware; that middleware is not yet
-// migrated to TS so it should be applied at the app level or added here once
-// it is converted.
+// All calendar routes require a valid Auth0 token + upsert the user record.
 router.use(checkJwt);
+router.use(upsertUser);
 
 // ---------------------------------------------------------------------------
 // Calendar Events — /events

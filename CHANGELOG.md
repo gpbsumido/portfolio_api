@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-17 - version 2.5.0
+
+- `src/index.ts`: new TypeScript entry point with all module routers, global middleware (helmet, cors, compression, pino-http), error handler, and graceful shutdown
+- Wire `upsertUser` middleware into calendar, follows, posts, timeline, and profiles routes
+- Replace `ts-node` with `tsx` for dev server (TypeScript 7 compatibility)
+- Update `package.json` scripts: `start` → `node dist/index.js`, `dev` → `tsx`, add `start:legacy`
+- Update `Dockerfile` to run `npm run build` before start
+- Downgrade `@asteasolutions/zod-to-openapi` to v7 for Zod 3 compatibility
+
 ## 2026-07-17 - version 2.4.2
 
 - `src/shared/openapi/`: OpenAPI 3.1 spec generation with `@asteasolutions/zod-to-openapi`, all endpoints registered with schemas

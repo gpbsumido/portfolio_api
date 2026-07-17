@@ -29,6 +29,9 @@ RUN mkdir -p cache/fastf1
 # Copy your source code
 COPY . .
 
+# Build TypeScript
+RUN npm run build
+
 # Add wait-for-it script to handle database startup
 ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
 RUN chmod +x /wait-for-it.sh
