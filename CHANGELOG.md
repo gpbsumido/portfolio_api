@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-16 - version 2.1.1
+
+- install `knex` as a dependency
+- `src/modules/calendar/`: full TypeScript migration of the calendar module (~800 lines of JS → 2200 lines of typed TS) using Knex query builder
+  - `types.ts`: interfaces for CalendarEvent, Calendar, CalendarMember, Countdown, EventCard, plus input/filter types
+  - `repository.ts`: Knex-based data access replacing 27+ raw SQL functions from `utils/db.js` — fluent `.where()`, `.join()`, `.orderBy()`, transactions for multi-table ops
+  - `service.ts`: business logic for permissions (owner/editor/viewer), Google sync orchestration, validation
+  - `controller.ts`: HTTP handlers matching exact response shapes from the JS routes
+  - `routes.ts`: thin router with all event, calendar, sharing, card, and countdown endpoints
+
 ## 2026-07-16 - version 2.1.0
 
 - `src/modules/nba/`: full TypeScript migration of NBA and playoffs modules using raw SQL repository pattern
