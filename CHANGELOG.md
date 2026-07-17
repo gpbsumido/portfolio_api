@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.4.2
+
+- `src/shared/openapi/`: OpenAPI 3.1 spec generation with `@asteasolutions/zod-to-openapi`, all endpoints registered with schemas
+- `src/modules/docs/routes.ts`: Swagger UI at `/api/docs` and raw spec at `/api/docs/openapi.json`
+
 ## 2026-07-17 - version 2.4.1
 
 - Per-module Zod schemas for all POST/PUT endpoints across 11 modules (calendar, posts, profiles, follows, feedback, chat, vitals, medical-journal, forum, nba, gallery)
