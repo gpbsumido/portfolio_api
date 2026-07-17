@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-16 - version 2.1.3
+
+- `src/modules/f1/`: TypeScript migration — service wraps Python queue for FastF1 data, 14 route handlers including cache clear
+- `src/modules/fantasy/`: TypeScript migration — typed fantasy scoring functions for F1 qualifying/race/sprint points
+- `src/modules/gallery/`: TypeScript migration — raw SQL repository for gallery CRUD with S3 upload and sharp image processing
+- `src/modules/medical-journal/`: TypeScript migration — raw SQL repository with transaction support for entries + feedback
+- `src/modules/feedback/`: TypeScript migration — raw SQL repository with pagination, rotation filter, and search
+- `src/modules/chat/`: TypeScript migration — typed OpenAI SDK service for chat and summarization endpoints
+- `src/modules/youtube/`: TypeScript migration — RSS feed fetch service with xml2js parsing
+- `src/modules/vitals/`: TypeScript migration — raw SQL repository with PERCENTILE_CONT aggregation and version filtering
+- `src/modules/geo/`: TypeScript migration — ip-api.com lookup service with in-memory caching
+- `src/modules/google-auth/`: TypeScript migration — OAuth flow with HMAC-signed state, webhook handler with per-user queue
+- `src/modules/forum/`: TypeScript migration — raw SQL repository for table introspection, postforum CRUD, markers CRUD
+
 ## 2026-07-16 - version 2.1.2
 
 - install `drizzle-orm` and `drizzle-kit`
