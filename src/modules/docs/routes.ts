@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 
 // Import route registrations (side-effect: populates the registry)
@@ -21,6 +22,18 @@ function getSpec() {
 router.get('/openapi.json', (_req, res) => {
   res.json(getSpec());
 });
+
+// Relax CSP for Swagger UI (it needs inline scripts/styles)
+router.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+    },
+  }),
+);
 
 // GET /api/docs — Swagger UI
 router.use('/', swaggerUi.serve, swaggerUi.setup(undefined, {

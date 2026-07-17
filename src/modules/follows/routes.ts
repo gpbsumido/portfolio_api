@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { FollowsController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { upsertUser } from '../../middleware/upsertUser.js';
 import { validateParams } from '../../middleware/validate.js';
 import { followParamSchema } from './schemas.js';
 
@@ -13,6 +14,7 @@ const ctrl = new FollowsController();
 
 // All follows routes require auth
 router.use(checkJwt);
+router.use(upsertUser);
 
 // GET routes must come before parameterized routes
 router.get('/requests', (req, res, next) => ctrl.getRequests(req, res, next));
