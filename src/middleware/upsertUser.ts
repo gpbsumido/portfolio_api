@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { query } from '../config/database.js';
+import { createModuleLogger } from '../shared/utils/logger.js';
+
+const log = createModuleLogger('upsertUser');
 
 /**
  * Module-level cache: sub → email for subs seen this process lifetime.
@@ -23,9 +26,7 @@ export async function upsertUser(
     null;
 
   if (!sub || !email) {
-    console.warn(
-      '[upsertUser] email not available from JWT or BFF header — sharing will not work for this user',
-    );
+    log.warn('email not available from JWT or BFF header — sharing will not work for this user');
     return next();
   }
 
@@ -42,10 +43,7 @@ export async function upsertUser(
     );
     _seenUsers.set(sub, email);
   } catch (err) {
-    console.error(
-      '[upsertUser] DB upsert failed (non-fatal):',
-      (err as Error).message,
-    );
+    log.error({ err }, 'DB upsert failed (non-fatal)');
   }
 
   next();

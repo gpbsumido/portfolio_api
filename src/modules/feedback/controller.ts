@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { FeedbackRepository } from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('feedback');
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -26,7 +29,7 @@ export class FeedbackController {
       );
       res.status(200).json({ success: true, feedback, totalCount });
     } catch (error) {
-      console.error('Error fetching feedback:', error);
+      log.error({ err: error }, 'failed to fetch feedback');
       res.status(500).json({ error: 'Failed to fetch feedback' });
     }
   }
@@ -42,7 +45,7 @@ export class FeedbackController {
       const feedback = await repo.add({ text, rotation, journal_entry_id, user_sub: userSub });
       res.status(201).json({ success: true, feedback });
     } catch (error) {
-      console.error('Error adding feedback:', error);
+      log.error({ err: error }, 'failed to add feedback');
       res.status(500).json({ error: 'Failed to add feedback' });
     }
   }
@@ -59,7 +62,7 @@ export class FeedbackController {
       const feedback = await repo.update(id, { text, rotation, journal_entry_id, user_sub: userSub });
       res.status(200).json({ success: true, feedback });
     } catch (error: any) {
-      console.error('Error updating feedback:', error);
+      log.error({ err: error }, 'failed to update feedback');
       if (error.message === 'Feedback not found or unauthorized') {
         res.status(404).json({ error: 'Feedback not found or unauthorized' });
       } else {
@@ -74,7 +77,7 @@ export class FeedbackController {
       await repo.delete(id);
       res.status(200).json({ success: true });
     } catch (error) {
-      console.error('Error deleting feedback:', error);
+      log.error({ err: error }, 'failed to delete feedback');
       res.status(500).json({ error: 'Failed to delete feedback' });
     }
   }

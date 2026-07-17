@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-17 - version 2.2.1
+
+- `src/shared/utils/logger.ts`: pino-based structured logger with pretty-print in dev, JSON in production
+- `src/middleware/requestLogger.ts`: pino-http request/response logging with userId and timing
+- Replace all `console.log/error/warn` calls across 17 files with structured pino logging
+
 ## 2026-07-17 - version 2.2.0
 
 - `src/middleware/upsertUser.ts`: typed Auth0 user upsert middleware with per-process caching

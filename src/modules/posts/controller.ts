@@ -4,6 +4,9 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('posts');
 import path from 'path';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -130,7 +133,7 @@ export class PostsController {
         const row = await repo.insertTextPost(sub, content);
         return res.status(201).json({ ...row, media: [] });
       } catch (err: any) {
-        console.error('[posts] POST / text error:', err.message);
+        log.error({ err }, 'POST / text failed');
         return res.status(500).json({ error: 'Failed to create post' });
       }
     }
@@ -169,10 +172,7 @@ export class PostsController {
               vidProcessed = await processVideo(fileBuffer);
             } catch (vidErr: any) {
               await client.query('ROLLBACK');
-              console.error(
-                '[posts] video processing error:',
-                vidErr.message,
-              );
+              log.error({ err: vidErr }, 'video processing failed');
               return res
                 .status(400)
                 .json({ error: 'Failed to process video' });
@@ -239,7 +239,7 @@ export class PostsController {
         return res.status(201).json({ ...post, media: mediaRows });
       } catch (err: any) {
         await client.query('ROLLBACK');
-        console.error('[posts] POST / photo error:', err.message);
+        log.error({ err }, 'POST / photo failed');
         return res.status(500).json({ error: 'Failed to create post' });
       } finally {
         client.release();
@@ -309,7 +309,7 @@ export class PostsController {
 
       res.json({ posts: formattedPosts, nextCursor });
     } catch (err: any) {
-      console.error('[posts] GET /user/:username error:', err.message);
+      log.error({ err }, 'GET /user/:username failed');
       res.status(500).json({ error: 'Failed to fetch posts' });
     }
   }
@@ -327,7 +327,7 @@ export class PostsController {
       );
       res.json({ posts: formattedPosts });
     } catch (err: any) {
-      console.error('[posts] GET /discover error:', err.message);
+      log.error({ err }, 'GET /discover failed');
       res.status(500).json({ error: 'Failed to fetch discover posts' });
     }
   }
@@ -350,7 +350,7 @@ export class PostsController {
         media: mediaRows,
       });
     } catch (err: any) {
-      console.error('[posts] GET /:id error:', err.message);
+      log.error({ err }, 'GET /:id failed');
       res.status(500).json({ error: 'Failed to fetch post' });
     }
   }
@@ -388,7 +388,7 @@ export class PostsController {
 
       res.status(204).end();
     } catch (err: any) {
-      console.error('[posts] DELETE /:id error:', err.message);
+      log.error({ err }, 'DELETE /:id failed');
       res.status(500).json({ error: 'Failed to delete post' });
     }
   }

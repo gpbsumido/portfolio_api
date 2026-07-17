@@ -11,3 +11,4 @@ export {
   invalidateCacheByPrefix,
   clearResponseCache,
 } from './cache.js';
+export { requestLogger } from './requestLogger.js';

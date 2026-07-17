@@ -5,6 +5,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as repo from './repository.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('follows');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -60,7 +63,7 @@ export class FollowsController {
           .status(409)
           .json({ error: 'Follow request already exists' });
       }
-      console.error('[follows] POST /:username error:', err.message);
+      log.error({ err }, 'POST /:username failed');
       return res
         .status(500)
         .json({ error: 'Failed to send follow request' });
@@ -81,7 +84,7 @@ export class FollowsController {
       }
       return res.json(row);
     } catch (err: any) {
-      console.error('[follows] PUT /:id/accept error:', err.message);
+      log.error({ err }, 'PUT /:id/accept failed');
       return res
         .status(500)
         .json({ error: 'Failed to accept follow request' });
@@ -102,7 +105,7 @@ export class FollowsController {
       }
       return res.json(row);
     } catch (err: any) {
-      console.error('[follows] PUT /:id/reject error:', err.message);
+      log.error({ err }, 'PUT /:id/reject failed');
       return res
         .status(500)
         .json({ error: 'Failed to reject follow request' });
@@ -139,7 +142,7 @@ export class FollowsController {
       }
       return res.status(204).end();
     } catch (err: any) {
-      console.error('[follows] DELETE /:username error:', err.message);
+      log.error({ err }, 'DELETE /:username failed');
       return res.status(500).json({ error: 'Failed to unfollow user' });
     }
   }
@@ -152,7 +155,7 @@ export class FollowsController {
       const rows = await repo.getPendingRequests(followingSub);
       return res.json({ requests: rows });
     } catch (err: any) {
-      console.error('[follows] GET /requests error:', err.message);
+      log.error({ err }, 'GET /requests failed');
       return res
         .status(500)
         .json({ error: 'Failed to fetch follow requests' });
@@ -167,7 +170,7 @@ export class FollowsController {
       const rows = await repo.getFollowing(followerSub);
       return res.json({ following: rows });
     } catch (err: any) {
-      console.error('[follows] GET /following error:', err.message);
+      log.error({ err }, 'GET /following failed');
       return res
         .status(500)
         .json({ error: 'Failed to fetch following list' });
@@ -182,7 +185,7 @@ export class FollowsController {
       const rows = await repo.getFollowers(followingSub);
       return res.json({ followers: rows });
     } catch (err: any) {
-      console.error('[follows] GET /followers error:', err.message);
+      log.error({ err }, 'GET /followers failed');
       return res
         .status(500)
         .json({ error: 'Failed to fetch followers list' });

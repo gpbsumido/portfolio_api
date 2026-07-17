@@ -1,6 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../shared/errors/index.js';
+import { createModuleLogger } from '../shared/utils/logger.js';
+
+const log = createModuleLogger('errorHandler');
 
 interface ErrorResponse {
   error: string;
@@ -57,7 +60,7 @@ export function errorHandler(
 
   // Unknown errors
   const isProduction = process.env.NODE_ENV === 'production';
-  console.error('Unhandled error:', err);
+  log.error({ err }, 'unhandled error');
 
   res.status(500).json({
     error: 'InternalServerError',

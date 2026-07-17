@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ChatService } from './service.js';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('chat');
 
 const service = new ChatService();
 
@@ -21,7 +24,7 @@ export class ChatController {
       const reply = await service.chat(prompt);
       res.json({ reply });
     } catch (error) {
-      console.error('ChatGPT error:', error);
+      log.error({ err: error }, 'ChatGPT request failed');
       res.status(500).json({ error: 'ChatGPT request failed' });
     }
   }
@@ -43,7 +46,7 @@ export class ChatController {
       const reply = await service.summarize(text);
       res.json({ reply });
     } catch (error) {
-      console.error('ChatGPT error:', error);
+      log.error({ err: error }, 'ChatGPT request failed');
       res.status(500).json({ error: 'ChatGPT request failed' });
     }
   }

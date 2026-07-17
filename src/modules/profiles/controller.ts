@@ -5,6 +5,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
+import { createModuleLogger } from '../../shared/utils/logger.js';
+
+const log = createModuleLogger('profiles');
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { Upload } from '@aws-sdk/lib-storage';
 import { s3, S3_BUCKET, CDN_BASE } from '../../config/s3.js';
@@ -135,7 +138,7 @@ export class ProfilesController {
         .webp({ quality: 85 })
         .toBuffer();
     } catch (err: any) {
-      console.error('[profiles] avatar sharp error:', err.message);
+      log.error({ err }, 'avatar sharp error');
       return res.status(400).json({ error: 'Failed to process image' });
     }
 
@@ -146,7 +149,7 @@ export class ProfilesController {
     try {
       avatarUrl = await s3Upload(avatarBuffer, key, 'image/webp');
     } catch (err: any) {
-      console.error('[profiles] avatar S3 upload error:', err.message);
+      log.error({ err }, 'avatar S3 upload failed');
       return res.status(500).json({ error: 'Failed to upload avatar' });
     }
 
@@ -155,7 +158,7 @@ export class ProfilesController {
       if (!row) return res.status(404).json({ error: 'Profile not set up yet' });
       res.json(row);
     } catch (err: any) {
-      console.error('[profiles] avatar DB update error:', err.message);
+      log.error({ err }, 'avatar DB update failed');
       res.status(500).json({ error: 'Failed to save avatar URL' });
     }
   }
@@ -169,7 +172,7 @@ export class ProfilesController {
         return res.status(404).json({ error: 'Profile not set up yet' });
       res.json(profile);
     } catch (err: any) {
-      console.error('[profiles] GET /me error:', err.message);
+      log.error({ err }, 'GET /me failed');
       res.status(500).json({ error: 'Failed to fetch profile' });
     }
   }
@@ -209,7 +212,7 @@ export class ProfilesController {
 
       res.json(row);
     } catch (err: any) {
-      console.error('[profiles] PUT /me error:', err.message);
+      log.error({ err }, 'PUT /me failed');
       res.status(500).json({ error: 'Failed to update profile' });
     }
   }
@@ -244,7 +247,7 @@ export class ProfilesController {
         }
         return res.status(409).json({ error: 'Username already taken' });
       }
-      console.error('[profiles] POST /setup error:', err.message);
+      log.error({ err }, 'POST /setup failed');
       res.status(500).json({ error: 'Failed to create profile' });
     }
   }
@@ -262,7 +265,7 @@ export class ProfilesController {
         hasMore: rows.length === limit,
       });
     } catch (err: any) {
-      console.error('[profiles] GET /discover error:', err.message);
+      log.error({ err }, 'GET /discover failed');
       res.status(500).json({ error: 'Failed to fetch discover list' });
     }
   }
@@ -290,7 +293,7 @@ export class ProfilesController {
           isOwn || !viewerSub ? null : (profile.follow_status ?? 'none'),
       });
     } catch (err: any) {
-      console.error('[profiles] GET /:username error:', err.message);
+      log.error({ err }, 'GET /:username failed');
       res.status(500).json({ error: 'Failed to fetch profile' });
     }
   }

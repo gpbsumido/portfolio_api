@@ -6,3 +6,4 @@ export {
   ALLOWED_VIDEO_MIME,
 } from './mediaProcessor.js';
 export type { ProcessedImage, ProcessedVideo } from './mediaProcessor.js';
+export { logger, createModuleLogger } from './logger.js';
