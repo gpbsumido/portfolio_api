@@ -1,5 +1,8 @@
 # Base image with Node + Python
-FROM node:18-bullseye
+FROM node:22-bullseye
+
+# Enable corepack for pnpm
+RUN corepack enable
 
 # Install Python and required system dependencies
 RUN apt-get update && \
@@ -16,8 +19,8 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy package files & install Node dependencies
-COPY package*.json ./
-RUN npm install
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Copy Python requirements & install them
 COPY requirements.txt ./
@@ -30,7 +33,7 @@ RUN mkdir -p cache/fastf1
 COPY . .
 
 # Build TypeScript
-RUN npm run build
+RUN pnpm run build
 
 # Add wait-for-it script to handle database startup
 ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
@@ -40,4 +43,4 @@ RUN chmod +x /wait-for-it.sh
 EXPOSE ${PORT:-3001}
 
 # Start command that waits for database
-CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- npm start"] 
+CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- pnpm start"]
