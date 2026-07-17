@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '../../config/env.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('google-auth');
 import {
@@ -33,7 +34,7 @@ function enqueueForUser(userId: string, fn: () => Promise<void>): Promise<void> 
 }
 
 export class GoogleAuthController {
-  async getStatus(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     const userId = (req as any).auth.payload.sub as string;
     try {
       const auth = await db.getGoogleAuth(userId);
@@ -43,21 +44,19 @@ export class GoogleAuthController {
         res.json({ connected: false });
       }
     } catch (err: any) {
-      log.error({ err }, 'GET /auth/status failed');
-      res.status(500).json({ error: 'Failed to check connection status' });
+      next(err);
     }
   }
 
-  async getAuthUrl(req: Request, res: Response, _next: NextFunction): Promise<void> {
-    const userId = (req as any).auth.payload.sub as string;
-    const origin = req.query.origin as string | undefined;
-
-    if (!origin || !ALLOWED_ORIGINS.has(origin)) {
-      res.status(400).json({ error: 'Missing or invalid origin' });
-      return;
-    }
-
+  async getAuthUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const userId = (req as any).auth.payload.sub as string;
+      const origin = req.query.origin as string | undefined;
+
+      if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+        throw new ValidationError('Missing or invalid origin');
+      }
+
       const state = buildState(userId, origin);
       const params = new URLSearchParams({
         client_id: env.GOOGLE_CLIENT_ID!,
@@ -70,12 +69,11 @@ export class GoogleAuthController {
       });
       res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
     } catch (err: any) {
-      log.error({ err }, 'GET /auth/url failed');
-      res.status(500).json({ error: 'Failed to generate authorization URL' });
+      next(err);
     }
   }
 
-  async handleCallback(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async handleCallback(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { code, state, error } = req.query as Record<string, string>;
 
     const parsed = verifyState(state);
@@ -89,8 +87,7 @@ export class GoogleAuthController {
 
     if (!parsed) {
       log.warn('invalid state param in callback');
-      res.status(400).json({ error: 'Invalid state parameter' });
-      return;
+      return next(new ValidationError('Invalid state parameter'));
     }
 
     const { userId } = parsed;
@@ -137,7 +134,7 @@ export class GoogleAuthController {
     }
   }
 
-  async disconnect(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async disconnect(req: Request, res: Response, next: NextFunction): Promise<void> {
     const userId = (req as any).auth.payload.sub as string;
     try {
       try {
@@ -148,8 +145,7 @@ export class GoogleAuthController {
       await db.deleteGoogleAuth(userId);
       res.sendStatus(204);
     } catch (err: any) {
-      log.error({ err }, 'DELETE /auth/disconnect failed');
-      res.status(500).json({ error: 'Failed to disconnect Google Calendar' });
+      next(err);
     }
   }
 

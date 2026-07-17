@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ForumRepository } from './repository.js';
+import { NotFoundError, ValidationError } from '../../shared/errors/AppError.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 
 const log = createModuleLogger('forum');
@@ -32,15 +33,14 @@ export class ForumController {
   }
 
   async getForumPosts(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const page = parseInt(req.query.page as string, 10) || 1;
-    const limit = parseInt(req.query.limit as string, 10) || 20;
-
-    if (page < 1 || limit < 1) {
-      res.status(400).json({ error: 'page and limit must be positive integers' });
-      return;
-    }
-
     try {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 20;
+
+      if (page < 1 || limit < 1) {
+        throw new ValidationError('page and limit must be positive integers');
+      }
+
       const { data, totalCount } = await repo.getForumPosts(page, limit);
       res.status(200).json({
         data,
@@ -61,11 +61,7 @@ export class ForumController {
       const username = (req as any).auth.payload.sub as string;
 
       if (!title || !text) {
-        res.status(400).json({
-          error: 'Missing required fields',
-          required: ['title', 'text'],
-        });
-        return;
+        throw new ValidationError('Missing required fields: title, text');
       }
 
       const post = await repo.createForumPost(title, text, username);
@@ -80,11 +76,7 @@ export class ForumController {
       const { latitude, longitude, text } = req.body;
 
       if (!latitude || !longitude || !text) {
-        res.status(400).json({
-          error: 'Missing required fields',
-          required: ['latitude', 'longitude', 'text'],
-        });
-        return;
+        throw new ValidationError('Missing required fields: latitude, longitude, text');
       }
 
       const marker = await repo.createMarker(latitude, longitude, text);
@@ -111,8 +103,7 @@ export class ForumController {
       const deleted = await repo.deleteMarker(id);
 
       if (!deleted) {
-        res.status(404).json({ error: 'Marker not found' });
-        return;
+        throw new NotFoundError('Marker not found');
       }
 
       res.status(200).json({ message: 'Marker deleted successfully', deleted });

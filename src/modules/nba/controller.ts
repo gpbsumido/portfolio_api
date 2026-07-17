@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { NbaService } from './service.js';
-import { ValidationError } from '../../shared/errors/index.js';
+import { ValidationError, UnauthorizedError } from '../../shared/errors/index.js';
 import { env } from '../../config/env.js';
 
 const service = new NbaService();
@@ -122,7 +122,7 @@ export class NbaController {
       const season = parseSeason(req.params.season);
       const secret = env.PLAYOFFS_ADMIN_SECRET;
       if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
-        return res.status(401).json({ error: 'Unauthorized' });
+        throw new UnauthorizedError();
       }
       const { picks } = req.body;
       if (!isPlainObject(picks)) {

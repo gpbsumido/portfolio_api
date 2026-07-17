@@ -1,47 +1,40 @@
 import type { Request, Response, NextFunction } from 'express';
 import { VitalsRepository, VALID_METRICS, VALID_RATINGS } from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('vitals');
 
 const repo = new VitalsRepository();
 
 export class VitalsController {
-  async ingest(req: Request, res: Response, _next: NextFunction): Promise<void> {
-    const {
-      metric,
-      value,
-      rating,
-      page,
-      nav_type,
-      app_version = 'unknown',
-    } = req.body;
-
-    if (!metric || value === undefined || value === null || !rating || !page) {
-      res.status(400).json({ error: 'metric, value, rating, and page are required' });
-      return;
-    }
-
-    if (!VALID_METRICS.has(metric)) {
-      res.status(400).json({
-        error: `metric must be one of: ${[...VALID_METRICS].join(', ')}`,
-      });
-      return;
-    }
-
-    if (!VALID_RATINGS.has(rating)) {
-      res.status(400).json({
-        error: `rating must be one of: ${[...VALID_RATINGS].join(', ')}`,
-      });
-      return;
-    }
-
-    if (typeof value !== 'number') {
-      res.status(400).json({ error: 'value must be a number' });
-      return;
-    }
-
+  async ingest(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const {
+        metric,
+        value,
+        rating,
+        page,
+        nav_type,
+        app_version = 'unknown',
+      } = req.body;
+
+      if (!metric || value === undefined || value === null || !rating || !page) {
+        throw new ValidationError('metric, value, rating, and page are required');
+      }
+
+      if (!VALID_METRICS.has(metric)) {
+        throw new ValidationError(`metric must be one of: ${[...VALID_METRICS].join(', ')}`);
+      }
+
+      if (!VALID_RATINGS.has(rating)) {
+        throw new ValidationError(`rating must be one of: ${[...VALID_RATINGS].join(', ')}`);
+      }
+
+      if (typeof value !== 'number') {
+        throw new ValidationError('value must be a number');
+      }
+
       const row = await repo.insert({
         metric,
         value,
@@ -52,51 +45,46 @@ export class VitalsController {
       });
       res.status(201).json(row);
     } catch (err: any) {
-      log.error({ err }, 'POST /vitals failed');
-      res.status(500).json({ error: 'Failed to store vital' });
+      next(err);
     }
   }
 
-  async getSummary(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async getSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { v, mode } = req.query as Record<string, string>;
     try {
       const summary = await repo.getSummary(v, mode);
       res.json({ summary });
     } catch (err: any) {
-      log.error({ err }, 'GET /vitals/summary failed');
-      res.status(500).json({ error: 'Failed to fetch vitals summary' });
+      next(err);
     }
   }
 
-  async getByPage(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async getByPage(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { v, mode } = req.query as Record<string, string>;
     try {
       const byPage = await repo.getByPage(v, mode);
       res.json({ byPage });
     } catch (err: any) {
-      log.error({ err }, 'GET /vitals/by-page failed');
-      res.status(500).json({ error: 'Failed to fetch vitals by page' });
+      next(err);
     }
   }
 
-  async getByVersion(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async getByVersion(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { v, mode } = req.query as Record<string, string>;
     try {
       const byVersion = await repo.getByVersion(v, mode);
       res.json({ byVersion });
     } catch (err: any) {
-      log.error({ err }, 'GET /vitals/by-version failed');
-      res.status(500).json({ error: 'Failed to fetch vitals by version' });
+      next(err);
     }
   }
 
-  async getVersions(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async getVersions(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const versions = await repo.getVersions();
       res.json({ versions });
     } catch (err: any) {
-      log.error({ err }, 'GET /vitals/versions failed');
-      res.status(500).json({ error: 'Failed to fetch versions' });
+      next(err);
     }
   }
 }

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { F1Service, MEMORY_ERROR_MESSAGES, requestQueue } from './service.js';
+import { AppError } from '../../shared/errors/AppError.js';
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -19,12 +20,7 @@ async function handleQueuedRoute(
     res.json(data);
   } catch (error: any) {
     if (error.message === MEMORY_ERROR_MESSAGES.QUEUE_TIMEOUT) {
-      res.status(503).json({
-        error: 'Request timeout',
-        details: 'The request took too long due to high server load.',
-        suggestion: 'Please try again later',
-      });
-      return;
+      return next(new AppError('Request timeout', 503));
     }
     next(error);
   }
@@ -115,7 +111,7 @@ export class F1Controller {
       await service.clearCache();
       res.json({ message: 'Cache cleared successfully' });
     } catch (error: any) {
-      res.status(500).json({ error: `Failed to clear cache: ${error.message}` });
+      next(error);
     }
   }
 

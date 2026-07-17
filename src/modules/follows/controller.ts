@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as repo from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { NotFoundError, ValidationError, ConflictError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('follows');
 
@@ -28,7 +29,7 @@ const usernameParamSchema = z.object({
 
 export class FollowsController {
   /** POST /api/follows/:username — send follow request */
-  async follow(req: Request, res: Response, _next: NextFunction) {
+  async follow(req: Request, res: Response, next: NextFunction) {
     const parseResult = usernameParamSchema.safeParse({
       username: param(req.params.username),
     });
@@ -37,7 +38,7 @@ export class FollowsController {
         field: e.path.join('.'),
         message: e.message,
       }));
-      return res.status(400).json({ error: 'Validation failed', details });
+      throw new ValidationError('Validation failed', details);
     }
 
     const followerSub = (req as any).auth.payload.sub as string;
@@ -46,12 +47,12 @@ export class FollowsController {
     try {
       const target = await repo.getTargetByUsername(username);
       if (!target) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new NotFoundError('User not found');
       }
       const { user_sub: followingSub, is_public } = target;
 
       if (followerSub === followingSub) {
-        return res.status(400).json({ error: 'Cannot follow yourself' });
+        throw new ValidationError('Cannot follow yourself');
       }
 
       const status = is_public ? 'accepted' : 'pending';
@@ -59,61 +60,46 @@ export class FollowsController {
       return res.status(201).json(row);
     } catch (err: any) {
       if (err.code === '23505') {
-        return res
-          .status(409)
-          .json({ error: 'Follow request already exists' });
+        throw new ConflictError('Follow request already exists');
       }
-      log.error({ err }, 'POST /:username failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to send follow request' });
+      next(err);
     }
   }
 
   /** PUT /api/follows/:id/accept */
-  async accept(req: Request, res: Response, _next: NextFunction) {
+  async accept(req: Request, res: Response, next: NextFunction) {
     const followingSub = (req as any).auth.payload.sub as string;
     const id = param(req.params.id);
 
     try {
       const row = await repo.acceptFollow(id, followingSub);
       if (!row) {
-        return res
-          .status(404)
-          .json({ error: 'Follow request not found' });
+        throw new NotFoundError('Follow request not found');
       }
       return res.json(row);
     } catch (err: any) {
-      log.error({ err }, 'PUT /:id/accept failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to accept follow request' });
+      next(err);
     }
   }
 
   /** PUT /api/follows/:id/reject */
-  async reject(req: Request, res: Response, _next: NextFunction) {
+  async reject(req: Request, res: Response, next: NextFunction) {
     const followingSub = (req as any).auth.payload.sub as string;
     const id = param(req.params.id);
 
     try {
       const row = await repo.rejectFollow(id, followingSub);
       if (!row) {
-        return res
-          .status(404)
-          .json({ error: 'Follow request not found' });
+        throw new NotFoundError('Follow request not found');
       }
       return res.json(row);
     } catch (err: any) {
-      log.error({ err }, 'PUT /:id/reject failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to reject follow request' });
+      next(err);
     }
   }
 
   /** DELETE /api/follows/:username */
-  async unfollow(req: Request, res: Response, _next: NextFunction) {
+  async unfollow(req: Request, res: Response, next: NextFunction) {
     const parseResult = usernameParamSchema.safeParse({
       username: param(req.params.username),
     });
@@ -122,7 +108,7 @@ export class FollowsController {
         field: e.path.join('.'),
         message: e.message,
       }));
-      return res.status(400).json({ error: 'Validation failed', details });
+      throw new ValidationError('Validation failed', details);
     }
 
     const followerSub = (req as any).auth.payload.sub as string;
@@ -131,24 +117,21 @@ export class FollowsController {
     try {
       const followingSub = await repo.getTargetSubByUsername(username);
       if (!followingSub) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new NotFoundError('User not found');
       }
 
       const rowCount = await repo.deleteFollow(followerSub, followingSub);
       if (rowCount === 0) {
-        return res
-          .status(404)
-          .json({ error: 'Follow relationship not found' });
+        throw new NotFoundError('Follow relationship not found');
       }
       return res.status(204).end();
     } catch (err: any) {
-      log.error({ err }, 'DELETE /:username failed');
-      return res.status(500).json({ error: 'Failed to unfollow user' });
+      next(err);
     }
   }
 
   /** GET /api/follows/requests */
-  async getRequests(req: Request, res: Response, _next: NextFunction) {
+  async getRequests(req: Request, res: Response, next: NextFunction) {
     const followingSub = (req as any).auth.payload.sub as string;
 
     try {
@@ -156,14 +139,12 @@ export class FollowsController {
       return res.json({ requests: rows });
     } catch (err: any) {
       log.error({ err }, 'GET /requests failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to fetch follow requests' });
+      next(err);
     }
   }
 
   /** GET /api/follows/following */
-  async getFollowing(req: Request, res: Response, _next: NextFunction) {
+  async getFollowing(req: Request, res: Response, next: NextFunction) {
     const followerSub = (req as any).auth.payload.sub as string;
 
     try {
@@ -171,14 +152,12 @@ export class FollowsController {
       return res.json({ following: rows });
     } catch (err: any) {
       log.error({ err }, 'GET /following failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to fetch following list' });
+      next(err);
     }
   }
 
   /** GET /api/follows/followers */
-  async getFollowers(req: Request, res: Response, _next: NextFunction) {
+  async getFollowers(req: Request, res: Response, next: NextFunction) {
     const followingSub = (req as any).auth.payload.sub as string;
 
     try {
@@ -186,9 +165,7 @@ export class FollowsController {
       return res.json({ followers: rows });
     } catch (err: any) {
       log.error({ err }, 'GET /followers failed');
-      return res
-        .status(500)
-        .json({ error: 'Failed to fetch followers list' });
+      next(err);
     }
   }
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.4.0
+
+- `src/shared/utils/response.ts`: typed response helpers — `success()`, `paginated()`, `created()` for future v2 envelope pattern
+- Standardize error handling across all 17 controllers to use AppError subclasses and `next(err)` instead of manual `res.status().json()` responses
+
 ## 2026-07-17 - version 2.3.2
 
 - `src/shared/utils/shutdown.ts`: graceful shutdown with SIGTERM/SIGINT handling, 30s drain timeout, pg and Knex pool cleanup
