@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-17 - version 2.5.1
+
+- Remove all legacy JavaScript source files: 19 route files, 3 middleware files, 6 utility files, schemas, constants, and `server.js`
+- Keep `start.js` (cron entry point), `config/database.js`, and Google Calendar utils for Railway cron job compatibility
+- Update `start.js` to load from `dist/index` instead of `server`
+
 ## 2026-07-17 - version 2.5.0
 
 - `src/index.ts`: new TypeScript entry point with all module routers, global middleware (helmet, cors, compression, pino-http), error handler, and graceful shutdown
