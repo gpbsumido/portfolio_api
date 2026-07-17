@@ -7,5 +7,5 @@ if (process.env.RUN_CRON === "true") {
       process.exit(1);
     });
 } else {
-  require("./server");
+  require("./dist/index");
 }

@@ -1,5 +1,170 @@
 # Changelog
 
+## 2026-07-17 - version 2.7.2
+
+- Remove unused dependencies left over from the overhaul: `apicache` (replaced by the custom typed cache manager), `jest` (replaced by Vitest), and `ts-node` (replaced by `tsx` for the dev server)
+
+## 2026-07-17 - version 2.7.1
+
+- `knexfile.ts`: Knex migration configuration with pg connection from env vars
+- `src/migrations/000_baseline.ts`: baseline migration capturing full schema (15 tables, all indexes, triggers)
+- `package.json`: add `migrate`, `migrate:rollback`, `migrate:make` scripts
+- Existing databases should mark the baseline as already-run (see knexfile.ts comment)
+
+## 2026-07-17 - version 2.7.0
+
+- Add Biome linter with TypeScript support (replaces ESLint which doesn't support TypeScript 7)
+- `.github/workflows/ci.yml`: CI pipeline with parallel lint, type check, test, and build jobs
+- Husky pre-commit hook with lint-staged running Biome on staged `.ts` files
+- Fix 3 lint errors: implicit `any` variables in posts controller, `forEach` return value in NBA repository
+- `package.json`: add `lint`, `lint:fix`, and `typecheck` scripts
+
+## 2026-07-17 - version 2.6.1
+
+- Integration tests for health, vitals, and profiles endpoints using supertest
+- Extract `src/app.ts` from `src/index.ts` so the Express app is importable for testing
+- Health: verify ok/degraded status, readiness probe, shutdown behavior
+- Vitals: POST ingestion, Zod validation rejection, GET summary/versions with mocked auth
+- Profiles: GET /me, POST /setup with username validation, discover pagination, public profile lookup
+
+## 2026-07-17 - version 2.6.0
+
+- Replace Jest with Vitest for TypeScript-native testing (`vitest.config.ts`, test scripts)
+- `src/shared/testing/setup.ts`: pool cleanup, `src/shared/testing/factories.ts`: test data factories for users, posts, events, vitals, profiles
+- Migrate `tests/fantasy.test.js` → `src/modules/f1/fantasyScoring.test.ts` with vitest imports
+- `src/middleware/errorHandler.test.ts`: unit tests for AppError, ZodError, auth errors, and unknown error handling
+
+## 2026-07-17 - version 2.5.1
+
+- Remove all legacy JavaScript source files: 19 route files, 3 middleware files, 6 utility files, schemas, constants, and `server.js`
+- Keep `start.js` (cron entry point), `config/database.js`, and Google Calendar utils for Railway cron job compatibility
+- Update `start.js` to load from `dist/index` instead of `server`
+
+## 2026-07-17 - version 2.5.0
+
+- `src/index.ts`: new TypeScript entry point with all module routers, global middleware (helmet, cors, compression, pino-http), error handler, and graceful shutdown
+- Wire `upsertUser` middleware into calendar, follows, posts, timeline, and profiles routes
+- Replace `ts-node` with `tsx` for dev server (TypeScript 7 compatibility)
+- Update `package.json` scripts: `start` → `node dist/index.js`, `dev` → `tsx`, add `start:legacy`
+- Update `Dockerfile` to run `npm run build` before start
+- Downgrade `@asteasolutions/zod-to-openapi` to v7 for Zod 3 compatibility
+
+## 2026-07-17 - version 2.4.2
+
+- `src/shared/openapi/`: OpenAPI 3.1 spec generation with `@asteasolutions/zod-to-openapi`, all endpoints registered with schemas
+- `src/modules/docs/routes.ts`: Swagger UI at `/api/docs` and raw spec at `/api/docs/openapi.json`
+
+## 2026-07-17 - version 2.4.1
+
+- Per-module Zod schemas for all POST/PUT endpoints across 11 modules (calendar, posts, profiles, follows, feedback, chat, vitals, medical-journal, forum, nba, gallery)
+- Wire `validateBody`/`validateParams` middleware into all route files
+
+## 2026-07-17 - version 2.4.0
+
+- `src/shared/utils/response.ts`: typed response helpers — `success()`, `paginated()`, `created()` for future v2 envelope pattern
+- Standardize error handling across all 17 controllers to use AppError subclasses and `next(err)` instead of manual `res.status().json()` responses
+
+## 2026-07-17 - version 2.3.2
+
+- `src/shared/utils/shutdown.ts`: graceful shutdown with SIGTERM/SIGINT handling, 30s drain timeout, pg and Knex pool cleanup
+- `src/modules/health/routes.ts`: readiness probe (`GET /ready`) returns 503 once shutdown begins
+
+## 2026-07-17 - version 2.3.1
+
+- `src/shared/utils/cache.ts`: tag-based invalidation, updated TTL tiers (SHORT/MEDIUM/LONG/DAY), LRU cleanup on eviction
+- `src/middleware/cache.ts`: typed cache options with `varyByUser`, ETag support with 304 responses, `Cache-Control` headers, tag-based response cache invalidation
+
+## 2026-07-17 - version 2.3.0
+
+- `src/config/database.ts`: explicit pool settings (max 20, idle/connection timeouts), pool event logging, slow query warnings (>100ms)
+- `src/config/drizzle/index.ts`: centralized Drizzle instance shared by posts, profiles, and follows repositories
+- `src/modules/calendar/repository.ts`: Knex pool configuration (min 2, max 10) with exported instance for shutdown
+- `src/modules/health/routes.ts`: health check endpoint returning status, uptime, DB connectivity, and version
+
+## 2026-07-17 - version 2.2.1
+
+- `src/shared/utils/logger.ts`: pino-based structured logger with pretty-print in dev, JSON in production
+- `src/middleware/requestLogger.ts`: pino-http request/response logging with userId and timing
+- Replace all `console.log/error/warn` calls across 17 files with structured pino logging
+
+## 2026-07-17 - version 2.2.0
+
+- `src/middleware/upsertUser.ts`: typed Auth0 user upsert middleware with per-process caching
+- `src/middleware/validate.ts`: generic Zod validation middleware — `validateBody<T>()`, `validateParams<T>()`, `validateQuery<T>()` with typed schemas
+- `src/middleware/rateLimiter.ts`: typed factory functions `createIpLimiter()` and `createUserLimiter()` with pre-configured NBA limiter
+- `src/middleware/cache.ts`: typed response cache middleware with TTL, LRU eviction, prefix invalidation, and X-Cache headers
+- `src/shared/types/express.d.ts`: global Express Request type augmentation for `auth`, `validatedBody`, `validatedQuery`
+
+## 2026-07-16 - version 2.1.3
+
+- `src/modules/f1/`: TypeScript migration — service wraps Python queue for FastF1 data, 14 route handlers including cache clear
+- `src/modules/fantasy/`: TypeScript migration — typed fantasy scoring functions for F1 qualifying/race/sprint points
+- `src/modules/gallery/`: TypeScript migration — raw SQL repository for gallery CRUD with S3 upload and sharp image processing
+- `src/modules/medical-journal/`: TypeScript migration — raw SQL repository with transaction support for entries + feedback
+- `src/modules/feedback/`: TypeScript migration — raw SQL repository with pagination, rotation filter, and search
+- `src/modules/chat/`: TypeScript migration — typed OpenAI SDK service for chat and summarization endpoints
+- `src/modules/youtube/`: TypeScript migration — RSS feed fetch service with xml2js parsing
+- `src/modules/vitals/`: TypeScript migration — raw SQL repository with PERCENTILE_CONT aggregation and version filtering
+- `src/modules/geo/`: TypeScript migration — ip-api.com lookup service with in-memory caching
+- `src/modules/google-auth/`: TypeScript migration — OAuth flow with HMAC-signed state, webhook handler with per-user queue
+- `src/modules/forum/`: TypeScript migration — raw SQL repository for table introspection, postforum CRUD, markers CRUD
+
+## 2026-07-16 - version 2.1.2
+
+- install `drizzle-orm` and `drizzle-kit`
+- `src/config/drizzle/schema.ts`: Drizzle table definitions for users, user_profiles, posts, post_media, follows with proper column types and relations
+- `src/modules/posts/`: TypeScript migration with Drizzle ORM for post CRUD, multer file uploads, image/video processing, S3 uploads
+- `src/modules/profiles/`: TypeScript migration with Drizzle ORM for profile setup, avatar upload, public/discover endpoints
+- `src/modules/follows/`: TypeScript migration with Drizzle ORM for follow/accept/reject/unfollow and follower/following lists
+- `src/modules/timeline/`: TypeScript migration with cursor-based pagination and JSON_AGG timeline query
+- `src/shared/utils/mediaProcessor.ts`: extracted typed image and video processing utilities (sharp, ffmpeg)
+- add `yarn.lock` to `.gitignore` (project uses npm)
+
+## 2026-07-16 - version 2.1.1
+
+- install `knex` as a dependency
+- `src/modules/calendar/`: full TypeScript migration of the calendar module (~800 lines of JS → 2200 lines of typed TS) using Knex query builder
+  - `types.ts`: interfaces for CalendarEvent, Calendar, CalendarMember, Countdown, EventCard, plus input/filter types
+  - `repository.ts`: Knex-based data access replacing 27+ raw SQL functions from `utils/db.js` — fluent `.where()`, `.join()`, `.orderBy()`, transactions for multi-table ops
+  - `service.ts`: business logic for permissions (owner/editor/viewer), Google sync orchestration, validation
+  - `controller.ts`: HTTP handlers matching exact response shapes from the JS routes
+  - `routes.ts`: thin router with all event, calendar, sharing, card, and countdown endpoints
+
+## 2026-07-16 - version 2.1.0
+
+- `src/modules/nba/`: full TypeScript migration of NBA and playoffs modules using raw SQL repository pattern
+  - `types.ts`: interfaces for teams, players, stats, shot charts, playoffs brackets, leaderboard
+  - `repository.ts`: NBA Stats API proxy with throttled fetch + raw SQL for playoff brackets
+  - `service.ts`: business logic layer with fantasy point calculations and bracket scoring
+  - `controller.ts`: HTTP handlers with Express 5 param typing
+  - `routes.ts`: thin router wiring all NBA + playoff endpoints
+- `src/shared/utils/cache.ts`: typed in-memory cache utility with TTL and LRU eviction
+
+## 2026-07-16 - version 2.0.3
+
+- `src/config/env.ts`: Zod schema validating all env vars at startup — crashes fast on missing required vars, typed `env` export
+- `src/config/database.ts`: typed pg Pool setup with generic `query<T>()` helper and `checkDatabaseHealth()`
+- `src/config/auth.ts`: Auth0 JWT middleware (`checkJwt`, `optionalCheckJwt`, `checkPermissions`) using typed env
+- `src/config/s3.ts`: configured S3Client export with typed bucket/CDN constants
+
+## 2026-07-16 - version 2.0.2
+
+- `src/shared/errors/AppError.ts`: base `AppError` class and subclasses — `NotFoundError` (404), `ValidationError` (400), `UnauthorizedError` (401), `ForbiddenError` (403), `ConflictError` (409), `RateLimitError` (429)
+- `src/middleware/errorHandler.ts`: global error handler that catches `AppError`, `ZodError`, auth errors, and unknown errors with consistent JSON responses
+
+## 2026-07-16 - version 2.0.1
+
+- scaffold `src/` directory structure: `config/`, `middleware/`, `shared/` (errors, types, utils), and 17 feature modules under `modules/`
+- each directory has an empty barrel `index.ts` for future exports
+- `src/index.ts` entry point with architecture documentation
+
+## 2026-07-16 - version 2.0.0
+
+- add TypeScript toolchain alongside existing JS: `typescript`, `ts-node`, type definitions for all dependencies
+- `tsconfig.json`: strict mode, ES2022 target, NodeNext module resolution, output to `dist/`
+- new `dev:ts` and `build` scripts in `package.json`
+- `dist/` added to `.gitignore`
+
 ## 2026-07-07 - version 1.5.11
 
 - `routes/vitals.js`: added `buildVersionConditions` helper and `mode` query param support (`major`, `minor`, or exact match) to `GET /summary`, `GET /by-page`, and `GET /by-version` endpoints — replaces the old semver "from version onwards" filter with scoped filtering by major version, minor version, or exact version
