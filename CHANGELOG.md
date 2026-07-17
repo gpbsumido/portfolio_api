@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-17 - version 2.8.0
+
+- Switch package manager from npm to pnpm for strict dependency resolution and faster installs
+- Remove `declaration`/`declarationMap` from tsconfig (app, not library — fixes pnpm phantom dependency errors)
+- Update Dockerfile: Node 22, corepack enable, `pnpm install --frozen-lockfile`
+- Update CI: `pnpm/action-setup`, pnpm store caching, pnpm commands
+- Add `packageManager` field pinning pnpm@10.34.5
+
 ## 2026-07-17 - version 2.7.2
 
 - Remove unused dependencies left over from the overhaul: `apicache` (replaced by the custom typed cache manager), `jest` (replaced by Vitest), and `ts-node` (replaced by `tsx` for the dev server)
