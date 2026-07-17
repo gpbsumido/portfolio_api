@@ -5,6 +5,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as repo from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('timeline');
 
@@ -12,7 +13,7 @@ const LIMIT = 20;
 
 export class TimelineController {
   /** GET /api/timeline */
-  async getTimeline(req: Request, res: Response, _next: NextFunction) {
+  async getTimeline(req: Request, res: Response, next: NextFunction) {
     const sub = (req as any).auth.payload.sub as string;
     const cursor = req.query.cursor as string | undefined;
 
@@ -20,7 +21,7 @@ export class TimelineController {
     if (cursor) {
       const d = new Date(cursor);
       if (isNaN(d.getTime())) {
-        return res.status(400).json({ error: 'Invalid cursor' });
+        throw new ValidationError('Invalid cursor');
       }
       cursorDate = d.toISOString();
     } else {
@@ -51,7 +52,7 @@ export class TimelineController {
       return res.json({ posts, nextCursor });
     } catch (err: any) {
       log.error({ err }, 'GET / failed');
-      return res.status(500).json({ error: 'Failed to fetch timeline' });
+      next(err);
     }
   }
 }

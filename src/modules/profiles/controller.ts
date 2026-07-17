@@ -6,6 +6,7 @@ import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { NotFoundError, ValidationError, ConflictError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('profiles');
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
@@ -99,35 +100,28 @@ const setupProfileSchema = z.object({
 
 export class ProfilesController {
   /** POST /api/profiles/me/avatar */
-  async uploadAvatar(req: Request, res: Response, _next: NextFunction) {
+  async uploadAvatar(req: Request, res: Response, next: NextFunction) {
     // Run multer
     await new Promise<void>((resolve, reject) => {
       avatarUpload(req as any, res as any, (err: any) => {
         if (err?.code === 'LIMIT_FILE_SIZE') {
-          res
-            .status(400)
-            .json({ error: 'Avatar must be 10 MB or smaller' });
-          return resolve();
+          return reject(new ValidationError('Avatar must be 10 MB or smaller'));
         }
         if (err) {
-          res.status(400).json({ error: err.message });
-          return resolve();
+          return reject(new ValidationError(err.message));
         }
         resolve();
       });
     });
 
-    // If response already sent by multer error handler
-    if (res.headersSent) return;
-
     const file = (req as any).file as Express.Multer.File | undefined;
-    if (!file) return res.status(400).json({ error: 'No file provided' });
+    if (!file) throw new ValidationError('No file provided');
 
     const sub = (req as any).auth.payload.sub as string;
 
     const detected = await fileTypeFromBuffer(file.buffer).catch(() => null);
     if (!detected || !ALLOWED_MIME.has(detected.mime)) {
-      return res.status(400).json({ error: 'Unsupported image type' });
+      throw new ValidationError('Unsupported image type');
     }
 
     let avatarBuffer: Buffer;
@@ -139,7 +133,7 @@ export class ProfilesController {
         .toBuffer();
     } catch (err: any) {
       log.error({ err }, 'avatar sharp error');
-      return res.status(400).json({ error: 'Failed to process image' });
+      throw new ValidationError('Failed to process image');
     }
 
     const safeKey = sub.replace(/[^a-zA-Z0-9_\-|]/g, '_');
@@ -150,42 +144,41 @@ export class ProfilesController {
       avatarUrl = await s3Upload(avatarBuffer, key, 'image/webp');
     } catch (err: any) {
       log.error({ err }, 'avatar S3 upload failed');
-      return res.status(500).json({ error: 'Failed to upload avatar' });
+      next(err);
+      return;
     }
 
     try {
       const row = await repo.updateAvatarUrl(sub, avatarUrl);
-      if (!row) return res.status(404).json({ error: 'Profile not set up yet' });
+      if (!row) throw new NotFoundError('Profile not set up yet');
       res.json(row);
     } catch (err: any) {
-      log.error({ err }, 'avatar DB update failed');
-      res.status(500).json({ error: 'Failed to save avatar URL' });
+      next(err);
     }
   }
 
   /** GET /api/profiles/me */
-  async getMe(req: Request, res: Response, _next: NextFunction) {
+  async getMe(req: Request, res: Response, next: NextFunction) {
     const sub = (req as any).auth.payload.sub as string;
     try {
       const profile = await repo.getOwnProfile(sub);
       if (!profile)
-        return res.status(404).json({ error: 'Profile not set up yet' });
+        throw new NotFoundError('Profile not set up yet');
       res.json(profile);
     } catch (err: any) {
-      log.error({ err }, 'GET /me failed');
-      res.status(500).json({ error: 'Failed to fetch profile' });
+      next(err);
     }
   }
 
   /** PUT /api/profiles/me */
-  async updateMe(req: Request, res: Response, _next: NextFunction) {
+  async updateMe(req: Request, res: Response, next: NextFunction) {
     const parseResult = updateProfileSchema.safeParse(req.body);
     if (!parseResult.success) {
       const details = parseResult.error.errors.map((e) => ({
         field: e.path.join('.'),
         message: e.message,
       }));
-      return res.status(400).json({ error: 'Validation failed', details });
+      throw new ValidationError('Validation failed', details);
     }
 
     const sub = (req as any).auth.payload.sub as string;
@@ -194,7 +187,7 @@ export class ProfilesController {
     try {
       const wasPublic = await repo.getIsPublic(sub);
       if (wasPublic === null)
-        return res.status(404).json({ error: 'Profile not set up yet' });
+        throw new NotFoundError('Profile not set up yet');
       const wasPrivate = !wasPublic;
 
       const row = await repo.updateProfile(sub, {
@@ -203,7 +196,7 @@ export class ProfilesController {
         avatar_url,
         is_public,
       });
-      if (!row) return res.status(404).json({ error: 'Profile not set up yet' });
+      if (!row) throw new NotFoundError('Profile not set up yet');
 
       // auto-accept follows if switching to public
       if (wasPrivate && row.is_public) {
@@ -212,20 +205,19 @@ export class ProfilesController {
 
       res.json(row);
     } catch (err: any) {
-      log.error({ err }, 'PUT /me failed');
-      res.status(500).json({ error: 'Failed to update profile' });
+      next(err);
     }
   }
 
   /** POST /api/profiles/setup */
-  async setup(req: Request, res: Response, _next: NextFunction) {
+  async setup(req: Request, res: Response, next: NextFunction) {
     const parseResult = setupProfileSchema.safeParse(req.body);
     if (!parseResult.success) {
       const details = parseResult.error.errors.map((e) => ({
         field: e.path.join('.'),
         message: e.message,
       }));
-      return res.status(400).json({ error: 'Validation failed', details });
+      throw new ValidationError('Validation failed', details);
     }
 
     const sub = (req as any).auth.payload.sub as string;
@@ -243,17 +235,17 @@ export class ProfilesController {
       if (err.code === '23505') {
         const detail: string = err.detail ?? '';
         if (detail.includes('user_sub')) {
-          return res.status(409).json({ error: 'Profile already set up' });
+          throw new ConflictError('Profile already set up');
         }
-        return res.status(409).json({ error: 'Username already taken' });
+        throw new ConflictError('Username already taken');
       }
       log.error({ err }, 'POST /setup failed');
-      res.status(500).json({ error: 'Failed to create profile' });
+      next(err);
     }
   }
 
   /** GET /api/profiles/discover */
-  async discover(req: Request, res: Response, _next: NextFunction) {
+  async discover(req: Request, res: Response, next: NextFunction) {
     const limit = 20;
     const offset = parseInt(req.query.offset as string, 10) || 0;
     try {
@@ -266,15 +258,15 @@ export class ProfilesController {
       });
     } catch (err: any) {
       log.error({ err }, 'GET /discover failed');
-      res.status(500).json({ error: 'Failed to fetch discover list' });
+      next(err);
     }
   }
 
   /** GET /api/profiles/:username */
-  async getByUsername(req: Request, res: Response, _next: NextFunction) {
+  async getByUsername(req: Request, res: Response, next: NextFunction) {
     const username = param(req.params.username);
     if (!USERNAME_RE.test(username)) {
-      return res.status(400).json({ error: 'Invalid username format' });
+      throw new ValidationError('Invalid username format');
     }
 
     const viewerSub =
@@ -283,7 +275,7 @@ export class ProfilesController {
     try {
       const profile = await repo.getPublicProfile(username, viewerSub);
       if (!profile)
-        return res.status(404).json({ error: 'Profile not found' });
+        throw new NotFoundError('Profile not found');
 
       const isOwn = viewerSub && viewerSub === profile.user_sub;
 
@@ -293,8 +285,7 @@ export class ProfilesController {
           isOwn || !viewerSub ? null : (profile.follow_status ?? 'none'),
       });
     } catch (err: any) {
-      log.error({ err }, 'GET /:username failed');
-      res.status(500).json({ error: 'Failed to fetch profile' });
+      next(err);
     }
   }
 }

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { FantasyService, MEMORY_ERROR_MESSAGES } from './service.js';
+import { AppError } from '../../shared/errors/AppError.js';
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -18,17 +19,7 @@ export class FantasyController {
       res.json(result);
     } catch (error: any) {
       if (error.message === MEMORY_ERROR_MESSAGES.QUEUE_TIMEOUT) {
-        res.status(503).json({
-          error: 'Request timeout',
-          details: 'The request took too long due to high server load.',
-          suggestion: 'Please try again later',
-        });
-        return;
-      }
-      // If the error came from results.error in the python script
-      if (!error.statusCode) {
-        res.status(500).json({ error: error.message });
-        return;
+        return next(new AppError('Request timeout', 503));
       }
       next(error);
     }

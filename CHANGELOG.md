@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-17 - version 2.4.2
+
+- `src/shared/openapi/`: OpenAPI 3.1 spec generation with `@asteasolutions/zod-to-openapi`, all endpoints registered with schemas
+- `src/modules/docs/routes.ts`: Swagger UI at `/api/docs` and raw spec at `/api/docs/openapi.json`
+
+## 2026-07-17 - version 2.4.1
+
+- Per-module Zod schemas for all POST/PUT endpoints across 11 modules (calendar, posts, profiles, follows, feedback, chat, vitals, medical-journal, forum, nba, gallery)
+- Wire `validateBody`/`validateParams` middleware into all route files
+
+## 2026-07-17 - version 2.4.0
+
+- `src/shared/utils/response.ts`: typed response helpers — `success()`, `paginated()`, `created()` for future v2 envelope pattern
+- Standardize error handling across all 17 controllers to use AppError subclasses and `next(err)` instead of manual `res.status().json()` responses
+
 ## 2026-07-17 - version 2.3.2
 
 - `src/shared/utils/shutdown.ts`: graceful shutdown with SIGTERM/SIGINT handling, 30s drain timeout, pg and Knex pool cleanup

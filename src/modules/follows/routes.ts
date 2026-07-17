@@ -5,6 +5,8 @@
 import { Router } from 'express';
 import { FollowsController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { validateParams } from '../../middleware/validate.js';
+import { followParamSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new FollowsController();
@@ -18,7 +20,7 @@ router.get('/following', (req, res, next) => ctrl.getFollowing(req, res, next));
 router.get('/followers', (req, res, next) => ctrl.getFollowers(req, res, next));
 
 // POST /api/follows/:username — send follow request
-router.post('/:username', (req, res, next) => ctrl.follow(req, res, next));
+router.post('/:username', validateParams(followParamSchema), (req, res, next) => ctrl.follow(req, res, next));
 
 // PUT /api/follows/:id/accept
 router.put('/:id/accept', (req, res, next) => ctrl.accept(req, res, next));

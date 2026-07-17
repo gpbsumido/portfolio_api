@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { YouTubeService } from './service.js';
+import { ValidationError } from '../../shared/errors/AppError.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 
 const log = createModuleLogger('youtube');
@@ -11,8 +12,7 @@ export class YouTubeController {
     try {
       const channelId = req.query.channel_id as string | undefined;
       if (!channelId) {
-        res.status(400).json({ error: 'channel_id query parameter is required' });
-        return;
+        throw new ValidationError('channel_id query parameter is required');
       }
 
       const videos = await service.getRecentVideos(channelId);

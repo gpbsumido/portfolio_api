@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { NbaController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { validateBody } from '../../middleware/validate.js';
+import { savePicksSchema, saveResultsSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new NbaController();
@@ -18,7 +20,7 @@ router.get('/playoffs/picks/:season', checkJwt, (req, res, next) =>
 router.get('/playoffs/picks/:season/public', (req, res, next) =>
   ctrl.getPublicPicks(req, res, next),
 );
-router.put('/playoffs/picks/:season', checkJwt, (req, res, next) =>
+router.put('/playoffs/picks/:season', checkJwt, validateBody(savePicksSchema), (req, res, next) =>
   ctrl.savePicks(req, res, next),
 );
 
@@ -26,7 +28,7 @@ router.put('/playoffs/picks/:season', checkJwt, (req, res, next) =>
 router.get('/playoffs/leaderboard/:season', (req, res, next) =>
   ctrl.getLeaderboard(req, res, next),
 );
-router.put('/playoffs/results/:season', (req, res, next) =>
+router.put('/playoffs/results/:season', validateBody(saveResultsSchema), (req, res, next) =>
   ctrl.saveResults(req, res, next),
 );
 

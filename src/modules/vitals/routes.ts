@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { VitalsController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { validateBody } from '../../middleware/validate.js';
+import { ingestVitalSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new VitalsController();
 
 // Open ingestion — no auth
-router.post('/', (req, res, next) => ctrl.ingest(req, res, next));
+router.post('/', validateBody(ingestVitalSchema), (req, res, next) => ctrl.ingest(req, res, next));
 
 // Auth required for read endpoints
 router.get('/summary', checkJwt, (req, res, next) => ctrl.getSummary(req, res, next));

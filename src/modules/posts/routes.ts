@@ -5,12 +5,14 @@
 import { Router } from 'express';
 import { PostsController } from './controller.js';
 import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
+import { validateBody } from '../../middleware/validate.js';
+import { createPostSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new PostsController();
 
 // POST /api/posts — create a post (checkJwt + upsertUser applied at app level)
-router.post('/', checkJwt, (req, res, next) =>
+router.post('/', checkJwt, validateBody(createPostSchema), (req, res, next) =>
   ctrl.createPost(req, res, next),
 );
 

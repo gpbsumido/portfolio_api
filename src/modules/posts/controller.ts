@@ -5,6 +5,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { NotFoundError, ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('posts');
 import path from 'path';
@@ -96,20 +97,18 @@ const createPostSchema = z.discriminatedUnion('type', [
 
 export class PostsController {
   /** POST /api/posts */
-  async createPost(req: Request, res: Response, _next: NextFunction) {
+  async createPost(req: Request, res: Response, next: NextFunction) {
     // Run multer first so req.body and req.files are populated
     try {
       await runMulter(req, res);
     } catch (err: any) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File too large' });
+        throw new ValidationError('File too large');
       }
       if (err.code === 'LIMIT_FILE_COUNT') {
-        return res
-          .status(400)
-          .json({ error: `Maximum ${MAX_FILES} files allowed` });
+        throw new ValidationError(`Maximum ${MAX_FILES} files allowed`);
       }
-      return res.status(400).json({ error: err.message });
+      throw new ValidationError(err.message);
     }
 
     // Zod validation (after multer so req.body is populated)
@@ -119,7 +118,7 @@ export class PostsController {
         field: e.path.join('.'),
         message: e.message,
       }));
-      return res.status(400).json({ error: 'Validation failed', details });
+      throw new ValidationError('Validation failed', details);
     }
     const validated = parseResult.data;
 
@@ -134,7 +133,8 @@ export class PostsController {
         return res.status(201).json({ ...row, media: [] });
       } catch (err: any) {
         log.error({ err }, 'POST / text failed');
-        return res.status(500).json({ error: 'Failed to create post' });
+        next(err);
+        return;
       }
     }
 
@@ -143,12 +143,10 @@ export class PostsController {
       const caption = validated.caption?.trim() || null;
       const files = (req as any).files as Express.Multer.File[] | undefined;
       if (!files || files.length === 0) {
-        return res
-          .status(400)
-          .json({ error: 'At least one file is required for a media post' });
+        throw new ValidationError('At least one file is required for a media post');
       }
       if (files.length > 10) {
-        return res.status(400).json({ error: 'Maximum 10 files allowed' });
+        throw new ValidationError('Maximum 10 files allowed');
       }
 
       const client = await (await import('../../config/database.js')).pool.connect();
@@ -173,9 +171,7 @@ export class PostsController {
             } catch (vidErr: any) {
               await client.query('ROLLBACK');
               log.error({ err: vidErr }, 'video processing failed');
-              return res
-                .status(400)
-                .json({ error: 'Failed to process video' });
+              throw new ValidationError('Failed to process video');
             }
 
             const { thumbBuffer, width, height, duration } = vidProcessed;
@@ -206,9 +202,7 @@ export class PostsController {
               processed = await processImage(fileBuffer);
             } catch (imgErr: any) {
               await client.query('ROLLBACK');
-              return res
-                .status(imgErr.status || 400)
-                .json({ error: imgErr.message });
+              throw new ValidationError(imgErr.message);
             }
 
             const { fullBuffer, thumbBuffer, blurDataUrl, width, height } =
@@ -239,18 +233,23 @@ export class PostsController {
         return res.status(201).json({ ...post, media: mediaRows });
       } catch (err: any) {
         await client.query('ROLLBACK');
-        log.error({ err }, 'POST / photo failed');
-        return res.status(500).json({ error: 'Failed to create post' });
+        if (err instanceof ValidationError) {
+          next(err);
+        } else {
+          log.error({ err }, 'POST / photo failed');
+          next(err);
+        }
+        return;
       } finally {
         client.release();
       }
     }
 
-    return res.status(400).json({ error: 'type must be "text" or "photo"' });
+    throw new ValidationError('type must be "text" or "photo"');
   }
 
   /** GET /api/posts/user/:username */
-  async getPostsByUser(req: Request, res: Response, _next: NextFunction) {
+  async getPostsByUser(req: Request, res: Response, next: NextFunction) {
     const username = param(req.params.username);
     const cursor = req.query.cursor as string | undefined;
     const LIMIT = 20;
@@ -261,7 +260,7 @@ export class PostsController {
     if (cursor) {
       const d = new Date(cursor);
       if (isNaN(d.getTime())) {
-        return res.status(400).json({ error: 'Invalid cursor' });
+        throw new ValidationError('Invalid cursor');
       }
       cursorDate = d.toISOString();
     }
@@ -270,7 +269,7 @@ export class PostsController {
       // Check visibility
       const profile = await repo.getProfileVisibility(username);
       if (!profile) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new NotFoundError('User not found');
       }
 
       if (!profile.is_public && viewerSub !== profile.user_sub) {
@@ -309,13 +308,12 @@ export class PostsController {
 
       res.json({ posts: formattedPosts, nextCursor });
     } catch (err: any) {
-      log.error({ err }, 'GET /user/:username failed');
-      res.status(500).json({ error: 'Failed to fetch posts' });
+      next(err);
     }
   }
 
   /** GET /api/posts/discover */
-  async discover(req: Request, res: Response, _next: NextFunction) {
+  async discover(req: Request, res: Response, next: NextFunction) {
     const LIMIT = 30;
     try {
       const rows = await repo.getDiscoverPosts(LIMIT);
@@ -328,17 +326,17 @@ export class PostsController {
       res.json({ posts: formattedPosts });
     } catch (err: any) {
       log.error({ err }, 'GET /discover failed');
-      res.status(500).json({ error: 'Failed to fetch discover posts' });
+      next(err);
     }
   }
 
   /** GET /api/posts/:id */
-  async getById(req: Request, res: Response, _next: NextFunction) {
+  async getById(req: Request, res: Response, next: NextFunction) {
     const id = param(req.params.id);
     try {
       const postRow = await repo.getPostById(id);
       if (!postRow) {
-        return res.status(404).json({ error: 'Post not found' });
+        throw new NotFoundError('Post not found');
       }
 
       const mediaRows = await repo.getPostMediaByPostId(id);
@@ -350,13 +348,12 @@ export class PostsController {
         media: mediaRows,
       });
     } catch (err: any) {
-      log.error({ err }, 'GET /:id failed');
-      res.status(500).json({ error: 'Failed to fetch post' });
+      next(err);
     }
   }
 
   /** DELETE /api/posts/:id */
-  async deleteById(req: Request, res: Response, _next: NextFunction) {
+  async deleteById(req: Request, res: Response, next: NextFunction) {
     const sub = (req as any).auth.payload.sub as string;
     const id = param(req.params.id);
 
@@ -366,7 +363,7 @@ export class PostsController {
 
       const rowCount = await repo.deletePost(id, sub);
       if (rowCount === 0) {
-        return res.status(404).json({ error: 'Post not found' });
+        throw new NotFoundError('Post not found');
       }
 
       // Best-effort S3 cleanup
@@ -388,8 +385,7 @@ export class PostsController {
 
       res.status(204).end();
     } catch (err: any) {
-      log.error({ err }, 'DELETE /:id failed');
-      res.status(500).json({ error: 'Failed to delete post' });
+      next(err);
     }
   }
 }

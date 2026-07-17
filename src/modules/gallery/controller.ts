@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import sharp from 'sharp';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { NotFoundError, ValidationError, ForbiddenError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('gallery');
 import { Upload } from '@aws-sdk/lib-storage';
@@ -17,24 +18,21 @@ function param(val: string | string[]): string {
 const repo = new GalleryRepository();
 
 export class GalleryController {
-  async create(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     if (!req.is('multipart/form-data')) {
-      res.status(400).json({ error: 'Content-Type must be multipart/form-data.' });
-      return;
+      throw new ValidationError('Content-Type must be multipart/form-data.');
     }
 
     const { text, description, date } = req.body as Record<string, string>;
     const file = req.file;
 
     if (!file || !text || !description || !date) {
-      res.status(400).json({ error: 'All fields are required.' });
-      return;
+      throw new ValidationError('All fields are required.');
     }
 
     const parsedDate = new Date(date);
     if (isNaN(parsedDate.getTime())) {
-      res.status(400).json({ error: 'Invalid date format.' });
-      return;
+      throw new ValidationError('Invalid date format.');
     }
 
     try {
@@ -63,8 +61,7 @@ export class GalleryController {
         outputFormat = 'webp';
         contentType = 'image/webp';
       } else {
-        res.status(400).json({ error: 'Unsupported image format.' });
-        return;
+        throw new ValidationError('Unsupported image format.');
       }
 
       const key = `gallery/${Date.now()}_${sanitizedFilename.replace(/\.[^/.]+$/, '')}.${outputFormat}`;
@@ -90,20 +87,18 @@ export class GalleryController {
 
       res.status(201).json(savedData);
     } catch (error) {
-      log.error({ err: error }, 'failed to upload image or save data');
-      res.status(500).json({ error: 'Failed to upload image or save data.' });
+      next(error);
     }
   }
 
-  async list(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { page = '1', limit = '10' } = req.query as Record<string, string>;
 
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
     if (isNaN(pageNumber) || isNaN(limitNumber) || pageNumber <= 0 || limitNumber <= 0) {
-      res.status(400).json({ error: 'Invalid page or limit parameters.' });
-      return;
+      throw new ValidationError('Invalid page or limit parameters.');
     }
 
     try {
@@ -121,11 +116,11 @@ export class GalleryController {
       res.status(200).json(images);
     } catch (error) {
       log.error({ err: error }, 'failed to fetch gallery items');
-      res.status(500).json({ error: 'Failed to fetch gallery items from database.' });
+      next(error);
     }
   }
 
-  async remove(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     const id = param(req.params.id);
     const userSub = (req as any).auth?.payload?.sub as string | undefined;
 
@@ -133,13 +128,11 @@ export class GalleryController {
       const record = await repo.findById(id);
 
       if (!record) {
-        res.status(404).json({ error: 'Record not found.' });
-        return;
+        throw new NotFoundError('Record not found.');
       }
 
       if (!userSub || record.user_sub !== userSub) {
-        res.status(403).json({ error: 'Unauthorized to delete this record.' });
-        return;
+        throw new ForbiddenError('Unauthorized to delete this record.');
       }
 
       await repo.deleteById(id);
@@ -149,8 +142,7 @@ export class GalleryController {
 
       res.status(200).json({ message: 'Record and image deleted successfully.' });
     } catch (error) {
-      log.error({ err: error }, 'failed to delete gallery item');
-      res.status(500).json({ error: 'Failed to delete record.' });
+      next(error);
     }
   }
 }
