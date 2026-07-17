@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-17 - version 2.2.0
+
+- `src/middleware/upsertUser.ts`: typed Auth0 user upsert middleware with per-process caching
+- `src/middleware/validate.ts`: generic Zod validation middleware — `validateBody<T>()`, `validateParams<T>()`, `validateQuery<T>()` with typed schemas
+- `src/middleware/rateLimiter.ts`: typed factory functions `createIpLimiter()` and `createUserLimiter()` with pre-configured NBA limiter
+- `src/middleware/cache.ts`: typed response cache middleware with TTL, LRU eviction, prefix invalidation, and X-Cache headers
+- `src/shared/types/express.d.ts`: global Express Request type augmentation for `auth`, `validatedBody`, `validatedQuery`
+
 ## 2026-07-16 - version 2.1.3
 
 - `src/modules/f1/`: TypeScript migration — service wraps Python queue for FastF1 data, 14 route handlers including cache clear
