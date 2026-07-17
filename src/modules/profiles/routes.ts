@@ -5,6 +5,8 @@
 import { Router } from 'express';
 import { ProfilesController } from './controller.js';
 import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
+import { validateBody } from '../../middleware/validate.js';
+import { setupProfileSchema, updateProfileSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new ProfilesController();
@@ -20,12 +22,12 @@ router.get('/me', checkJwt, (req, res, next) =>
 );
 
 // PUT /api/profiles/me
-router.put('/me', checkJwt, (req, res, next) =>
+router.put('/me', checkJwt, validateBody(updateProfileSchema), (req, res, next) =>
   ctrl.updateMe(req, res, next),
 );
 
 // POST /api/profiles/setup
-router.post('/setup', checkJwt, (req, res, next) =>
+router.post('/setup', checkJwt, validateBody(setupProfileSchema), (req, res, next) =>
   ctrl.setup(req, res, next),
 );
 

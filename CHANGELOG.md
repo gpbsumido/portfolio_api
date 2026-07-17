@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.4.1
+
+- Per-module Zod schemas for all POST/PUT endpoints across 11 modules (calendar, posts, profiles, follows, feedback, chat, vitals, medical-journal, forum, nba, gallery)
+- Wire `validateBody`/`validateParams` middleware into all route files
+
 ## 2026-07-17 - version 2.4.0
 
 - `src/shared/utils/response.ts`: typed response helpers — `success()`, `paginated()`, `created()` for future v2 envelope pattern

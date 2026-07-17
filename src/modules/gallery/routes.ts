@@ -2,12 +2,14 @@ import { Router } from 'express';
 import multer from 'multer';
 import { GalleryController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { validateBody } from '../../middleware/validate.js';
+import { createGalleryItemSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new GalleryController();
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post('/', checkJwt, upload.single('file'), (req, res, next) =>
+router.post('/', checkJwt, upload.single('file'), validateBody(createGalleryItemSchema), (req, res, next) =>
   ctrl.create(req, res, next),
 );
 router.get('/', (req, res, next) => ctrl.list(req, res, next));
