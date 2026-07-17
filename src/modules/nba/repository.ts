@@ -184,7 +184,7 @@ export class NbaRepository {
       VsConference: '',
       VsDivision: '',
     };
-    Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+    for (const [k, v] of Object.entries(params)) url.searchParams.append(k, v);
 
     const response = await throttledFetch(url.toString(), {
       headers: NBA_HEADERS,

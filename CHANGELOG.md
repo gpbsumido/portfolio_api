@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-17 - version 2.7.0
+
+- Add Biome linter with TypeScript support (replaces ESLint which doesn't support TypeScript 7)
+- `.github/workflows/ci.yml`: CI pipeline with parallel lint, type check, test, and build jobs
+- Husky pre-commit hook with lint-staged running Biome on staged `.ts` files
+- Fix 3 lint errors: implicit `any` variables in posts controller, `forEach` return value in NBA repository
+- `package.json`: add `lint`, `lint:fix`, and `typecheck` scripts
+
 ## 2026-07-17 - version 2.6.1
 
 - Integration tests for health, vitals, and profiles endpoints using supertest
