@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { eq, and, lt, sql, desc } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { db } from '../../config/drizzle/index.js';
 import { pool } from '../../config/database.js';
 import {
   posts,
@@ -12,8 +12,6 @@ import {
   follows,
 } from '../../config/drizzle/schema.js';
 import type { PostRow, MediaRow } from './types.js';
-
-export const db = drizzle(pool);
 
 // ── Post CRUD ──────────────────────────────────────────────────────────────
 

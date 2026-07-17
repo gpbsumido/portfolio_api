@@ -3,15 +3,13 @@
 // ---------------------------------------------------------------------------
 
 import { eq, and, desc } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { db } from '../../config/drizzle/index.js';
 import { pool } from '../../config/database.js';
 import {
   follows,
   userProfiles,
 } from '../../config/drizzle/schema.js';
 import type { FollowRow, FollowRequestItem, FollowListItem } from './types.js';
-
-export const db = drizzle(pool);
 
 // ── Lookup target by username ──────────────────────────────────────────────
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-17 - version 2.3.0
+
+- `src/config/database.ts`: explicit pool settings (max 20, idle/connection timeouts), pool event logging, slow query warnings (>100ms)
+- `src/config/drizzle/index.ts`: centralized Drizzle instance shared by posts, profiles, and follows repositories
+- `src/modules/calendar/repository.ts`: Knex pool configuration (min 2, max 10) with exported instance for shutdown
+- `src/modules/health/routes.ts`: health check endpoint returning status, uptime, DB connectivity, and version
+
 ## 2026-07-17 - version 2.2.1
 
 - `src/shared/utils/logger.ts`: pino-based structured logger with pretty-print in dev, JSON in production

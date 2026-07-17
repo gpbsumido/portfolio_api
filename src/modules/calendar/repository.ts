@@ -39,12 +39,13 @@ const connectionString =
   env.DATABASE_URL ||
   `postgresql://${env.DB_USER}:${env.DB_PASSWORD}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
 
-const db: Knex = knex({
+export const db: Knex = knex({
   client: 'pg',
   connection: {
     connectionString,
     ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   },
+  pool: { min: 2, max: 10 },
 });
 
 // ---------------------------------------------------------------------------
