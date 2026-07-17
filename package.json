@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "2.7.2",
+  "version": "2.9.0",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -42,7 +42,6 @@
     "helmet": "^7.0.0",
     "jwks-rsa": "^3.2.0",
     "knex": "^3.3.0",
-    "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.2",
     "openai": "^4.98.0",
     "p-throttle": "^4.1.1",
@@ -60,7 +59,6 @@
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/morgan": "^1.9.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",

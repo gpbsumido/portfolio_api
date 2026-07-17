@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.9.0
+
+- Architecture audit: documented layer boundary findings, inconsistent layering patterns, and recommendations
+- Remove unused `morgan` and `@types/morgan` dependencies (replaced by pino-http)
+
 ## 2026-07-17 - version 2.7.2
 
 - Remove unused dependencies left over from the overhaul: `apicache` (replaced by the custom typed cache manager), `jest` (replaced by Vitest), and `ts-node` (replaced by `tsx` for the dev server)
