@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-07-16 - version 2.1.3
+
+- `src/modules/f1/`: TypeScript migration — service wraps Python queue for FastF1 data, 14 route handlers including cache clear
+- `src/modules/fantasy/`: TypeScript migration — typed fantasy scoring functions for F1 qualifying/race/sprint points
+- `src/modules/gallery/`: TypeScript migration — raw SQL repository for gallery CRUD with S3 upload and sharp image processing
+- `src/modules/medical-journal/`: TypeScript migration — raw SQL repository with transaction support for entries + feedback
+- `src/modules/feedback/`: TypeScript migration — raw SQL repository with pagination, rotation filter, and search
+- `src/modules/chat/`: TypeScript migration — typed OpenAI SDK service for chat and summarization endpoints
+- `src/modules/youtube/`: TypeScript migration — RSS feed fetch service with xml2js parsing
+- `src/modules/vitals/`: TypeScript migration — raw SQL repository with PERCENTILE_CONT aggregation and version filtering
+- `src/modules/geo/`: TypeScript migration — ip-api.com lookup service with in-memory caching
+- `src/modules/google-auth/`: TypeScript migration — OAuth flow with HMAC-signed state, webhook handler with per-user queue
+- `src/modules/forum/`: TypeScript migration — raw SQL repository for table introspection, postforum CRUD, markers CRUD
+
+## 2026-07-16 - version 2.1.2
+
+- install `drizzle-orm` and `drizzle-kit`
+- `src/config/drizzle/schema.ts`: Drizzle table definitions for users, user_profiles, posts, post_media, follows with proper column types and relations
+- `src/modules/posts/`: TypeScript migration with Drizzle ORM for post CRUD, multer file uploads, image/video processing, S3 uploads
+- `src/modules/profiles/`: TypeScript migration with Drizzle ORM for profile setup, avatar upload, public/discover endpoints
+- `src/modules/follows/`: TypeScript migration with Drizzle ORM for follow/accept/reject/unfollow and follower/following lists
+- `src/modules/timeline/`: TypeScript migration with cursor-based pagination and JSON_AGG timeline query
+- `src/shared/utils/mediaProcessor.ts`: extracted typed image and video processing utilities (sharp, ffmpeg)
+- add `yarn.lock` to `.gitignore` (project uses npm)
+
+## 2026-07-16 - version 2.1.1
+
+- install `knex` as a dependency
+- `src/modules/calendar/`: full TypeScript migration of the calendar module (~800 lines of JS → 2200 lines of typed TS) using Knex query builder
+  - `types.ts`: interfaces for CalendarEvent, Calendar, CalendarMember, Countdown, EventCard, plus input/filter types
+  - `repository.ts`: Knex-based data access replacing 27+ raw SQL functions from `utils/db.js` — fluent `.where()`, `.join()`, `.orderBy()`, transactions for multi-table ops
+  - `service.ts`: business logic for permissions (owner/editor/viewer), Google sync orchestration, validation
+  - `controller.ts`: HTTP handlers matching exact response shapes from the JS routes
+  - `routes.ts`: thin router with all event, calendar, sharing, card, and countdown endpoints
+
+## 2026-07-16 - version 2.1.0
+
+- `src/modules/nba/`: full TypeScript migration of NBA and playoffs modules using raw SQL repository pattern
+  - `types.ts`: interfaces for teams, players, stats, shot charts, playoffs brackets, leaderboard
+  - `repository.ts`: NBA Stats API proxy with throttled fetch + raw SQL for playoff brackets
+  - `service.ts`: business logic layer with fantasy point calculations and bracket scoring
+  - `controller.ts`: HTTP handlers with Express 5 param typing
+  - `routes.ts`: thin router wiring all NBA + playoff endpoints
+- `src/shared/utils/cache.ts`: typed in-memory cache utility with TTL and LRU eviction
+
 ## 2026-07-16 - version 2.0.3
 
 - `src/config/env.ts`: Zod schema validating all env vars at startup — crashes fast on missing required vars, typed `env` export
