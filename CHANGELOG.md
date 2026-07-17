@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-17 - version 2.3.1
+
+- `src/shared/utils/cache.ts`: tag-based invalidation, updated TTL tiers (SHORT/MEDIUM/LONG/DAY), LRU cleanup on eviction
+- `src/middleware/cache.ts`: typed cache options with `varyByUser`, ETag support with 304 responses, `Cache-Control` headers, tag-based response cache invalidation
+
 ## 2026-07-17 - version 2.3.0
 
 - `src/config/database.ts`: explicit pool settings (max 20, idle/connection timeouts), pool event logging, slow query warnings (>100ms)
