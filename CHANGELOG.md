@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-17 - version 2.6.0
+
+- Replace Jest with Vitest for TypeScript-native testing (`vitest.config.ts`, test scripts)
+- `src/shared/testing/setup.ts`: pool cleanup, `src/shared/testing/factories.ts`: test data factories for users, posts, events, vitals, profiles
+- Migrate `tests/fantasy.test.js` → `src/modules/f1/fantasyScoring.test.ts` with vitest imports
+- `src/middleware/errorHandler.test.ts`: unit tests for AppError, ZodError, auth errors, and unknown error handling
+
 ## 2026-07-17 - version 2.5.1
 
 - Remove all legacy JavaScript source files: 19 route files, 3 middleware files, 6 utility files, schemas, constants, and `server.js`
