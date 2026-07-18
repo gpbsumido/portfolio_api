@@ -5,7 +5,6 @@ import { ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('google-auth');
 import {
-  db,
   registerWatch,
   stopWatch,
   fetchIncrementalEvents,
@@ -14,6 +13,14 @@ import {
   verifyState,
   fromGoogleEvent,
   processExistingItem,
+  getGoogleAuth,
+  upsertGoogleAuth,
+  deleteGoogleAuth,
+  getCalendarByGoogleCalId,
+  updateCalendar,
+  getEventByGoogleId,
+  createCalendarEventFromWebhook,
+  updateSyncToken,
 } from './service.js';
 
 // Per-user webhook queue
@@ -37,7 +44,7 @@ export class GoogleAuthController {
   async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     const userId = (req as any).auth.payload.sub as string;
     try {
-      const auth = await db.getGoogleAuth(userId);
+      const auth = await getGoogleAuth(userId);
       if (auth) {
         res.json({ connected: true, googleCalId: auth.google_cal_id });
       } else {
@@ -115,7 +122,7 @@ export class GoogleAuthController {
       const { access_token, refresh_token, expires_in } = await tokenRes.json();
       const tokenExpiry = new Date(Date.now() + expires_in * 1000);
 
-      await db.upsertGoogleAuth(userId, {
+      await upsertGoogleAuth(userId, {
         accessToken: access_token,
         refreshToken: refresh_token,
         tokenExpiry,
@@ -142,7 +149,7 @@ export class GoogleAuthController {
       } catch (watchErr: any) {
         log.warn({ err: watchErr }, 'stopWatch failed on disconnect');
       }
-      await db.deleteGoogleAuth(userId);
+      await deleteGoogleAuth(userId);
       res.sendStatus(204);
     } catch (err: any) {
       next(err);
@@ -165,7 +172,7 @@ export class GoogleAuthController {
 
     enqueueForUser(userId, async () => {
       if (googleCalId) {
-        const calendar = await db.getCalendarByGoogleCalId(googleCalId, userId);
+        const calendar = await getCalendarByGoogleCalId(googleCalId, userId);
         if (!calendar) {
           log.info({ googleCalId, userId }, 'orphaned channel');
           return;
@@ -178,10 +185,10 @@ export class GoogleAuthController {
         );
         log.info({ count: items.length, userId, googleCalId }, 'webhook items received');
 
-        await db.updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
+        await updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
 
         for (const item of items) {
-          const existing = await db.getEventByGoogleId(item.id, userId);
+          const existing = await getEventByGoogleId(item.id, userId);
 
           if (!existing) {
             if (calendar.syncMode !== 'two_way') {
@@ -191,23 +198,23 @@ export class GoogleAuthController {
             if (item.status === 'cancelled') continue;
             const fields = fromGoogleEvent(item);
             log.info({ itemId: item.id, calendarId: calendar.id }, 'importing new event');
-            await db.createCalendarEventFromWebhook(fields, item.id, calendar.id, userId);
+            await createCalendarEventFromWebhook(fields, item.id, calendar.id, userId);
             continue;
           }
 
           await processExistingItem(item, userId, existing);
         }
       } else {
-        const auth = await db.getGoogleAuth(userId);
+        const auth = await getGoogleAuth(userId);
         if (!auth) return;
 
         const { items, nextSyncToken } = await fetchIncrementalEvents(userId, auth.sync_token);
         log.info({ count: items.length, userId }, 'incremental fetch items received');
 
-        await db.updateSyncToken(userId, nextSyncToken);
+        await updateSyncToken(userId, nextSyncToken);
 
         for (const item of items) {
-          const existing = await db.getEventByGoogleId(item.id, userId);
+          const existing = await getEventByGoogleId(item.id, userId);
           if (!existing) {
             log.info({ itemId: item.id, status: item.status }, 'skipping item: not in our DB');
             continue;
