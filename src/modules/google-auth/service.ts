@@ -19,7 +19,53 @@ const { registerWatch, stopWatch, fetchIncrementalEvents } = require('../../../u
   ) => Promise<{ items: GoogleCalendarItem[]; nextSyncToken: string }>;
 };
 
-export { db, registerWatch, stopWatch, fetchIncrementalEvents };
+export { registerWatch, stopWatch, fetchIncrementalEvents };
+
+// ── Service methods wrapping DB access ────────────────────────────────────
+
+export async function getGoogleAuth(userId: string) {
+  return db.getGoogleAuth(userId);
+}
+
+export async function upsertGoogleAuth(
+  userId: string,
+  tokens: { accessToken: string; refreshToken: string; tokenExpiry: Date },
+) {
+  return db.upsertGoogleAuth(userId, tokens);
+}
+
+export async function deleteGoogleAuth(userId: string) {
+  return db.deleteGoogleAuth(userId);
+}
+
+export async function getCalendarByGoogleCalId(googleCalId: string, userId: string) {
+  return db.getCalendarByGoogleCalId(googleCalId, userId);
+}
+
+export async function updateCalendar(calendarId: string, data: { syncToken: string }, userId: string) {
+  return db.updateCalendar(calendarId, data, userId);
+}
+
+export async function getEventByGoogleId(googleEventId: string, userId: string) {
+  return db.getEventByGoogleId(googleEventId, userId);
+}
+
+export async function createCalendarEventFromWebhook(
+  fields: WebhookEventFields,
+  googleEventId: string,
+  calendarId: string,
+  userId: string,
+) {
+  return db.createCalendarEventFromWebhook(fields, googleEventId, calendarId, userId);
+}
+
+export async function getGoogleAuthForSync(userId: string) {
+  return db.getGoogleAuth(userId);
+}
+
+export async function updateSyncToken(userId: string, syncToken: string) {
+  return db.updateSyncToken(userId, syncToken);
+}
 
 const ALLOWED_ORIGINS = new Set([
   'https://paulsumido.com',
