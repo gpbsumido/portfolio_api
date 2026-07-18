@@ -11,6 +11,22 @@ import type {
 import { getCachedData } from '../../shared/utils/cache.js';
 import { NotFoundError, ValidationError } from '../../shared/errors/index.js';
 
+// ── Date calculations (not data access — belong in service, not repository) ──
+
+export function getCurrentSeason(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const seasonStartYear = now.getMonth() >= 9 ? year : year - 1;
+  const seasonEndYear = seasonStartYear + 1;
+  return `${seasonStartYear}-${seasonEndYear.toString().slice(-2)}`;
+}
+
+export function getCurrentSeasonYear(): number {
+  const now = new Date();
+  const year = now.getFullYear();
+  return now.getMonth() >= 9 ? year : year - 1;
+}
+
 // Playoff scoring constants
 const ROUND_POINTS: Record<string, number> = {
   r1: 1,
@@ -105,15 +121,17 @@ export class NbaService {
   constructor(private repo = new NbaRepository()) {}
 
   async getTeams(): Promise<PaginatedResponse<NbaTeam[]>> {
-    return getCachedData('teams', () => this.repo.fetchTeams());
+    const season = getCurrentSeason();
+    return getCachedData('teams', () => this.repo.fetchTeams(season));
   }
 
   async getPlayersByTeam(
     teamId: number,
   ): Promise<PaginatedResponse<NbaPlayer[]>> {
     if (isNaN(teamId)) throw new ValidationError('Invalid team ID');
+    const season = getCurrentSeason();
     return getCachedData(`team-players-${teamId}`, () =>
-      this.repo.fetchPlayersByTeam(teamId),
+      this.repo.fetchPlayersByTeam(teamId, season),
     );
   }
 
@@ -121,16 +139,19 @@ export class NbaService {
     playerId: number,
   ): Promise<PaginatedResponse<PlayerStats[]>> {
     if (isNaN(playerId)) throw new ValidationError('Invalid player ID');
+    const season = getCurrentSeason();
+    const seasonYear = getCurrentSeasonYear();
     return getCachedData(`player-stats-${playerId}`, () =>
-      this.repo.fetchPlayerStats(playerId),
+      this.repo.fetchPlayerStats(playerId, season, seasonYear),
     );
   }
 
   async getShotChart(playerId: number): Promise<{ data: ShotChartData }> {
     if (isNaN(playerId)) throw new ValidationError('Invalid player ID');
+    const season = getCurrentSeason();
     return getCachedData(
       `shots-${playerId}`,
-      () => this.repo.fetchShotChart(playerId),
+      () => this.repo.fetchShotChart(playerId, season),
       86400,
     );
   }
