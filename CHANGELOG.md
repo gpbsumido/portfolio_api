@@ -7,6 +7,13 @@
 - Move NBA date calculations (`getCurrentSeason`, `getCurrentSeasonYear`) from repository to service layer
 - Addresses layer boundary violations identified in the Phase 10 architecture audit
 
+## 2026-07-17 - version 2.8.1
+
+- Reduce logging rate to stay under Railway's 500 logs/sec limit
+- Silence health check, readiness probe, and favicon requests from pino-http logging
+- Suppress routine 2xx request logs in production (log at debug level, filtered by info base)
+- Keep 4xx (warn) and 5xx (error) logs flowing for diagnostics
+
 ## 2026-07-17 - version 2.8.0
 
 - Switch package manager from npm to pnpm for strict dependency resolution and faster installs
