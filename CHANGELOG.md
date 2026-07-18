@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-17 - version 2.9.0
+
+- Extract post creation transaction logic (BEGIN/COMMIT/ROLLBACK) from controller to `posts/service.ts`
+- Add named service methods for Google auth DB access — controller no longer touches `db` directly
+- Move NBA date calculations (`getCurrentSeason`, `getCurrentSeasonYear`) from repository to service layer
+- Addresses layer boundary violations identified in the Phase 10 architecture audit
+
 ## 2026-07-17 - version 2.8.0
 
 - Switch package manager from npm to pnpm for strict dependency resolution and faster installs

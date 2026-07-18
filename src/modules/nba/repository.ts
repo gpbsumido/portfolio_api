@@ -34,23 +34,8 @@ async function throttledFetch(
   return fetch(url, options);
 }
 
-function getCurrentSeason(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const seasonStartYear = now.getMonth() >= 9 ? year : year - 1;
-  const seasonEndYear = seasonStartYear + 1;
-  return `${seasonStartYear}-${seasonEndYear.toString().slice(-2)}`;
-}
-
-function getCurrentSeasonYear(): number {
-  const now = new Date();
-  const year = now.getFullYear();
-  return now.getMonth() >= 9 ? year : year - 1;
-}
-
 export class NbaRepository {
-  async fetchTeams(): Promise<PaginatedResponse<NbaTeam[]>> {
-    const season = getCurrentSeason();
+  async fetchTeams(season: string): Promise<PaginatedResponse<NbaTeam[]>> {
     const url = `https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=${season}&SeasonType=Regular+Season`;
     const response = await throttledFetch(url, { headers: NBA_HEADERS });
     const data = await response.json();
@@ -85,10 +70,11 @@ export class NbaRepository {
 
   async fetchPlayersByTeam(
     teamId: number,
+    season: string,
   ): Promise<PaginatedResponse<NbaPlayer[]>> {
     const url = new URL(`${NBA_BASE_URL}/commonteamroster`);
     url.searchParams.append('LeagueID', '00');
-    url.searchParams.append('Season', getCurrentSeason());
+    url.searchParams.append('Season', season);
     url.searchParams.append('TeamID', teamId.toString());
 
     const response = await throttledFetch(url.toString(), {
@@ -156,6 +142,8 @@ export class NbaRepository {
 
   async fetchPlayerStats(
     playerId: number,
+    season: string,
+    seasonYear: number,
   ): Promise<PaginatedResponse<PlayerStats[]>> {
     const url = new URL(`${NBA_BASE_URL}/playerdashboardbygeneralsplits`);
     const params: Record<string, string> = {
@@ -176,7 +164,7 @@ export class NbaRepository {
       PlayerID: playerId.toString(),
       PlusMinus: 'N',
       Rank: 'N',
-      Season: getCurrentSeason(),
+      Season: season,
       SeasonSegment: '',
       SeasonType: 'Regular Season',
       ShotClockRange: '',
@@ -216,7 +204,7 @@ export class NbaRepository {
     const stats: PlayerStats = {
       games_played: parseInt(get('GP')) || 0,
       player_id: playerId,
-      season: getCurrentSeasonYear(),
+      season: seasonYear,
       min: get('MIN') || '0:00',
       fgm: parseFloat(get('FGM')) || 0,
       fga: parseFloat(get('FGA')) || 0,
@@ -251,8 +239,7 @@ export class NbaRepository {
     };
   }
 
-  async fetchShotChart(playerId: number): Promise<{ data: ShotChartData }> {
-    const season = getCurrentSeason();
+  async fetchShotChart(playerId: number, season: string): Promise<{ data: ShotChartData }> {
 
     // Deterministic mock data per player (NBA blocks shotchartdetail from some envs)
     const seed = (n: number) => {
