@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "2.7.2",
+  "version": "2.8.1",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -79,6 +79,7 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
+  "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=22.0.0"
   }
