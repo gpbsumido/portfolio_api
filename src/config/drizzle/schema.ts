@@ -2,25 +2,23 @@
 // Drizzle ORM schema definitions — social modules
 // ---------------------------------------------------------------------------
 
+import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
+  boolean,
+  doublePrecision,
+  integer,
   pgTable,
   text,
   timestamp,
   uuid,
-  integer,
-  boolean,
-  doublePrecision,
 } from 'drizzle-orm/pg-core';
-import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // ── users ──────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
   sub: text('sub').primaryKey(),
   email: text('email').notNull(),
   name: text('name'),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type User = InferSelectModel<typeof users>;
@@ -36,12 +34,8 @@ export const userProfiles = pgTable('user_profiles', {
   bio: text('bio'),
   avatarUrl: text('avatar_url'),
   isPublic: boolean('is_public').default(true).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type UserProfile = InferSelectModel<typeof userProfiles>;
@@ -56,12 +50,8 @@ export const posts = pgTable('posts', {
   type: text('type').notNull(),
   caption: text('caption'),
   content: text('content'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Post = InferSelectModel<typeof posts>;
@@ -82,9 +72,7 @@ export const postMedia = pgTable('post_media', {
   mediaType: text('media_type').notNull(),
   thumbnailUrl: text('thumbnail_url'),
   duration: doublePrecision('duration'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type PostMedia = InferSelectModel<typeof postMedia>;
@@ -100,13 +88,34 @@ export const follows = pgTable('follows', {
     .notNull()
     .references(() => users.sub),
   status: text('status').notNull().default('pending'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Follow = InferSelectModel<typeof follows>;
 export type NewFollow = InferInsertModel<typeof follows>;
+
+// ── referrals ────────────────────────────────────────────────────────────────
+export const referrals = pgTable('referrals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull().unique(),
+  targetPath: text('target_path').notNull().default('/'),
+  label: text('label'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Referral = InferSelectModel<typeof referrals>;
+export type NewReferral = InferInsertModel<typeof referrals>;
+
+// ── referral_clicks ──────────────────────────────────────────────────────────
+export const referralClicks = pgTable('referral_clicks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  referralId: uuid('referral_id')
+    .notNull()
+    .references(() => referrals.id, { onDelete: 'cascade' }),
+  uaHash: text('ua_hash'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ReferralClick = InferSelectModel<typeof referralClicks>;
+export type NewReferralClick = InferInsertModel<typeof referralClicks>;

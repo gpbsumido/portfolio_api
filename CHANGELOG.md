@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-20 - version 2.9.1
+
+- Add a `referrals` module backing the work-portfolio referral-links demo: create a shareable slug (custom or generated, uniqueness enforced), resolve it, record clicks (UA stored hashed), and read click stats. Public endpoints with basic IP rate limits
+- New `referrals` and `referral_clicks` tables (migration `001_referrals`) plus Drizzle schema definitions
+
 ## 2026-07-17 - version 2.9.0
 
 - Extract post creation transaction logic (BEGIN/COMMIT/ROLLBACK) from controller to `posts/service.ts`

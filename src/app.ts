@@ -1,31 +1,30 @@
-import express from 'express';
-import cors from 'cors';
 import compression from 'compression';
+import cors from 'cors';
+import express from 'express';
 import helmet from 'helmet';
-
-import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
-
-// Module routers
-import nbaRoutes from './modules/nba/routes.js';
+import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
+import chatRoutes from './modules/chat/routes.js';
+import docsRoutes from './modules/docs/routes.js';
 import f1Routes from './modules/f1/routes.js';
 import fantasyRoutes from './modules/fantasy/routes.js';
-import galleryRoutes from './modules/gallery/routes.js';
-import medJournalRoutes from './modules/medical-journal/routes.js';
 import feedbackRoutes from './modules/feedback/routes.js';
-import chatRoutes from './modules/chat/routes.js';
-import youtubeRoutes from './modules/youtube/routes.js';
-import postsRoutes from './modules/posts/routes.js';
-import profilesRoutes from './modules/profiles/routes.js';
 import followsRoutes from './modules/follows/routes.js';
-import timelineRoutes from './modules/timeline/routes.js';
-import vitalsRoutes from './modules/vitals/routes.js';
+import forumRoutes from './modules/forum/routes.js';
+import galleryRoutes from './modules/gallery/routes.js';
 import geoRoutes from './modules/geo/routes.js';
 import googleAuthRoutes from './modules/google-auth/routes.js';
-import forumRoutes from './modules/forum/routes.js';
 import healthRoutes from './modules/health/routes.js';
-import docsRoutes from './modules/docs/routes.js';
+import medJournalRoutes from './modules/medical-journal/routes.js';
+// Module routers
+import nbaRoutes from './modules/nba/routes.js';
+import postsRoutes from './modules/posts/routes.js';
+import profilesRoutes from './modules/profiles/routes.js';
+import referralsRoutes from './modules/referrals/routes.js';
+import timelineRoutes from './modules/timeline/routes.js';
+import vitalsRoutes from './modules/vitals/routes.js';
+import youtubeRoutes from './modules/youtube/routes.js';
 
 export const app = express();
 
@@ -34,11 +33,7 @@ export const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: [
-      'https://paulsumido.com',
-      'https://develop.paulsumido.com',
-      'http://localhost:3000',
-    ],
+    origin: ['https://paulsumido.com', 'https://develop.paulsumido.com', 'http://localhost:3000'],
   }),
 );
 app.use(compression());
@@ -58,6 +53,7 @@ app.use('/api/f1', f1Routes);
 app.use('/api/fantasy', fantasyRoutes);
 app.use('/api/vitals', vitalsRoutes);
 app.use('/api/geo', geoRoutes);
+app.use('/api/referrals', referralsRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);
