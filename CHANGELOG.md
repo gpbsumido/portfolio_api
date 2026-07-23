@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-23 - version 2.13.0
+
+- Add a `search` module for Ketsup: `GET /api/search?q=...` returns matching public accounts (username or display name) and public posts (text or caption), newest first
+- Public (works for guests) and read-only, no schema change or migration. ILIKE-based for now; a pg_trgm GIN index on usernames and a tsvector column on post text are noted as a scale follow-up
+- Empty/blank queries return empty results without touching the DB
+
 ## 2026-07-23 - version 2.12.0
 
 - Add a `reposts` module for the Ketsup reposts feature: repost (`POST /api/reposts/:postId`), undo (`DELETE /api/reposts/:postId`, both idempotent), and a batch summary (`GET /api/reposts?ids=a,b,c`) returning repost counts and reposted-by-me per post
