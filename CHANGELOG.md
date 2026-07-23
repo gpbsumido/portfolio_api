@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-23 - version 2.11.0
+
+- Add a `replies` module for the Ketsup threads feature: add a reply (`POST /api/replies/:postId`, content 1-500 chars), read a post's thread oldest-first with author info (`GET /api/replies/:postId`), and a batch reply-count endpoint (`GET /api/replies?ids=a,b,c`)
+- Self-contained like the likes module: no changes to the posts read path
+- New `post_replies` table (migration `009_post_replies`, FKs cascade, index on post_id + created_at) plus a Drizzle schema definition
+
 ## 2026-07-23 - version 2.10.0
 
 - Add a `likes` module for the Ketsup likes feature: like a post (`POST /api/likes/:postId`), remove a like (`DELETE /api/likes/:postId`, both idempotent), and a batch summary endpoint (`GET /api/likes?ids=a,b,c`) returning like counts and liked-by-me per post, capped at 100 ids and skipping non-uuid ids
