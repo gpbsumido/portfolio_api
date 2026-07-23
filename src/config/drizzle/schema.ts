@@ -78,6 +78,21 @@ export const postMedia = pgTable('post_media', {
 export type PostMedia = InferSelectModel<typeof postMedia>;
 export type NewPostMedia = InferInsertModel<typeof postMedia>;
 
+// ── post_likes ─────────────────────────────────────────────────────────────
+export const postLikes = pgTable('post_likes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  postId: uuid('post_id')
+    .notNull()
+    .references(() => posts.id, { onDelete: 'cascade' }),
+  userSub: text('user_sub')
+    .notNull()
+    .references(() => users.sub),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type PostLike = InferSelectModel<typeof postLikes>;
+export type NewPostLike = InferInsertModel<typeof postLikes>;
+
 // ── follows ────────────────────────────────────────────────────────────────
 export const follows = pgTable('follows', {
   id: uuid('id').primaryKey().defaultRandom(),
