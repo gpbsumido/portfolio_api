@@ -34,6 +34,9 @@ export const userProfiles = pgTable('user_profiles', {
   bio: text('bio'),
   avatarUrl: text('avatar_url'),
   isPublic: boolean('is_public').default(true).notNull(),
+  notificationsSeenAt: timestamp('notifications_seen_at', {
+    withTimezone: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

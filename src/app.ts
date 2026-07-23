@@ -17,6 +17,7 @@ import geoRoutes from './modules/geo/routes.js';
 import googleAuthRoutes from './modules/google-auth/routes.js';
 import healthRoutes from './modules/health/routes.js';
 import likesRoutes from './modules/likes/routes.js';
+import notificationsRoutes from './modules/notifications/routes.js';
 import medJournalRoutes from './modules/medical-journal/routes.js';
 // Module routers
 import nbaRoutes from './modules/nba/routes.js';
@@ -71,6 +72,7 @@ app.use('/api/likes', likesRoutes);
 app.use('/api/replies', repliesRoutes);
 app.use('/api/reposts', repostsRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api/follows', followsRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.use('/api/google', googleAuthRoutes);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-23 - version 2.14.0
+
+- Add a `notifications` module for Ketsup: `GET /api/notifications` returns the recipient's activity feed (likes, replies, and reposts on their posts by others, plus follows of them), newest first, with an unread count; `PUT /api/notifications/seen` marks all as read
+- Pull-based: notifications are derived by joining the existing likes/replies/reposts/follows tables, so there is no notifications table and no writes were added to those modules. Read state is a single `notifications_seen_at` column
+- New migration `011_notifications_seen` (adds the column to user_profiles) plus the Drizzle schema change
+
 ## 2026-07-23 - version 2.13.0
 
 - Add a `search` module for Ketsup: `GET /api/search?q=...` returns matching public accounts (username or display name) and public posts (text or caption), newest first
