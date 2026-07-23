@@ -30,139 +30,25 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 ## API Endpoints
 
-### NBA — `/api/nba`
+The Features table above is the quick tour. For the full, always-current reference (every route, its params, and the request/response schemas) I generate live Swagger docs straight from the code so this README never drifts out of date:
 
-| Method | Path               | Description                         |
-| ------ | ------------------ | ----------------------------------- |
-| GET    | `/teams`           | Current season standings            |
-| GET    | `/players/:teamId` | Roster for a team                   |
-| GET    | `/stats/:playerId` | Player stats for the current season |
-| GET    | `/shots/:playerId` | Deterministic mock shot chart data  |
+- **Swagger UI:** `/api/docs`
+- **OpenAPI spec:** `/api/docs/openapi.json`
 
-### NBA Playoffs — `/api/nba/playoffs`
+Route groups at a glance:
 
-| Method | Path                    | Auth     | Description                                                             |
-| ------ | ----------------------- | -------- | ----------------------------------------------------------------------- |
-| GET    | `/picks/:season`        | Required | Fetch the authenticated user's bracket picks for a season               |
-| PUT    | `/picks/:season`        | Required | Save (upsert) the authenticated user's bracket picks for a season       |
-| GET    | `/leaderboard/:season`  | —        | Score all user brackets against official results; returns ranked entries |
-
-### F1 — `/api/f1`
-
-| Method | Path                                            | Description                         |
-| ------ | ----------------------------------------------- | ----------------------------------- |
-| GET    | `/schedule/:year`                               | Race schedule for a season          |
-| GET    | `/results/:year/:round/:session`                | Session results (Q/R)               |
-| GET    | `/telemetry/:year/:round/:session/:driver/:lap` | Driver telemetry                    |
-| GET    | `/fastest-laps/:year/:round/:session`           | Fastest laps                        |
-| GET    | `/best-lap/:year/:round/:session/:driver`       | Driver's best lap                   |
-| GET    | `/weather/:year/:round/:session`                | Session weather                     |
-| GET    | `/driver-points/:year`                          | Driver championship standings       |
-| GET    | `/constructor-points/:year`                     | Constructor standings               |
-| GET    | `/driver-points/:year/:round`                   | Standings after a round             |
-| GET    | `/constructor-points/:year/:round`              | Constructor standings after a round |
-| GET    | `/driver-points-per-race/:year`                 | Points breakdown per race           |
-| GET    | `/constructor-points-per-race/:year`            | Constructor breakdown per race      |
-| GET    | `/driver-points-per-race/:year/:round`          | Driver points up to a round         |
-| GET    | `/constructor-points-per-race/:year/:round`     | Constructor points up to a round    |
-| GET    | `/queue-status`                                 | Current Python script queue status  |
-| DELETE | `/cache`                                        | Clear FastF1 cache (requires auth)  |
-
-### Fantasy F1 — `/api/fantasy`
-
-| Method | Path                   | Description                              |
-| ------ | ---------------------- | ---------------------------------------- |
-| GET    | `/points/:year/:round` | Fantasy points for all drivers in a race |
-
-### YouTube — `/api/youtube`
-
-| Method | Path                      | Description                  |
-| ------ | ------------------------- | ---------------------------- |
-| GET    | `/recent?channel_id=<id>` | Recent videos from a channel |
-
-### Gallery — `/api/gallery`
-
-| Method | Path   | Auth     | Description             |
-| ------ | ------ | -------- | ----------------------- |
-| GET    | `/`    | —        | Paginated gallery items |
-| POST   | `/`    | Required | Upload an image         |
-| DELETE | `/:id` | Required | Delete an image         |
-
-### Medical Journal — `/api/med-journal` _(Auth Required)_
-
-| Method | Path                | Description                                    |
-| ------ | ------------------- | ---------------------------------------------- |
-| GET    | `/entries`          | Paginated journal entries (with search/filter) |
-| GET    | `/edit-entry/:id`   | Fetch a single entry                           |
-| POST   | `/save-entry`       | Create or update an entry                      |
-| DELETE | `/delete-entry/:id` | Delete an entry                                |
-
-### Feedback — `/api/feedback` _(Auth Required)_
-
-| Method | Path   | Description                                      |
-| ------ | ------ | ------------------------------------------------ |
-| GET    | `/`    | Paginated feedback (with search/rotation filter) |
-| POST   | `/`    | Add feedback                                     |
-| PUT    | `/:id` | Update feedback                                  |
-| DELETE | `/:id` | Delete feedback                                  |
-
-### ChatGPT — `/api/chatgpt` _(Auth Required)_
-
-| Method | Path         | Description                     |
-| ------ | ------------ | ------------------------------- |
-| POST   | `/`          | Chat completion                 |
-| POST   | `/summarize` | Reword text for medical journal |
-
-### Calendar — `/api/calendar` _(Auth Required)_
-
-| Method | Path                                  | Description                                                                                         |
-| ------ | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| GET    | `/events`                             | List events for the authenticated user (supports `?start=`, `?end=`, `?cardId=`, `?cardName=`)      |
-| GET    | `/events/:id`                         | Get a single event                                                                                  |
-| POST   | `/events`                             | Create an event                                                                                     |
-| PUT    | `/events/:id`                         | Update an event                                                                                     |
-| DELETE | `/events/:id`                         | Delete an event                                                                                     |
-| GET    | `/events/:id/cards`                   | List all TCG cards linked to an event                                                               |
-| POST   | `/events/:id/cards`                   | Add a card to an event (`cardId`, `cardName` required; metadata denormalized from TCGdex at insert) |
-| PUT    | `/events/:id/cards/:entryId`          | Update `quantity` or `notes` on a card entry                                                        |
-| DELETE | `/events/:id/cards/:entryId`          | Remove a card from an event                                                                         |
-| GET    | `/countdowns`                         | List all countdowns for the authenticated user, sorted by target date ascending                     |
-| GET    | `/countdowns/:id`                     | Get a single countdown                                                                              |
-| POST   | `/countdowns`                         | Create a countdown (`title` and `targetDate` required, `targetDate` as `"YYYY-MM-DD"`)             |
-| PUT    | `/countdowns/:id`                     | Partial update — send only the fields to change                                                     |
-| DELETE | `/countdowns/:id`                     | Delete a countdown                                                                                  |
-| GET    | `/calendars`                          | List all calendars owned by or shared with the user; owned rows include `role: "owner"`, shared rows include `role`, `ownerSub`, `ownerEmail` |
-| POST   | `/calendars`                          | Create a calendar (`name`, `color`, `syncMode` required)                                            |
-| PUT    | `/calendars/:id`                      | Update calendar name/color/syncMode — owner only                                                    |
-| DELETE | `/calendars/:id`                      | Delete a calendar and all its events — owner only; removes Google ACL entries via `Promise.allSettled` before DB delete |
-| POST   | `/calendars/:id/connect-google`       | Create a Google Calendar and register a push watch channel — owner only                             |
-| DELETE | `/calendars/:id/google`               | Disconnect Google Calendar, stop watch channel — owner only                                         |
-| GET    | `/calendars/:id/members`             | List members (owner entry synthesized at top); accessible by owner or any member                    |
-| POST   | `/calendars/:id/members`             | Invite by email — owner only; rate-limited 20/min; generic 404 if email not found                  |
-| PUT    | `/calendars/:id/members/:memberSub`  | Update member role (`editor`\|`viewer`) — owner only                                               |
-| DELETE | `/calendars/:id/members/:memberSub`  | Remove member — owner only, or `"me"` for self-removal; awaits Google ACL revocation and returns `{ googleAclRemoved }` |
-
-### Web Vitals — `/api/vitals`
-
-| Method | Path | Auth | Description |
-| ------ | ---- | ---- | ----------- |
-| POST | `/` | — | Ingest a Core Web Vitals metric (LCP, CLS, FCP, INP, TTFB); accepts optional `app_version` |
-| GET | `/summary` | Required | P75 + good/needs-improvement/poor counts per metric; supports `?v=X.Y.Z` to filter by version |
-| GET | `/by-page` | Required | Same aggregation grouped by pathname (min 5 samples); supports `?v=X.Y.Z` |
-| GET | `/by-version` | Required | P75 per metric for the last 5 versions, sorted oldest→newest (for trend charts) |
-| GET | `/versions` | Required | Distinct `app_version` values sorted by semver descending |
-
-### General — `/api`
-
-| Method | Path                | Auth     | Description           |
-| ------ | ------------------- | -------- | --------------------- |
-| GET    | `/postforum`        | —        | Fetch all forum posts |
-| POST   | `/postforum`        | Required | Create a forum post   |
-| GET    | `/markers`          | —        | Fetch all map markers |
-| POST   | `/markers`          | —        | Add a map marker      |
-| DELETE | `/markers/:id`      | —        | Delete a marker       |
-| GET    | `/tables`           | Required | List database tables  |
-| GET    | `/table/:tableName` | Required | Inspect table schema  |
+| Base | Area |
+| ---- | ---- |
+| `/api/nba`, `/api/nba/playoffs` | NBA standings, rosters, stats, shot charts, bracket picks |
+| `/api/f1`, `/api/fantasy` | F1 schedules, results, telemetry, standings, fantasy scoring |
+| `/api/youtube` | Recent videos from a channel |
+| `/api/gallery` | S3 image upload / delete |
+| `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |
+| `/api/chatgpt` | OpenAI chat + journal summarization (auth) |
+| `/api/calendar` | Events, countdowns, and shared calendars (auth) |
+| `/api/vitals` | Core Web Vitals ingest + P75 aggregation |
+| `/api/likes`, `/api/replies`, `/api/reposts`, `/api/search`, `/api/notifications` | Ketsup social features — likes, replies, reposts, search, notifications |
+| `/api` | Forum posts, map markers, DB table inspection |
 
 ## Local Development
 
@@ -308,3 +194,5 @@ Covers the fantasy scoring engine (`calculateQualifyingPoints`, `calculateRacePo
 ## Deployment
 
 Deployed on [Railway](https://railway.app) using the included `Dockerfile`. Environment variables are configured in the Railway dashboard. FastF1 cache is persisted at `./cache/fastf1` via a Railway volume.
+
+There's also a `fly.toml` in the repo. I might move hosting over to [Fly.io](https://fly.io) at some point to sit on the free tier, but Railway is working fine so it's not a priority. If I do switch it's roughly `fly launch` then `fly deploy` with the secrets set.
