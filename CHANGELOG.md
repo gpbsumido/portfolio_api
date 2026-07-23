@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-23 - version 2.12.0
+
+- Add a `reposts` module for the Ketsup reposts feature: repost (`POST /api/reposts/:postId`), undo (`DELETE /api/reposts/:postId`, both idempotent), and a batch summary (`GET /api/reposts?ids=a,b,c`) returning repost counts and reposted-by-me per post
+- Self-contained like likes and replies: no changes to the posts/timeline read path (surfacing reposts in the feed with attribution is a separate follow-up)
+- New `reposts` table (migration `010_reposts`, unique on post_id + user_sub, FKs cascade) plus a Drizzle schema definition
+
 ## 2026-07-23 - version 2.11.0
 
 - Add a `replies` module for the Ketsup threads feature: add a reply (`POST /api/replies/:postId`, content 1-500 chars), read a post's thread oldest-first with author info (`GET /api/replies/:postId`), and a batch reply-count endpoint (`GET /api/replies?ids=a,b,c`)
