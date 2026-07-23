@@ -1,0 +1,27 @@
+# Fly.io config for portfolio_api.
+# Secrets are set separately (never in this file):
+#   fly secrets set DATABASE_URL=... NEXT_PUBLIC_AUTH0_AUDIENCE=... \
+#     NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL=... \
+#     R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=...
+app = "ketsup-api"
+primary_region = "sea"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero when idle (cold starts accepted); wakes on request.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # A bit more headroom for Sharp image processing.
+  memory = "512mb"
