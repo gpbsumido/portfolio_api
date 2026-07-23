@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23 - version 2.10.0
+
+- Add a `likes` module for the Ketsup likes feature: like a post (`POST /api/likes/:postId`), remove a like (`DELETE /api/likes/:postId`, both idempotent), and a batch summary endpoint (`GET /api/likes?ids=a,b,c`) returning like counts and liked-by-me per post, capped at 100 ids and skipping non-uuid ids
+- Self-contained by design: it does not touch the posts read path, so the frontend overlays like state per feed page with one extra request
+- New `post_likes` table (migration `008_post_likes`, unique on post_id + user_sub, FKs cascade) plus a Drizzle schema definition
+- Likes are idempotent via `ON CONFLICT DO NOTHING`
+
 ## 2026-07-20 - version 2.9.1
 
 - Add a `referrals` module backing the work-portfolio referral-links demo: create a shareable slug (custom or generated, uniqueness enforced), resolve it, record clicks (UA stored hashed), and read click stats. Public endpoints with basic IP rate limits
