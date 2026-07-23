@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-23 - version 2.14.1
+
+- Add a `fly.toml` so the API can deploy to Fly.io (uses the existing Dockerfile, scale-to-zero, PORT 8080). Secrets (DATABASE_URL, Auth0, R2) are set separately via `fly secrets`. Part of the Ketsup free-stack move
+
 ## 2026-07-23 - version 2.14.0
 
 - Add a `notifications` module for Ketsup: `GET /api/notifications` returns the recipient's activity feed (likes, replies, and reposts on their posts by others, plus follows of them), newest first, with an unread count; `PUT /api/notifications/seen` marks all as read
