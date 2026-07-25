@@ -55,12 +55,24 @@ describe('notifications routes', () => {
     expect(res.body.unread_count).toBe(1);
   });
 
-  test('everything is unread when never viewed', async () => {
+  test('flags each event with whether it has been seen', async () => {
+    vi.mocked(repo.listEvents).mockResolvedValue(events as any);
+    vi.mocked(repo.getSeenAt).mockResolvedValue(new Date('2026-01-02T00:00:00.000Z'));
+
+    const res = await request(makeApp()).get('/api/notifications');
+
+    // like@01-03 is after the last view (unseen); reply@01-01 is before (seen).
+    expect(res.body.notifications[0].seen).toBe(false);
+    expect(res.body.notifications[1].seen).toBe(true);
+  });
+
+  test('everything is unread and unseen when never viewed', async () => {
     vi.mocked(repo.listEvents).mockResolvedValue(events as any);
     vi.mocked(repo.getSeenAt).mockResolvedValue(null);
 
     const res = await request(makeApp()).get('/api/notifications');
     expect(res.body.unread_count).toBe(2);
+    expect(res.body.notifications.every((n: { seen: boolean }) => !n.seen)).toBe(true);
   });
 
   test('PUT /seen marks notifications read', async () => {

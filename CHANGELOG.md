@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-25 - version 2.15.0
+
+- Add a per-item `seen` flag to `GET /api/notifications`: each notification now reports whether the recipient has already viewed it (created at or before their last view). Derived from the existing `notifications_seen_at` timestamp, so no migration and no extra query — the read state was already fetched to compute `unread_count`. Lets Ketsup mark new-vs-old exactly instead of by list position (gpbsumido/ketsup#62)
+
 ## 2026-07-23 - version 2.14.1
 
 - Add a `fly.toml` so the API can deploy to Fly.io (uses the existing Dockerfile, scale-to-zero, PORT 8080). Secrets (DATABASE_URL, Auth0, R2) are set separately via `fly secrets`. Part of the Ketsup free-stack move
