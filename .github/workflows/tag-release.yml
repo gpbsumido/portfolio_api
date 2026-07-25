@@ -1,0 +1,40 @@
+name: Tag release
+
+# When a release lands on main, tag it v<version> — but only for major and
+# minor releases (X.Y.0). Patches aren't worth a tag.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # to push the tag
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Tag if a new minor/major release
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          # Only X.Y.0 — the part after the last dot must be 0.
+          if [ "${VERSION##*.}" != "0" ]; then
+            echo "$VERSION is a patch release — no tag."
+            exit 0
+          fi
+          tag="v$VERSION"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "$tag already exists — skipping."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
