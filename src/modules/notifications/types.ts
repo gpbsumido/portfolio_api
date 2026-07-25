@@ -10,12 +10,18 @@ export interface NotificationActor {
   avatar_url: string | null;
 }
 
-export interface NotificationItem {
+/** A raw activity event, before per-recipient read state is applied. */
+export interface NotificationEvent {
   type: NotificationType;
   actor: NotificationActor;
   /** The post the action was on, or null for follows. */
   post_id: string | null;
   created_at: string;
+}
+
+export interface NotificationItem extends NotificationEvent {
+  /** True once the recipient has viewed it (created at or before their last view). */
+  seen: boolean;
 }
 
 export interface NotificationsResponse {

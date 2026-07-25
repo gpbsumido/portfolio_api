@@ -16,7 +16,7 @@ import {
   reposts,
   userProfiles,
 } from '../../config/drizzle/schema.js';
-import type { NotificationItem, NotificationType } from './types.js';
+import type { NotificationEvent, NotificationType } from './types.js';
 
 interface EventRow {
   username: string;
@@ -33,7 +33,7 @@ const actor = {
 };
 
 function toItem(type: NotificationType) {
-  return (r: EventRow): NotificationItem => ({
+  return (r: EventRow): NotificationEvent => ({
     type,
     actor: {
       username: r.username,
@@ -52,7 +52,7 @@ function toItem(type: NotificationType) {
 export async function listEvents(
   recipientSub: string,
   limit = 50,
-): Promise<NotificationItem[]> {
+): Promise<NotificationEvent[]> {
   const [likeRows, replyRows, repostRows, followRows] = await Promise.all([
     db
       .select({ ...actor, post_id: postLikes.postId, created_at: postLikes.createdAt })
@@ -87,7 +87,7 @@ export async function listEvents(
       .limit(limit),
   ]);
 
-  const merged: NotificationItem[] = [
+  const merged: NotificationEvent[] = [
     ...(likeRows as EventRow[]).map(toItem('like')),
     ...(replyRows as EventRow[]).map(toItem('reply')),
     ...(repostRows as EventRow[]).map(toItem('repost')),
