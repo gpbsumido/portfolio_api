@@ -7,11 +7,18 @@ import {
   boolean,
   doublePrecision,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type {
+  AuditAction,
+  EnvironmentConfig,
+  FlagKind,
+  Variation,
+} from '../../modules/feature-flags/types.js';
 
 // ── users ──────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
@@ -168,3 +175,36 @@ export const referralClicks = pgTable('referral_clicks', {
 
 export type ReferralClick = InferSelectModel<typeof referralClicks>;
 export type NewReferralClick = InferInsertModel<typeof referralClicks>;
+
+// ── feature_flags ────────────────────────────────────────────────────────────
+// One row per flag; its per-environment config is stored as JSONB so the shape
+// mirrors the paul-explore `Flag` contract 1:1 (see modules/feature-flags).
+export const featureFlags = pgTable('feature_flags', {
+  key: text('key').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  kind: text('kind').$type<FlagKind>().notNull(),
+  tags: jsonb('tags').$type<string[]>().notNull(),
+  variations: jsonb('variations').$type<Variation[]>().notNull(),
+  environments: jsonb('environments')
+    .$type<Record<string, EnvironmentConfig>>()
+    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type FeatureFlag = InferSelectModel<typeof featureFlags>;
+export type NewFeatureFlag = InferInsertModel<typeof featureFlags>;
+
+// ── feature_flag_audit ───────────────────────────────────────────────────────
+export const featureFlagAudit = pgTable('feature_flag_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flagKey: text('flag_key').notNull(),
+  environment: text('environment').notNull(),
+  action: text('action').$type<AuditAction>().notNull(),
+  summary: text('summary').notNull(),
+  actor: text('actor').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type FeatureFlagAudit = InferSelectModel<typeof featureFlagAudit>;
+export type NewFeatureFlagAudit = InferInsertModel<typeof featureFlagAudit>;

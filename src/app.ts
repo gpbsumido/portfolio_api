@@ -9,6 +9,7 @@ import chatRoutes from './modules/chat/routes.js';
 import docsRoutes from './modules/docs/routes.js';
 import f1Routes from './modules/f1/routes.js';
 import fantasyRoutes from './modules/fantasy/routes.js';
+import featureFlagsRoutes from './modules/feature-flags/routes.js';
 import feedbackRoutes from './modules/feedback/routes.js';
 import followsRoutes from './modules/follows/routes.js';
 import forumRoutes from './modules/forum/routes.js';
@@ -59,6 +60,8 @@ app.use('/api/fantasy', fantasyRoutes);
 app.use('/api/vitals', vitalsRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/referrals', referralsRoutes);
+// Reads public; the PATCH write applies checkJwt internally per-route.
+app.use('/api/feature-flags', featureFlagsRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);

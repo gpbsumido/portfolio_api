@@ -126,6 +126,43 @@ renews any channel expiring within 24 hours. Set it up as a Railway cron service
 
 You can also run it manually: `node utils/renewWatchChannels.js`
 
+### Feature-flags reset cron
+
+The feature-flags console is public and any signed-in user can toggle flags, so a
+cron restores the canonical demo seed every 6 hours. It reuses the same seed the
+migration applies (`src/modules/feature-flags/seed.ts`), so the demo can't drift.
+
+Run it as its **own** Railway cron service (separate from the web service and the
+calendar cron — a service has only one schedule and one `CRON_JOB`):
+
+- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Schedule**: `0 */6 * * *` (00/06/12/18 UTC)
+- **Variables**: `RUN_CRON=true`, `CRON_JOB=reset-feature-flags`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
+
+`start.js` dispatches on `CRON_JOB` (defaulting to `renew-watch-channels`), so set
+these vars **only on the cron service** — setting them project-wide would boot the
+web service into cron mode. `NODE_ENV=production` is required so the DB pool uses
+SSL against the Railway Postgres (`src/config/database.ts`). Run manually with
+`node dist/jobs/resetFeatureFlags.js`.
+
+### Database migrations
+
+Migrations are TypeScript (`src/migrations/`) run via knex through `tsx`:
+
+```bash
+pnpm migrate            # apply pending migrations
+pnpm migrate:rollback   # roll back the last batch
+```
+
+Notes:
+
+- The scripts invoke `tsx node_modules/knex/bin/cli.js` — plain `knex` can't load
+  the TS migrations or their `.js`-style ESM imports.
+- Migrations pick up `DATABASE_URL` from `.env`. Use `NODE_ENV=production pnpm migrate`
+  against a managed/Railway database so the connection enables SSL.
+- On a database that already has the pre-migrations schema, mark the baseline as
+  applied once so knex skips it: `INSERT INTO knex_migrations (name, batch, migration_time) VALUES ('000_baseline.ts', 1, NOW());`
+
 ### Run (without Docker)
 
 ```bash
