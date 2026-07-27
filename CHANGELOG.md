@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-27 - version 2.16.0
+
+- Add a `feature-flags` module backing the paul-explore feature-flags console with real persistence: `GET /api/feature-flags` returns every flag plus the environment list, `GET /api/feature-flags/audit` returns the change log, and `PATCH /api/feature-flags/:flagKey` toggles a flag's kill switch or rollout for one environment. Reads are public so the console works signed-out; the PATCH write requires an authenticated Auth0 user (like the NBA picks writes) and attributes the audit entry to the real user's email/sub
+- Each flag is one row with its per-environment config stored as JSONB, mirroring the console's `Flag` shape 1:1 (the Zod contract is ported so the API and console never drift). New migration `012_feature_flags` creates both tables (`feature_flags`, `feature_flag_audit` with a newest-first index) and seeds the canonical five flags plus the seed audit log
+- Add a `reset-feature-flags` cron job that restores the demo to its canonical seed every 6 hours (`0 */6 * * *`), wired into the existing cron entrypoint via `CRON_JOB=reset-feature-flags`. The migration and the reset reuse one shared seed, so the demo can never drift
+
 ## 2026-07-25 - version 2.15.0
 
 - Add a per-item `seen` flag to `GET /api/notifications`: each notification now reports whether the recipient has already viewed it (created at or before their last view). Derived from the existing `notifications_seen_at` timestamp, so no migration and no extra query — the read state was already fetched to compute `unread_count`. Lets Ketsup mark new-vs-old exactly instead of by list position (gpbsumido/ketsup#62)
