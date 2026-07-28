@@ -385,6 +385,69 @@ registry.registerPath({
   responses: { 200: { description: 'Gallery items' } },
 });
 
+// ── Gallery walls ─────────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: 'get',
+  path: '/walls',
+  summary: "List the signed-in user's saved gallery walls",
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Wall summaries' } },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/walls',
+  summary: 'Save a new gallery wall (photos as multipart files keyed by image id)',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': { schema: z.object({ name: z.string(), state: z.string() }) },
+      },
+    },
+  },
+  responses: { 201: { description: 'Created' } },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/walls/{id}',
+  summary: 'Read a saved gallery wall',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Wall manifest' }, 404: { description: 'Not found' } },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/walls/{id}',
+  summary: 'Rename and/or replace a saved gallery wall',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({ name: z.string().optional(), state: z.string().optional() }),
+        },
+      },
+    },
+  },
+  responses: { 200: { description: 'Updated' }, 404: { description: 'Not found' } },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/walls/{id}',
+  summary: 'Delete a saved gallery wall and its photos',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Deleted' }, 404: { description: 'Not found' } },
+});
+
 // ── Forum ─────────────────────────────────────────────────────────────────
 
 registry.registerPath({

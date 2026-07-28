@@ -13,4 +13,14 @@ export const s3 = new S3Client({
 });
 
 export const S3_BUCKET = env.AWS_S3_BUCKET_NAME;
-export const CDN_BASE = env.CDN_BASE_URL;
+
+/**
+ * Where uploaded media is served from. Prefer the CDN, but fall back to the
+ * bucket's own URL so a missing CDN_BASE_URL degrades to a slower-but-working
+ * link instead of stringifying `undefined` into every stored image URL.
+ */
+export const CDN_BASE =
+  env.CDN_BASE_URL ??
+  (env.AWS_S3_BUCKET_NAME && env.AWS_REGION
+    ? `https://${env.AWS_S3_BUCKET_NAME}.s3.${env.AWS_REGION}.amazonaws.com`
+    : undefined);
