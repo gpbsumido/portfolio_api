@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { WallsRepository } from './repository.js';
 import type { WallManifest } from './types.js';
@@ -115,6 +116,16 @@ describe('WallsRepository', () => {
       { Key: 'gallery-walls/auth0_u1/w1/manifest.json' },
       { Key: 'gallery-walls/auth0_u1/w1/images/a.jpg' },
     ]);
+  });
+
+  test('deleteImage removes a single wall image by its key', async () => {
+    const { client, sent } = fakeClient();
+    const repo = new WallsRepository({ client, bucket: 'b', cdnBase: 'https://cdn' });
+    await repo.deleteImage(SUB, 'w1', 'img7', 'webp');
+
+    const del = sent.find((c) => c instanceof DeleteObjectCommand) as DeleteObjectCommand;
+    expect(del.input.Key).toBe('gallery-walls/auth0_u1/w1/images/img7.webp');
+    expect(del.input.Bucket).toBe('b');
   });
 
   test('deleteWall with an empty prefix sends no delete', async () => {

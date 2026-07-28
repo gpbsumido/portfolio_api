@@ -12,6 +12,7 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
   type S3Client,
 } from '@aws-sdk/client-s3';
 import { s3, S3_BUCKET, CDN_BASE } from '../../config/s3.js';
@@ -107,6 +108,15 @@ export class WallsRepository {
       }) as never,
     );
     return `${this.cdnBase}/${key}`;
+  }
+
+  async deleteImage(sub: string, wallId: string, imageId: string, ext: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: imageKey(sub, wallId, imageId, ext),
+      }) as never,
+    );
   }
 
   async deleteWall(sub: string, wallId: string): Promise<void> {
