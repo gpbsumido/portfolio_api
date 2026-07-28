@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-28 - version 2.17.1
+
+- Fall back to the bucket's own URL when `CDN_BASE_URL` is unset instead of stringifying `undefined` into every stored image URL. Uploads were landing in S3 correctly but the saved `image_url` read `undefined/gallery-walls/...`, so nothing could load it back. Affected the gallery module the same way
+
 ## 2026-07-28 - version 2.17.0
 
 - Add a `walls` module backing the paul-explore Gallery Wall save feature, stored entirely in S3 with no database. Each user's saved walls live under `gallery-walls/{userSegment}/{wallId}/` with a `manifest.json` (name, serialized wall state, timestamps) and an `images/` folder, so per-user isolation comes from the key prefix and deleting a wall bulk-removes its photos. `GET /api/walls` lists a user's walls, `POST /api/walls` saves a new one (photos arrive as multipart files keyed by image id, are optimized to WebP via the shared media processor, uploaded, and their srcs rewritten to CDN URLs), `GET /api/walls/:id` reads one, `PUT /api/walls/:id` renames and/or replaces it (deleting photos that were removed), and `DELETE /api/walls/:id` removes the whole wall. All routes require an authenticated Auth0 user and are scoped to their `sub`
