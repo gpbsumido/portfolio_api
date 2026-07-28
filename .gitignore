@@ -49,3 +49,6 @@ cache/fastf1/*
 Thumbs.db
 
 /plan
+# Agent harness scratch — session logs and state, never part of the repo
+.harness/
+.harness-logs/
