@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-28 - version 3.0.1
+
+- Ignore the agent harness scratch directories (`.harness/`, `.harness-logs/`). They were untracked but not ignored, so a `git add -A` picked them up -- which nearly put session logs into a PR. paul-explore already ignored them; this brings the API into line
+
 ## 2026-07-28 - version 3.0.0
 
 Release to production. Rolls up everything since 2.16.0.
