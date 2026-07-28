@@ -32,9 +32,21 @@ export function manifestKey(sub: string, wallId: string): string {
   return `${wallPrefix(sub, wallId)}manifest.json`;
 }
 
+/**
+ * Squash an image id into a key- and URL-safe filename. Image ids come from the
+ * browser and are built from filenames, so they can hold spaces and non-ASCII
+ * (a screenshot named "Shot 2025-11-18 at 10.40 AM.png" carries a narrow
+ * no-break space). Left raw those land in the key and the CDN URL needs
+ * escaping to be fetchable, so they are flattened here. Deterministic, so the
+ * delete path rebuilds the same key.
+ */
+export function imageSegment(imageId: string): string {
+  return imageId.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+}
+
 /** Key of one image inside a wall. */
 export function imageKey(sub: string, wallId: string, imageId: string, ext: string): string {
-  return `${wallPrefix(sub, wallId)}images/${imageId}.${ext}`;
+  return `${wallPrefix(sub, wallId)}images/${imageSegment(imageId)}.${ext}`;
 }
 
 /**

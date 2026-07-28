@@ -9,12 +9,17 @@ import { z } from 'zod';
 export const createWallSchema = z.object({
   name: z.string({ required_error: 'name is required' }).min(1, 'name must not be empty'),
   state: z.string({ required_error: 'state is required' }).min(1, 'state must not be empty'),
+  // JSON array naming the image each uploaded photo belongs to, in the same
+  // order the photos were appended. Declared here because validateBody replaces
+  // the body with the parsed result, which drops anything not in the schema.
+  imageIds: z.string().optional(),
 });
 
 /** Update allows a rename, a new state, or both; either may be omitted. */
 export const updateWallSchema = z.object({
   name: z.string().min(1, 'name must not be empty').optional(),
   state: z.string().min(1, 'state must not be empty').optional(),
+  imageIds: z.string().optional(),
 });
 
 export type CreateWallInput = z.infer<typeof createWallSchema>;

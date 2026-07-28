@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-28 - version 2.17.2
+
+- Fix saved walls reopening with dead `blob:` image URLs. Photos were correlated to their images by multipart field name, and ids are built from filenames, so an id holding a space or non-ASCII character (a screenshot named "... 10.40.57 AM.png" carries U+202F) did not come back as the same string. The upload succeeded, the match silently failed, and the wall kept pointing at a browser blob handle that dies on reload. Photos are now paired to images by position against an explicit `imageIds` field
+- Declare `imageIds` in the wall schemas: `validateBody` replaces the body with the parsed result, so a field missing from the schema is stripped before the controller runs
+- Flatten image ids to `[a-zA-Z0-9.-_]` when building S3 keys, so keys and CDN URLs need no escaping to be fetchable
+
 ## 2026-07-28 - version 2.17.1
 
 - Fall back to the bucket's own URL when `CDN_BASE_URL` is unset instead of stringifying `undefined` into every stored image URL. Uploads were landing in S3 correctly but the saved `image_url` read `undefined/gallery-walls/...`, so nothing could load it back. Affected the gallery module the same way

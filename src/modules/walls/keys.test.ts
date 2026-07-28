@@ -31,6 +31,16 @@ describe('walls S3 keys', () => {
     );
   });
 
+  test('flattens spaces and non-ASCII in an image id so the key and url are safe', () => {
+    const id = 'Screenshot 2025-11-18 at 10.40.57 AM.png-852056';
+    const key = imageKey(SUB, 'w1', id, 'webp');
+    expect(key).not.toMatch(/[\s ]/);
+    expect(key).toBe(encodeURI(key));
+    expect(key).toMatch(/^gallery-walls\/auth0_abc123\/w1\/images\/.+\.webp$/);
+    // Deterministic, so the delete path rebuilds exactly the same key.
+    expect(imageKey(SUB, 'w1', id, 'webp')).toBe(key);
+  });
+
   test('recovers a wallId from a ListObjects common prefix', () => {
     expect(wallIdFromPrefix('gallery-walls/auth0_abc123/w1/', SUB)).toBe('w1');
   });

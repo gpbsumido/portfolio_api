@@ -49,11 +49,31 @@ function parseState(raw: string): WallState {
   return parsed as WallState;
 }
 
-/** Turn multer's uploaded files into service uploads keyed by image id. */
+/**
+ * Pair multer's uploaded files with the image they belong to.
+ *
+ * Correlation is by position against the `imageIds` field, not by multipart
+ * field name: ids are built from filenames, and one holding a space or
+ * non-ASCII character does not come back as the same string, which silently
+ * broke the match and left the image pointing at a dead browser blob URL.
+ */
 function uploads(req: Request): WallUpload[] {
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-  return files.map((file) => ({
-    imageId: file.fieldname,
+  if (files.length === 0) return [];
+
+  const raw = (req.body as { imageIds?: string }).imageIds;
+  let ids: unknown;
+  try {
+    ids = raw ? JSON.parse(raw) : [];
+  } catch {
+    throw new ValidationError('imageIds must be valid JSON.');
+  }
+  if (!Array.isArray(ids) || ids.length !== files.length) {
+    throw new ValidationError('imageIds must list exactly one id per uploaded photo.');
+  }
+
+  return files.map((file, index) => ({
+    imageId: String(ids[index]),
     buffer: file.buffer,
     mimetype: file.mimetype,
   }));
