@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-27 - version 2.16.1
+
+- Fix the `reset-feature-flags` Railway cron crashing on every run. It runs as its own cron service with only DB + cron vars set, but importing the DB layer pulled in `config/env.ts`, which hard-required the web service's Auth0 vars (`NEXT_PUBLIC_AUTH0_AUDIENCE`, `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`) and called `process.exit(1)` when they were absent — so the job died before doing any work. Those two vars are now optional in the env schema, decoupling DB-only workloads (the cron, migrations, scripts) from web-only config. The web service still fails fast with a clear message: `config/auth.ts` now validates their presence at the point of use
+
 ## 2026-07-27 - version 2.16.0
 
 - Add a `feature-flags` module backing the paul-explore feature-flags console with real persistence: `GET /api/feature-flags` returns every flag plus the environment list, `GET /api/feature-flags/audit` returns the change log, and `PATCH /api/feature-flags/:flagKey` toggles a flag's kill switch or rollout for one environment. Reads are public so the console works signed-out; the PATCH write requires an authenticated Auth0 user (like the NBA picks writes) and attributes the audit entry to the real user's email/sub
