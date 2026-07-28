@@ -1,6 +1,8 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import wallsRoutes from './routes.js';
+import { errorHandler } from '../../middleware/errorHandler.js';
 
 // Authenticated as a fixed user.
 vi.mock('../../config/auth.js', () => {
@@ -67,9 +69,6 @@ vi.mock('../../config/s3.js', () => ({
 // Just this module's router, not the whole app: mounting the app would import
 // every other module, and some open a database pool at import time, which dies
 // wherever DATABASE_URL is absent (that is, in CI).
-const { default: wallsRoutes } = await import('./routes.js');
-const { errorHandler } = await import('../../middleware/errorHandler.js');
-
 const app = express();
 app.use(express.json());
 app.use('/api/walls', wallsRoutes);
