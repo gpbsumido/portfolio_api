@@ -33,7 +33,6 @@ import { createPostSchema } from '../../modules/posts/schemas.js';
 import { setupProfileSchema, updateProfileSchema } from '../../modules/profiles/schemas.js';
 import { followParamSchema } from '../../modules/follows/schemas.js';
 import { createFeedbackSchema, updateFeedbackSchema } from '../../modules/feedback/schemas.js';
-import { chatSchema, summarizeSchema } from '../../modules/chat/schemas.js';
 import { ingestVitalSchema } from '../../modules/vitals/schemas.js';
 import { saveEntrySchema } from '../../modules/medical-journal/schemas.js';
 import { createForumPostSchema, createMarkerSchema } from '../../modules/forum/schemas.js';
@@ -333,28 +332,6 @@ registry.registerPath({
   security: [{ bearerAuth: [] }],
   request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: updateFeedbackSchema } } } },
   responses: { 200: { description: 'Updated' } },
-});
-
-// ── Chat ──────────────────────────────────────────────────────────────────
-
-registry.registerPath({
-  method: 'post',
-  path: '/chatgpt',
-  summary: 'Send a chat message',
-  tags: ['Chat'],
-  security: [{ bearerAuth: [] }],
-  request: { body: { content: { 'application/json': { schema: chatSchema } } } },
-  responses: { 200: { description: 'Chat response' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/chatgpt/summarize',
-  summary: 'Summarize text',
-  tags: ['Chat'],
-  security: [{ bearerAuth: [] }],
-  request: { body: { content: { 'application/json': { schema: summarizeSchema } } } },
-  responses: { 200: { description: 'Summary' } },
 });
 
 // ── Vitals ─────────────────────────────────────────────────────────────────

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-28 - version 2.17.0
+
+- Remove the `chat` module and both ChatGPT endpoints (`POST /api/chatgpt`, `POST /api/chatgpt/summarize`). They wrapped OpenAI `gpt-3.5-turbo` for free-text chat and for rewording medical-journal entries, but nothing called them -- a sweep of every project on disk found no consumer, and the medical-journal module never wired up the summarizer it was written for. They were authenticated but unmetered, so any signed-in user could spend against the key with 4000-character prompts
+- Drop the `openai` dependency from both `package.json` and `requirements.txt` (the Python pin was unused -- no script imported it), and remove `OPENAI_API_KEY` from the env schema and `.env.example`
+- Document the removal under a new Deprecations section in the README, including how to restore the module from history and the reminder to revoke the key at OpenAI -- deleting the code does not invalidate it
+
 ## 2026-07-27 - version 2.16.1
 
 - Fix the `reset-feature-flags` Railway cron crashing on every run. It runs as its own cron service with only DB + cron vars set, but importing the DB layer pulled in `config/env.ts`, which hard-required the web service's Auth0 vars (`NEXT_PUBLIC_AUTH0_AUDIENCE`, `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`) and called `process.exit(1)` when they were absent — so the job died before doing any work. Those two vars are now optional in the env schema, decoupling DB-only workloads (the cron, migrations, scripts) from web-only config. The web service still fails fast with a clear message: `config/auth.ts` now validates their presence at the point of use
