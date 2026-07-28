@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-28 - version 2.17.2
+
+- Fix saved walls reopening with dead `blob:` image URLs. Photos were correlated to their images by multipart field name, and ids are built from filenames, so an id holding a space or non-ASCII character (a screenshot named "... 10.40.57 AM.png" carries U+202F) did not come back as the same string. The upload succeeded, the match silently failed, and the wall kept pointing at a browser blob handle that dies on reload. Photos are now paired to images by position against an explicit `imageIds` field
+- Declare `imageIds` in the wall schemas: `validateBody` replaces the body with the parsed result, so a field missing from the schema is stripped before the controller runs
+- Flatten image ids to `[a-zA-Z0-9.-_]` when building S3 keys, so keys and CDN URLs need no escaping to be fetchable
+
+## 2026-07-28 - version 2.17.1
+
+- Fall back to the bucket's own URL when `CDN_BASE_URL` is unset instead of stringifying `undefined` into every stored image URL. Uploads were landing in S3 correctly but the saved `image_url` read `undefined/gallery-walls/...`, so nothing could load it back. Affected the gallery module the same way
+
+## 2026-07-28 - version 2.17.0
+
+- Add a `walls` module backing the paul-explore Gallery Wall save feature, stored entirely in S3 with no database. Each user's saved walls live under `gallery-walls/{userSegment}/{wallId}/` with a `manifest.json` (name, serialized wall state, timestamps) and an `images/` folder, so per-user isolation comes from the key prefix and deleting a wall bulk-removes its photos. `GET /api/walls` lists a user's walls, `POST /api/walls` saves a new one (photos arrive as multipart files keyed by image id, are optimized to WebP via the shared media processor, uploaded, and their srcs rewritten to CDN URLs), `GET /api/walls/:id` reads one, `PUT /api/walls/:id` renames and/or replaces it (deleting photos that were removed), and `DELETE /api/walls/:id` removes the whole wall. All routes require an authenticated Auth0 user and are scoped to their `sub`
+- Split the logic into a pure `WallsService` (injected repository, image processor, clock, and id generator) behind a thin Express controller, so the domain behaviour is unit tested without S3 or HTTP, and the S3 repository is tested against an injected fake client. Reuses the existing `processImage` pipeline (magic-byte validation, 10 MB cap, WebP output) rather than adding a second image path
 ## 2026-07-27 - version 2.16.1
 
 - Fix the `reset-feature-flags` Railway cron crashing on every run. It runs as its own cron service with only DB + cron vars set, but importing the DB layer pulled in `config/env.ts`, which hard-required the web service's Auth0 vars (`NEXT_PUBLIC_AUTH0_AUDIENCE`, `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`) and called `process.exit(1)` when they were absent — so the job died before doing any work. Those two vars are now optional in the env schema, decoupling DB-only workloads (the cron, migrations, scripts) from web-only config. The web service still fails fast with a clear message: `config/auth.ts` now validates their presence at the point of use
