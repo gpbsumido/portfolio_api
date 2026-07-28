@@ -5,7 +5,6 @@ import helmet from 'helmet';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
-import chatRoutes from './modules/chat/routes.js';
 import docsRoutes from './modules/docs/routes.js';
 import f1Routes from './modules/f1/routes.js';
 import fantasyRoutes from './modules/fantasy/routes.js';
@@ -30,6 +29,7 @@ import searchRoutes from './modules/search/routes.js';
 import referralsRoutes from './modules/referrals/routes.js';
 import timelineRoutes from './modules/timeline/routes.js';
 import vitalsRoutes from './modules/vitals/routes.js';
+import wallsRoutes from './modules/walls/routes.js';
 import youtubeRoutes from './modules/youtube/routes.js';
 
 export const app = express();
@@ -66,9 +66,9 @@ app.use('/api/feature-flags', featureFlagsRoutes);
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/gallery', galleryRoutes);
+app.use('/api/walls', wallsRoutes);
 app.use('/api/med-journal', medJournalRoutes);
 app.use('/api/feedback', feedbackRoutes);
-app.use('/api/chatgpt', chatRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/posts', postsRoutes);
 app.use('/api/likes', likesRoutes);

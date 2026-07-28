@@ -33,7 +33,6 @@ import { createPostSchema } from '../../modules/posts/schemas.js';
 import { setupProfileSchema, updateProfileSchema } from '../../modules/profiles/schemas.js';
 import { followParamSchema } from '../../modules/follows/schemas.js';
 import { createFeedbackSchema, updateFeedbackSchema } from '../../modules/feedback/schemas.js';
-import { chatSchema, summarizeSchema } from '../../modules/chat/schemas.js';
 import { ingestVitalSchema } from '../../modules/vitals/schemas.js';
 import { saveEntrySchema } from '../../modules/medical-journal/schemas.js';
 import { createForumPostSchema, createMarkerSchema } from '../../modules/forum/schemas.js';
@@ -335,28 +334,6 @@ registry.registerPath({
   responses: { 200: { description: 'Updated' } },
 });
 
-// ── Chat ──────────────────────────────────────────────────────────────────
-
-registry.registerPath({
-  method: 'post',
-  path: '/chatgpt',
-  summary: 'Send a chat message',
-  tags: ['Chat'],
-  security: [{ bearerAuth: [] }],
-  request: { body: { content: { 'application/json': { schema: chatSchema } } } },
-  responses: { 200: { description: 'Chat response' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/chatgpt/summarize',
-  summary: 'Summarize text',
-  tags: ['Chat'],
-  security: [{ bearerAuth: [] }],
-  request: { body: { content: { 'application/json': { schema: summarizeSchema } } } },
-  responses: { 200: { description: 'Summary' } },
-});
-
 // ── Vitals ─────────────────────────────────────────────────────────────────
 
 registry.registerPath({
@@ -406,6 +383,69 @@ registry.registerPath({
   summary: 'List gallery items',
   tags: ['Gallery'],
   responses: { 200: { description: 'Gallery items' } },
+});
+
+// ── Gallery walls ─────────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: 'get',
+  path: '/walls',
+  summary: "List the signed-in user's saved gallery walls",
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Wall summaries' } },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/walls',
+  summary: 'Save a new gallery wall (photos as multipart files keyed by image id)',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': { schema: z.object({ name: z.string(), state: z.string() }) },
+      },
+    },
+  },
+  responses: { 201: { description: 'Created' } },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/walls/{id}',
+  summary: 'Read a saved gallery wall',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Wall manifest' }, 404: { description: 'Not found' } },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/walls/{id}',
+  summary: 'Rename and/or replace a saved gallery wall',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({ name: z.string().optional(), state: z.string().optional() }),
+        },
+      },
+    },
+  },
+  responses: { 200: { description: 'Updated' }, 404: { description: 'Not found' } },
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/walls/{id}',
+  summary: 'Delete a saved gallery wall and its photos',
+  tags: ['Gallery walls'],
+  security: [{ bearerAuth: [] }],
+  responses: { 200: { description: 'Deleted' }, 404: { description: 'Not found' } },
 });
 
 // ── Forum ─────────────────────────────────────────────────────────────────

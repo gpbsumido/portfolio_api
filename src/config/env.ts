@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import 'dotenv/config';
 
-const envSchema = z.object({
+export const envSchema = z.object({
   // Server
   PORT: z.coerce.number().default(3001),
   NODE_ENV: z
@@ -16,9 +16,11 @@ const envSchema = z.object({
   DB_PORT: z.coerce.number().default(5432),
   DB_NAME: z.string().default('portfolio'),
 
-  // Auth0
-  NEXT_PUBLIC_AUTH0_AUDIENCE: z.string().min(1),
-  NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL: z.string().url(),
+  // Auth0 — required by the web service (see config/auth.ts), but optional here
+  // so DB-only workloads (the reset-feature-flags cron, migrations, scripts) can
+  // boot without them. auth.ts validates their presence at the point of use.
+  NEXT_PUBLIC_AUTH0_AUDIENCE: z.string().min(1).optional(),
+  NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
 
   // AWS S3
   AWS_ACCESS_KEY_ID: z.string().optional(),
@@ -27,8 +29,6 @@ const envSchema = z.object({
   AWS_S3_BUCKET_NAME: z.string().optional(),
   CDN_BASE_URL: z.string().optional(),
 
-  // OpenAI
-  OPENAI_API_KEY: z.string().optional(),
 
   // Google
   GOOGLE_CLIENT_ID: z.string().optional(),
