@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-28 - version 3.0.0
+
+Release to production. Rolls up everything since 2.16.0.
+
+- **Breaking: the ChatGPT endpoints are gone.** `POST /api/chatgpt` and `POST /api/chatgpt/summarize` were removed along with the `chat` module, the `openai` dependency (npm and pip), and `OPENAI_API_KEY`. Nothing called them, and they were authenticated but unmetered. Callers now get a 404. See the Deprecations section in the README
+- **New: the `walls` module** backing the paul-explore Gallery Wall save feature, stored entirely in S3 with no database. Each user's walls live under `gallery-walls/{userSegment}/{wallId}/` with a `manifest.json` and an `images/` folder. `GET/POST /api/walls` and `GET/PUT/DELETE /api/walls/:id`, all Auth0-scoped to the caller
+- Media URLs fall back to the bucket's own URL when `CDN_BASE_URL` is unset, instead of stringifying `undefined` into every stored image URL
+- Fixed the walls test suite importing the whole app, which opened a database pool at import time and failed CI wherever `DATABASE_URL` was absent
+
 ## 2026-07-28 - version 2.17.3
 
 - Remove the `chat` module and both ChatGPT endpoints (`POST /api/chatgpt`, `POST /api/chatgpt/summarize`). They wrapped OpenAI `gpt-3.5-turbo` for free-text chat and for rewording medical-journal entries, but nothing called them -- a sweep of every project on disk found no consumer, and the medical-journal module never wired up the summarizer it was written for. They were authenticated but unmetered, so any signed-in user could spend against the key with 4000-character prompts
