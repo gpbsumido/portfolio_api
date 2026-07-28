@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-28 - version 2.17.3
+
+- Remove the `chat` module and both ChatGPT endpoints (`POST /api/chatgpt`, `POST /api/chatgpt/summarize`). They wrapped OpenAI `gpt-3.5-turbo` for free-text chat and for rewording medical-journal entries, but nothing called them -- a sweep of every project on disk found no consumer, and the medical-journal module never wired up the summarizer it was written for. They were authenticated but unmetered, so any signed-in user could spend against the key with 4000-character prompts
+- Drop the `openai` dependency from both `package.json` and `requirements.txt` (the Python pin was unused -- no script imported it), and remove `OPENAI_API_KEY` from the env schema and `.env.example`
+- Document the removal under a new Deprecations section in the README, including how to restore the module from history and the reminder to revoke the key at OpenAI -- deleting the code does not invalidate it
+
 ## 2026-07-28 - version 2.17.2
 
 - Fix saved walls reopening with dead `blob:` image URLs. Photos were correlated to their images by multipart field name, and ids are built from filenames, so an id holding a space or non-ASCII character (a screenshot named "... 10.40.57 AM.png" carries U+202F) did not come back as the same string. The upload succeeded, the match silently failed, and the wall kept pointing at a browser blob handle that dies on reload. Photos are now paired to images by position against an explicit `imageIds` field

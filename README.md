@@ -8,7 +8,6 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 - **Database**: PostgreSQL (via `pg`)
 - **Auth**: Auth0 JWT (`express-oauth2-jwt-bearer`)
 - **Storage**: AWS S3 (image uploads via `multer` + `sharp`)
-- **AI**: OpenAI GPT (chat + summarization)
 - **Data**: Python + FastF1 (F1 telemetry), NBA Stats API proxy
 - **Deployment**: Railway + Docker
 
@@ -23,7 +22,6 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Gallery         | Authenticated image upload/delete with S3 storage and Sharp optimization        |
 | Medical Journal | Protected CRUD journal for medical rotations (Auth0-gated)                      |
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
-| ChatGPT         | OpenAI-powered chat and journal entry summarization (Auth0-gated)               |
 | Calendar        | Personal calendar events, countdowns, and calendar sharing with editor/viewer roles (Auth0-gated) |
 | Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
@@ -44,11 +42,36 @@ Route groups at a glance:
 | `/api/youtube` | Recent videos from a channel |
 | `/api/gallery` | S3 image upload / delete |
 | `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |
-| `/api/chatgpt` | OpenAI chat + journal summarization (auth) |
 | `/api/calendar` | Events, countdowns, and shared calendars (auth) |
 | `/api/vitals` | Core Web Vitals ingest + P75 aggregation |
 | `/api/likes`, `/api/replies`, `/api/reposts`, `/api/search`, `/api/notifications` | Ketsup social features — likes, replies, reposts, search, notifications |
 | `/api` | Forum posts, map markers, DB table inspection |
+
+## Deprecations
+
+### ChatGPT endpoints (removed 2026-07-28, v2.17.0)
+
+`POST /api/chatgpt` and `POST /api/chatgpt/summarize` are **gone**, along with the
+`chat` module, the `openai` dependency (npm and pip), and the `OPENAI_API_KEY`
+environment variable.
+
+They wrapped OpenAI `gpt-3.5-turbo` for a free-text chat and for rewording
+medical-journal entries. Nothing called them: a sweep of every project on this
+machine (`paul-explore`, `ketsup`, this repo) found no consumer, and the
+medical-journal module never wired up the summarizer it was written for. They
+were authenticated but unmetered, so any signed-in user could spend against the
+key with 4000-character prompts.
+
+Callers get a 404. If you need this back, restore the module from history rather
+than rewriting it:
+
+```bash
+git log --oneline --all -- src/modules/chat
+```
+
+**Operational follow-up:** remove `OPENAI_API_KEY` from the deployment
+environments (Railway/Fly) and revoke the key at OpenAI — deleting the code does
+not invalidate it.
 
 ## Local Development
 
@@ -97,8 +120,6 @@ AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-east-1
 AWS_S3_BUCKET_NAME=
 
-# OpenAI
-OPENAI_API_KEY=
 
 # Google Calendar sync (optional, only needed if using the calendar sync feature)
 # Create an OAuth 2.0 client in Google Cloud Console (Web application type)

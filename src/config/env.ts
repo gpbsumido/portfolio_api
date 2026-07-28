@@ -29,8 +29,6 @@ export const envSchema = z.object({
   AWS_S3_BUCKET_NAME: z.string().optional(),
   CDN_BASE_URL: z.string().optional(),
 
-  // OpenAI
-  OPENAI_API_KEY: z.string().optional(),
 
   // Google
   GOOGLE_CLIENT_ID: z.string().optional(),
