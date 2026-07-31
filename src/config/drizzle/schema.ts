@@ -208,3 +208,42 @@ export const featureFlagAudit = pgTable('feature_flag_audit', {
 
 export type FeatureFlagAudit = InferSelectModel<typeof featureFlagAudit>;
 export type NewFeatureFlagAudit = InferInsertModel<typeof featureFlagAudit>;
+
+// ── operator_stores ──────────────────────────────────────────────────────────
+// Backs the paul-explore operator dashboard. Moves the demo off in-memory data
+// onto real rows so the fleet reads and the sales analytics are real DB calls.
+export const operatorStores = pgTable("operator_stores", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  location: text("location").notNull().default(""),
+  province: text("province").notNull().default("ON"),
+  status: text("status").notNull().default("online"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorStore = InferSelectModel<typeof operatorStores>;
+export type NewOperatorStore = InferInsertModel<typeof operatorStores>;
+
+// ── operator_sales ───────────────────────────────────────────────────────────
+export const operatorSales = pgTable("operator_sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  productName: text("product_name").notNull(),
+  category: text("category").notNull().default(""),
+  unitPrice: doublePrecision("unit_price").notNull().default(0),
+  quantity: integer("quantity").notNull().default(1),
+  total: doublePrecision("total").notNull().default(0),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorSale = InferSelectModel<typeof operatorSales>;
+export type NewOperatorSale = InferInsertModel<typeof operatorSales>;
