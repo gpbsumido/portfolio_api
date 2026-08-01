@@ -16,10 +16,11 @@ import {
   operatorActivity,
   operatorAlerts,
   operatorInventory,
+  operatorPlanograms,
   operatorSales,
   operatorStores,
 } from '../../config/drizzle/schema.js';
-import type { SalesGranularity } from './types.js';
+import type { PlanogramBox, SalesGranularity } from './types.js';
 
 export async function listStores(): Promise<OperatorStore[]> {
   return db.select().from(operatorStores).orderBy(operatorStores.name);
@@ -158,4 +159,89 @@ export async function salesByStore(since: Date): Promise<StoreTotalRow[]> {
     )
     .groupBy(operatorStores.id, operatorStores.name)
     .orderBy(desc(revenue));
+}
+
+// ---------------------------------------------------------------------------
+// Planogram
+// ---------------------------------------------------------------------------
+
+export async function getPlanogram(storeId: string): Promise<PlanogramBox[]> {
+  const rows = await db
+    .select({ boxes: operatorPlanograms.boxes })
+    .from(operatorPlanograms)
+    .where(eq(operatorPlanograms.storeId, storeId))
+    .limit(1);
+  return rows[0]?.boxes ?? [];
+}
+
+/** Replaces a store's planogram layout, creating the row if needed. */
+export async function setPlanogram(
+  storeId: string,
+  boxes: PlanogramBox[],
+): Promise<PlanogramBox[]> {
+  const [row] = await db
+    .insert(operatorPlanograms)
+    .values({ storeId, boxes })
+    .onConflictDoUpdate({
+      target: operatorPlanograms.storeId,
+      set: { boxes, updatedAt: new Date() },
+    })
+    .returning({ boxes: operatorPlanograms.boxes });
+  return row.boxes;
+}
+
+// ---------------------------------------------------------------------------
+// Fleet summary aggregations — grouped in SQL, one query per axis
+// ---------------------------------------------------------------------------
+
+export type AlertStatRow = {
+  storeId: string;
+  unacked: number;
+  critical: number;
+  warning: number;
+};
+
+export async function alertStatsByStore(): Promise<AlertStatRow[]> {
+  const notAck = sql`not ${operatorAlerts.acknowledged}`;
+  return db
+    .select({
+      storeId: operatorAlerts.storeId,
+      unacked: sql<number>`count(*) filter (where ${notAck})::int`,
+      critical: sql<number>`count(*) filter (where ${notAck} and ${operatorAlerts.severity} = 'critical')::int`,
+      warning: sql<number>`count(*) filter (where ${notAck} and ${operatorAlerts.severity} = 'warning')::int`,
+    })
+    .from(operatorAlerts)
+    .groupBy(operatorAlerts.storeId);
+}
+
+export type InventoryStatRow = {
+  storeId: string;
+  avgFill: number;
+  lowStock: number;
+  itemCount: number;
+};
+
+export async function inventoryStatsByStore(): Promise<InventoryStatRow[]> {
+  const fill = sql`(${operatorInventory.currentStock}::float / nullif(${operatorInventory.capacity}, 0))`;
+  return db
+    .select({
+      storeId: operatorInventory.storeId,
+      avgFill: sql<number>`coalesce(avg(${fill}), 0)::float8`,
+      lowStock: sql<number>`count(*) filter (where ${fill} < 0.2)::int`,
+      itemCount: sql<number>`count(*)::int`,
+    })
+    .from(operatorInventory)
+    .groupBy(operatorInventory.storeId);
+}
+
+export type AlertTrendRow = { hour: Date; count: number };
+
+export async function alertHourlyTrend(since: Date): Promise<AlertTrendRow[]> {
+  const hour = sql<Date>`date_trunc('hour', ${operatorAlerts.occurredAt})`;
+  return db
+    .select({ hour, count: sql<number>`count(*)::int` })
+    .from(operatorAlerts)
+    .where(gte(operatorAlerts.occurredAt, since))
+    .groupBy(hour)
+    .orderBy(hour);
 }

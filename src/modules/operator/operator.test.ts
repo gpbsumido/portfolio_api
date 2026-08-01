@@ -12,6 +12,11 @@ vi.mock('./repository.js', () => ({
   dismissAlert: vi.fn(),
   listActivity: vi.fn(),
   insertActivity: vi.fn(),
+  getPlanogram: vi.fn(),
+  setPlanogram: vi.fn(),
+  alertStatsByStore: vi.fn(),
+  inventoryStatsByStore: vi.fn(),
+  alertHourlyTrend: vi.fn(),
   salesByPeriod: vi.fn(),
   salesByStore: vi.fn(),
 }));
@@ -28,6 +33,7 @@ vi.mock('../../shared/utils/logger.js', () => ({
 
 import { errorHandler } from '../../middleware/errorHandler.js';
 import { buildBuckets, windowStart } from './analytics.js';
+import { assembleFleetSummary, fillAlertTrend } from './fleet-summary.js';
 import * as repo from './repository.js';
 import operatorRoutes from './routes.js';
 
@@ -260,6 +266,120 @@ describe('operator entity routes', () => {
       timestamp: '2026-07-20T00:00:00.000Z',
       actor: 'operator@smartstore.example',
     });
+  });
+});
+
+describe('operator planogram routes', () => {
+  test('GET /stores/:id/planogram returns boxes under a slots key', async () => {
+    const boxes = [
+      { itemId: ITEM_ID, sensorMatch: true },
+      { itemId: null, sensorMatch: true },
+    ];
+    vi.mocked(repo.getPlanogram).mockResolvedValue(boxes as never);
+    const res = await request(makeApp()).get(
+      `/api/operator/stores/${STORE_ID}/planogram`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.slots).toEqual(boxes);
+  });
+
+  test('PATCH /stores/:id/planogram stores a new box layout', async () => {
+    const boxes = [{ itemId: ITEM_ID, sensorMatch: true }];
+    vi.mocked(repo.setPlanogram).mockResolvedValue(boxes as never);
+    const res = await request(makeApp())
+      .patch(`/api/operator/stores/${STORE_ID}/planogram`)
+      .send({ boxes });
+    expect(res.status).toBe(200);
+    expect(res.body.slots).toEqual(boxes);
+    expect(vi.mocked(repo.setPlanogram)).toHaveBeenCalledWith(STORE_ID, boxes);
+  });
+
+  test('PATCH /stores/:id/planogram re-syncs a slot by item id', async () => {
+    vi.mocked(repo.getPlanogram).mockResolvedValue([
+      { itemId: ITEM_ID, sensorMatch: false },
+    ] as never);
+    vi.mocked(repo.setPlanogram).mockImplementation(
+      async (_id, boxes) => boxes as never,
+    );
+    const res = await request(makeApp())
+      .patch(`/api/operator/stores/${STORE_ID}/planogram`)
+      .send({ resyncItemId: ITEM_ID });
+    expect(res.status).toBe(200);
+    expect(res.body.slots[0].sensorMatch).toBe(true);
+  });
+
+  test('PATCH /stores/:id/planogram rejects an unknown body shape', async () => {
+    const res = await request(makeApp())
+      .patch(`/api/operator/stores/${STORE_ID}/planogram`)
+      .send({ nonsense: true });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('operator fleet-summary route', () => {
+  test('GET /fleet-summary aggregates per-store health and a 24h trend', async () => {
+    vi.mocked(repo.listStores).mockResolvedValue([store()] as never);
+    vi.mocked(repo.alertStatsByStore).mockResolvedValue([
+      { storeId: STORE_ID, unacked: 3, critical: 1, warning: 2 },
+    ] as never);
+    vi.mocked(repo.inventoryStatsByStore).mockResolvedValue([
+      { storeId: STORE_ID, avgFill: 0.75, lowStock: 1, itemCount: 6 },
+    ] as never);
+    vi.mocked(repo.alertHourlyTrend).mockResolvedValue([] as never);
+
+    const res = await request(makeApp()).get('/api/operator/fleet-summary');
+    expect(res.status).toBe(200);
+    expect(res.body.summaries[0]).toMatchObject({
+      storeId: STORE_ID,
+      alertCount: 3,
+      inventoryHealth: 75,
+      hasCritical: true,
+      hasWarning: true,
+    });
+    expect(res.body.fleetStats.criticalAlerts).toBe(1);
+    expect(res.body.fleetStats.lowStockItems).toBe(1);
+    expect(res.body.fleetStats.avgInventoryHealth).toBe(75);
+    expect(res.body.alertTrend).toHaveLength(24);
+  });
+});
+
+describe('assembleFleetSummary', () => {
+  const now = new Date('2026-08-01T12:00:00.000Z');
+
+  test('maps stats onto stores and totals the fleet', () => {
+    const result = assembleFleetSummary(
+      [{ id: 's1' }, { id: 's2' }],
+      [
+        { storeId: 's1', unacked: 2, critical: 1, warning: 1 },
+        { storeId: 's2', unacked: 0, critical: 0, warning: 0 },
+      ],
+      [
+        { storeId: 's1', avgFill: 0.5, lowStock: 1, itemCount: 4 },
+        { storeId: 's2', avgFill: 1, lowStock: 0, itemCount: 4 },
+      ],
+      [],
+      now,
+    );
+    expect(result.summaries).toHaveLength(2);
+    expect(result.summaries[0].inventoryHealth).toBe(50);
+    expect(result.summaries[0].hasCritical).toBe(true);
+    // overall avg fill = (0.5*4 + 1*4) / 8 = 0.75
+    expect(result.fleetStats.avgInventoryHealth).toBe(75);
+    expect(result.fleetStats.criticalAlerts).toBe(1);
+    expect(result.fleetStats.lowStockItems).toBe(1);
+  });
+});
+
+describe('fillAlertTrend', () => {
+  const now = new Date('2026-08-01T12:30:00.000Z');
+
+  test('returns 24 buckets and places a count in the matching hour', () => {
+    const buckets = fillAlertTrend(
+      [{ hour: new Date('2026-08-01T12:00:00.000Z'), count: 5 }],
+      now,
+    );
+    expect(buckets).toHaveLength(24);
+    expect(buckets[23]).toEqual({ hour: '12:00', count: 5 });
   });
 });
 

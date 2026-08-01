@@ -66,3 +66,35 @@ export type FleetSalesAnalyticsDto = {
   byStore: FleetStoreTotal[];
   totalRevenue: number;
 };
+
+/** A planogram box: the item it holds (null = empty) and its sensor state. */
+export type PlanogramBox = {
+  itemId: string | null;
+  sensorMatch: boolean;
+};
+
+export type StoreSummaryDto = {
+  storeId: string;
+  alertCount: number;
+  inventoryHealth: number;
+  hasCritical: boolean;
+  hasWarning: boolean;
+};
+
+export type FleetStatsDto = {
+  criticalAlerts: number;
+  warningAlerts: number;
+  lowStockItems: number;
+  avgInventoryHealth: number;
+};
+
+export type AlertTrendBucketDto = {
+  hour: string;
+  count: number;
+};
+
+export type FleetSummaryDto = {
+  summaries: StoreSummaryDto[];
+  fleetStats: FleetStatsDto;
+  alertTrend: AlertTrendBucketDto[];
+};
