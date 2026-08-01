@@ -19,6 +19,7 @@ import type {
   FlagKind,
   Variation,
 } from '../../modules/feature-flags/types.js';
+import type { PlanogramBox } from '../../modules/operator/types.js';
 
 // ── users ──────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
@@ -287,6 +288,22 @@ export type OperatorActivityEvent = InferSelectModel<typeof operatorActivity>;
 export type NewOperatorActivityEvent = InferInsertModel<
   typeof operatorActivity
 >;
+
+// ── operator_planograms ──────────────────────────────────────────────────────
+// One row per store; the layout is a JSONB array of boxes so the client can
+// read and replace the whole arrangement in one call.
+export const operatorPlanograms = pgTable("operator_planograms", {
+  storeId: uuid("store_id")
+    .primaryKey()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  boxes: jsonb("boxes").$type<PlanogramBox[]>().notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorPlanogram = InferSelectModel<typeof operatorPlanograms>;
+export type NewOperatorPlanogram = InferInsertModel<typeof operatorPlanograms>;
 
 // ── operator_sales ───────────────────────────────────────────────────────────
 export const operatorSales = pgTable("operator_sales", {
