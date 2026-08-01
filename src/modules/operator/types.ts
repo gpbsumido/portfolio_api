@@ -10,6 +10,40 @@ export type StoreDto = {
   location: string;
   province: string;
   status: string;
+  temperature: number;
+  uptime: number;
+  revenue24h: number;
+  lastPing: string;
+};
+
+export type InventoryItemDto = {
+  id: string;
+  storeId: string;
+  productName: string;
+  category: string;
+  currentStock: number;
+  capacity: number;
+  price: number;
+  lastRestocked: string;
+};
+
+export type AlertDto = {
+  id: string;
+  storeId: string;
+  severity: string;
+  category: string;
+  message: string;
+  timestamp: string;
+  acknowledged: boolean;
+};
+
+export type ActivityEventDto = {
+  id: string;
+  storeId: string;
+  type: string;
+  description: string;
+  timestamp: string;
+  actor?: string;
 };
 
 export type SalesPeriodBucket = {
