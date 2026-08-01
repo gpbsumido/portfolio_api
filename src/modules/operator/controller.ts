@@ -33,6 +33,21 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const log = createModuleLogger('operator');
 
+const ONLINE_PING_MS = 30_000; // ~30s ago -> "strong signal"
+const STALE_PING_MS = 7 * 60_000; // 7min ago -> the degraded/offline demo tier
+
+/**
+ * The stored last_ping is static seed data; a real device reports continuously.
+ * To keep the freshness indicators meaningful (online reads as a strong recent
+ * signal, degraded/offline reads as stale) instead of every store aging into
+ * "offline" as time passes since the seed, synthesize a recent ping per read
+ * from the store's status. Mirrors the demo's previous in-memory behavior.
+ */
+function freshLastPing(status: string): string {
+  const offset = status === 'online' ? ONLINE_PING_MS : STALE_PING_MS;
+  return new Date(Date.now() - offset).toISOString();
+}
+
 function param(val: string | string[] | undefined): string {
   if (Array.isArray(val)) return val[0];
   return val ?? '';
@@ -54,7 +69,7 @@ function toStoreDto(row: OperatorStore): StoreDto {
     temperature: row.temperature,
     uptime: row.uptime,
     revenue24h: row.revenue24h,
-    lastPing: (row.lastPing ?? new Date()).toISOString(),
+    lastPing: freshLastPing(row.status),
   };
 }
 
