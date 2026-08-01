@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-01 - version 3.5.0
+
+- **Added a scheduled re-seed for the operator demo.** The operator dashboard has time-relative views (the 24-hour alert trend, the day/week sales ranges) built on static seed timestamps, so the data thins out as it ages. A new `reseed-operator` cron job wipes and re-inserts the fleet on a schedule (suggested daily, `0 4 * * *`), restoring the canonical demo and refreshing every timestamp — the same approach `reset-feature-flags` uses for the flags console. To keep the CLI seed and the job from drifting, both now call a single `seedOperator()` (one transactional wipe-and-insert from the pure builder); `scripts/operator/seed.ts` became a thin wrapper. Wire it up in the scheduler with `RUN_CRON=true CRON_JOB=reseed-operator`. paul-explore shows a note on the dashboard so the periodic reset isn't a surprise.
+
 ## 2026-08-01 - version 3.4.1
 
 - **Fixed operator stores drifting into "offline" once paul-explore read them from the database.** A store's `last_ping` is sensor telemetry — a real device reports it continuously — but the seed writes it once, so as time passed since seeding the value aged past the dashboard's 10-minute offline threshold and every store showed "offline" with no way to recover. The store DTO now synthesizes a recent ping per read from the store's status (online reads as a strong ~30s-old signal, degraded/offline as a stale ~7-minute one), mirroring the freshening the in-memory demo used to do. The rest of the store row is real DB data; only `last_ping`, which can't be static and still be meaningful, is derived.
