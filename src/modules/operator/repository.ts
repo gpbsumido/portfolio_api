@@ -6,10 +6,16 @@
 // every sale row into the app and summing there. The database does the fan-in.
 // ---------------------------------------------------------------------------
 
-import { and, desc, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
+  type OperatorActivityEvent,
+  type OperatorAlert,
+  type OperatorInventoryItem,
   type OperatorStore,
+  operatorActivity,
+  operatorAlerts,
+  operatorInventory,
   operatorSales,
   operatorStores,
 } from '../../config/drizzle/schema.js';
@@ -17,6 +23,84 @@ import type { SalesGranularity } from './types.js';
 
 export async function listStores(): Promise<OperatorStore[]> {
   return db.select().from(operatorStores).orderBy(operatorStores.name);
+}
+
+export async function getStore(id: string): Promise<OperatorStore | null> {
+  const rows = await db
+    .select()
+    .from(operatorStores)
+    .where(eq(operatorStores.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listInventory(
+  storeId: string,
+): Promise<OperatorInventoryItem[]> {
+  return db
+    .select()
+    .from(operatorInventory)
+    .where(eq(operatorInventory.storeId, storeId))
+    .orderBy(operatorInventory.productName);
+}
+
+/** Restock the given items to full capacity, returning the updated rows. */
+export async function restockItems(
+  storeId: string,
+  itemIds: readonly string[],
+): Promise<OperatorInventoryItem[]> {
+  if (itemIds.length === 0) return [];
+  return db
+    .update(operatorInventory)
+    .set({
+      currentStock: sql`${operatorInventory.capacity}`,
+      lastRestocked: new Date(),
+    })
+    .where(
+      and(
+        eq(operatorInventory.storeId, storeId),
+        inArray(operatorInventory.id, [...itemIds]),
+      ),
+    )
+    .returning();
+}
+
+export async function listAlerts(storeId: string): Promise<OperatorAlert[]> {
+  return db
+    .select()
+    .from(operatorAlerts)
+    .where(eq(operatorAlerts.storeId, storeId))
+    .orderBy(desc(operatorAlerts.occurredAt));
+}
+
+/** Acknowledge an alert, returning the updated row (or null if unknown). */
+export async function dismissAlert(id: string): Promise<OperatorAlert | null> {
+  const rows = await db
+    .update(operatorAlerts)
+    .set({ acknowledged: true })
+    .where(eq(operatorAlerts.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function listActivity(
+  storeId: string,
+): Promise<OperatorActivityEvent[]> {
+  return db
+    .select()
+    .from(operatorActivity)
+    .where(eq(operatorActivity.storeId, storeId))
+    .orderBy(desc(operatorActivity.occurredAt));
+}
+
+export async function insertActivity(values: {
+  storeId: string;
+  type: string;
+  description: string;
+  actor?: string | null;
+}): Promise<OperatorActivityEvent> {
+  const [row] = await db.insert(operatorActivity).values(values).returning();
+  return row;
 }
 
 export type PeriodRow = { period: Date; revenue: number; units: number };
