@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-31 - version 3.1.0
+
+- **New: the `operator` module** — moves the paul-explore operator dashboard off in-memory demo data and onto real tables. A `013_operator` migration creates `operator_stores` and `operator_sales` (indexed on `store_id` and `occurred_at`), with matching Drizzle schema. `GET /api/operator/stores` returns the fleet, and `GET /api/operator/sales-analytics?granularity=day|week|month|year` returns a fleet-wide sales rollup. The reason it lives in the DB: the analytics are two grouped SQL queries — one `date_trunc(...) … GROUP BY` for the time buckets and one `GROUP BY store` (left join so zero-sales stores still rank) — instead of pulling every sale row into the app and summing there. The controller fills the sparse DB rows into the fixed window (7 days / 8 weeks / 12 months / 5 years) and logs the aggregation time so the efficiency is measurable. Bucket assembly is a pure, clock-injectable helper covered by unit tests; the routes are covered with a mocked repository, so the suite still needs no live database. This is part one (stores + sales); inventory, alerts, activity, and the planogram are follow-ups.
+
 ## 2026-07-28 - version 3.0.1
 
 - Ignore the agent harness scratch directories (`.harness/`, `.harness-logs/`). They were untracked but not ignored, so a `git add -A` picked them up -- which nearly put session logs into a PR. paul-explore already ignored them; this brings the API into line

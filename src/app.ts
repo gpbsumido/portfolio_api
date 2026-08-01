@@ -26,6 +26,7 @@ import profilesRoutes from './modules/profiles/routes.js';
 import repliesRoutes from './modules/replies/routes.js';
 import repostsRoutes from './modules/reposts/routes.js';
 import searchRoutes from './modules/search/routes.js';
+import operatorRoutes from './modules/operator/routes.js';
 import referralsRoutes from './modules/referrals/routes.js';
 import timelineRoutes from './modules/timeline/routes.js';
 import vitalsRoutes from './modules/vitals/routes.js';
@@ -60,6 +61,7 @@ app.use('/api/fantasy', fantasyRoutes);
 app.use('/api/vitals', vitalsRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/referrals', referralsRoutes);
+app.use('/api/operator', operatorRoutes);
 // Reads public; the PATCH write applies checkJwt internally per-route.
 app.use('/api/feature-flags', featureFlagsRoutes);
 
