@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-01 - version 3.4.1
+
+- **Fixed operator stores drifting into "offline" once paul-explore read them from the database.** A store's `last_ping` is sensor telemetry — a real device reports it continuously — but the seed writes it once, so as time passed since seeding the value aged past the dashboard's 10-minute offline threshold and every store showed "offline" with no way to recover. The store DTO now synthesizes a recent ping per read from the store's status (online reads as a strong ~30s-old signal, degraded/offline as a stale ~7-minute one), mirroring the freshening the in-memory demo used to do. The rest of the store row is real DB data; only `last_ping`, which can't be static and still be meaningful, is derived.
+
 ## 2026-08-01 - version 3.4.0
 
 - **Operator backend, part four: a demo seed.** `pnpm seed:operator` wipes and re-populates the operator tables with a realistic demo fleet — 6 stores (one degraded), 36 inventory items, 24 alerts, 36 activity events, 360 sales spread across ~18 months so every analytics range has data, and a planogram per store (items plus a spare empty shelf). The dataset comes from a pure, deterministic builder (`buildOperatorSeed(uuid, now)`) that's unit-tested for its counts, its foreign-key relationships (every child row points at a real store, every planogram box references that store's own items or is empty), the 18-month sales spread, and reproducibility; the runner in `scripts/operator/seed.ts` just inserts it inside a transaction. With this, the operator backend is complete and demo-runnable end to end.
