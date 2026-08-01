@@ -12,16 +12,24 @@ import type {
 import { NotFoundError } from '../../shared/errors/AppError.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
+import { assembleFleetSummary } from './fleet-summary.js';
 import * as repo from './repository.js';
-import { type RestockInput, salesGranularitySchema } from './schemas.js';
+import {
+  type PlanogramUpdateInput,
+  type RestockInput,
+  salesGranularitySchema,
+} from './schemas.js';
 import type {
   ActivityEventDto,
   AlertDto,
   FleetSalesAnalyticsDto,
   InventoryItemDto,
+  PlanogramBox,
   SalesGranularity,
   StoreDto,
 } from './types.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const log = createModuleLogger('operator');
 
@@ -170,6 +178,60 @@ export class OperatorController {
     try {
       const events = await repo.listActivity(param(req.params.storeId));
       res.json({ events: events.map(toActivityDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/stores/:storeId/planogram — the shelf layout. */
+  async getPlanogram(req: Request, res: Response, next: NextFunction) {
+    try {
+      const boxes = await repo.getPlanogram(param(req.params.storeId));
+      res.json({ slots: boxes });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/operator/stores/:storeId/planogram — rearrange or re-sync. */
+  async updatePlanogram(req: Request, res: Response, next: NextFunction) {
+    try {
+      const storeId = param(req.params.storeId);
+      const body = req.body as PlanogramUpdateInput;
+
+      let boxes: PlanogramBox[];
+      if ('boxes' in body) {
+        boxes = await repo.setPlanogram(storeId, body.boxes);
+      } else {
+        const current = await repo.getPlanogram(storeId);
+        const updated = current.map((box) =>
+          box.itemId === body.resyncItemId
+            ? { ...box, sensorMatch: true }
+            : box,
+        );
+        boxes = await repo.setPlanogram(storeId, updated);
+      }
+
+      res.json({ slots: boxes });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/fleet-summary — aggregated per-store health + trend. */
+  async fleetSummary(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const now = new Date();
+      const since = new Date(now.getTime() - DAY_MS);
+      const [stores, alertStats, inventoryStats, trend] = await Promise.all([
+        repo.listStores(),
+        repo.alertStatsByStore(),
+        repo.inventoryStatsByStore(),
+        repo.alertHourlyTrend(since),
+      ]);
+      res.json(
+        assembleFleetSummary(stores, alertStats, inventoryStats, trend, now),
+      );
     } catch (err) {
       next(err);
     }

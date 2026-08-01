@@ -21,3 +21,16 @@ export const restockBodySchema = z.object({
 });
 
 export type RestockInput = z.infer<typeof restockBodySchema>;
+
+export const planogramBoxSchema = z.object({
+  itemId: z.string().uuid().nullable(),
+  sensorMatch: z.boolean(),
+});
+
+/** A planogram update is either the whole new layout or a single-slot re-sync. */
+export const planogramUpdateSchema = z.union([
+  z.object({ boxes: z.array(planogramBoxSchema) }),
+  z.object({ resyncItemId: z.string().uuid() }),
+]);
+
+export type PlanogramUpdateInput = z.infer<typeof planogramUpdateSchema>;
