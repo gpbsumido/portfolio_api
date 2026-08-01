@@ -218,6 +218,10 @@ export const operatorStores = pgTable("operator_stores", {
   location: text("location").notNull().default(""),
   province: text("province").notNull().default("ON"),
   status: text("status").notNull().default("online"),
+  temperature: doublePrecision("temperature").notNull().default(4),
+  uptime: doublePrecision("uptime").notNull().default(99),
+  revenue24h: doublePrecision("revenue_24h").notNull().default(0),
+  lastPing: timestamp("last_ping", { withTimezone: true }).defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -225,6 +229,64 @@ export const operatorStores = pgTable("operator_stores", {
 
 export type OperatorStore = InferSelectModel<typeof operatorStores>;
 export type NewOperatorStore = InferInsertModel<typeof operatorStores>;
+
+// ── operator_inventory ───────────────────────────────────────────────────────
+export const operatorInventory = pgTable("operator_inventory", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  productName: text("product_name").notNull(),
+  category: text("category").notNull().default(""),
+  currentStock: integer("current_stock").notNull().default(0),
+  capacity: integer("capacity").notNull().default(1),
+  price: doublePrecision("price").notNull().default(0),
+  lastRestocked: timestamp("last_restocked", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorInventoryItem = InferSelectModel<typeof operatorInventory>;
+export type NewOperatorInventoryItem = InferInsertModel<
+  typeof operatorInventory
+>;
+
+// ── operator_alerts ──────────────────────────────────────────────────────────
+export const operatorAlerts = pgTable("operator_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  severity: text("severity").notNull(),
+  category: text("category").notNull(),
+  message: text("message").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  acknowledged: boolean("acknowledged").notNull().default(false),
+});
+
+export type OperatorAlert = InferSelectModel<typeof operatorAlerts>;
+export type NewOperatorAlert = InferInsertModel<typeof operatorAlerts>;
+
+// ── operator_activity ────────────────────────────────────────────────────────
+export const operatorActivity = pgTable("operator_activity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  actor: text("actor"),
+});
+
+export type OperatorActivityEvent = InferSelectModel<typeof operatorActivity>;
+export type NewOperatorActivityEvent = InferInsertModel<
+  typeof operatorActivity
+>;
 
 // ── operator_sales ───────────────────────────────────────────────────────────
 export const operatorSales = pgTable("operator_sales", {
