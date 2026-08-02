@@ -21,7 +21,12 @@ import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
 import { assembleFleetSummary } from './fleet-summary.js';
 import * as repo from './repository.js';
-import { comparePerformance, promotionStatus } from './promotions.js';
+import {
+  MAX_MEASURE_DAYS,
+  comparePerformance,
+  measurementWindow,
+  promotionStatus,
+} from './promotions.js';
 import { countStatusOf } from './restock.js';
 import {
   type CompleteSessionInput,
@@ -478,26 +483,34 @@ export class OperatorController {
       if (!promotion) throw new NotFoundError('promotion not found');
 
       const now = new Date();
-      const windowStart = promotion.startsAt;
-      const windowEnd = promotion.endsAt ?? now;
-      const span = windowEnd.getTime() - windowStart.getTime();
+      const window = measurementWindow(
+        promotion.startsAt,
+        promotion.endsAt ?? now,
+      );
+      const span = window.end.getTime() - window.start.getTime();
       const sales = await repo.salesInWindow(
         promotion.storeId,
-        new Date(windowStart.getTime() - span),
-        windowEnd,
+        new Date(window.start.getTime() - span),
+        window.end,
       );
 
       const comparison = comparePerformance(
         promotion,
         sales,
-        windowStart,
-        windowEnd,
+        window.start,
+        window.end,
       );
 
+      const base =
+        'Comparison against the equal-length period before this promotion. It is not a claim that the promotion caused the difference.';
       res.json({
         promotion: toPromotionDto(promotion, now),
         ...comparison,
-        note: 'Comparison against the equal-length period before this promotion. It is not a claim that the promotion caused the difference.',
+        measuredFrom: window.start.toISOString(),
+        measuredTo: window.end.toISOString(),
+        note: window.clamped
+          ? `${base} This promotion has run longer than ${MAX_MEASURE_DAYS} days, so only its most recent ${MAX_MEASURE_DAYS} days are measured.`
+          : base,
       });
     } catch (err) {
       next(err);

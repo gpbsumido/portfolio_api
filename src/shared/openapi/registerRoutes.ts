@@ -38,6 +38,11 @@ import { saveEntrySchema } from '../../modules/medical-journal/schemas.js';
 import { createForumPostSchema, createMarkerSchema } from '../../modules/forum/schemas.js';
 import { savePicksSchema, saveResultsSchema } from '../../modules/nba/schemas.js';
 import { createGalleryItemSchema } from '../../modules/gallery/schemas.js';
+import {
+  completeSessionSchema,
+  promotionBodySchema,
+  restockLineSchema,
+} from '../../modules/operator/schemas.js';
 
 // ── Helper ────────────────────────────────────────────────────────────────
 
@@ -499,4 +504,176 @@ registry.registerPath({
   summary: 'Get geolocation from IP',
   tags: ['Geo'],
   responses: { 200: { description: 'Location data' } },
+});
+
+// ── Operator ───────────────────────────────────────────────────────────────
+// The operator dashboard's endpoints. Public and unauthenticated by design for
+// now (it is a demo), rate limited per IP.
+
+const storeIdParam = z.object({ storeId: z.string().uuid() });
+const operatorTags = ['Operator'];
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/stores',
+  summary: 'List every store in the fleet',
+  tags: operatorTags,
+  responses: {
+    200: { description: 'The fleet, each store carrying its IANA timezone' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/sales-analytics',
+  summary: 'Fleet-wide sales, bucketed in SQL',
+  description:
+    'Buckets resolve in the tz query param, defaulting to UTC. An unknown zone is rejected with 400 rather than falling back, because a wrong zone shifts every boundary and looks normal.',
+  tags: operatorTags,
+  request: {
+    query: z.object({
+      granularity: z.enum(['day', 'week', 'month', 'year']).optional(),
+      tz: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: { description: 'Buckets, per-store ranking and the fleet total' },
+    400: { description: 'Unknown IANA time zone' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/fleet-summary',
+  summary: 'Per-store health plus the 24-hour alert trend',
+  tags: operatorTags,
+  request: { query: z.object({ tz: z.string().optional() }) },
+  responses: { 200: { description: 'Summaries, fleet stats and alert trend' } },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/operator/stores/{storeId}/restock-sessions',
+  summary: 'Open a restock session',
+  tags: operatorTags,
+  request: { params: storeIdParam },
+  responses: {
+    201: { description: 'The open session' },
+    404: { description: 'Store not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/stores/{storeId}/restock-sessions',
+  summary: "A store's restock history, newest first",
+  tags: operatorTags,
+  request: { params: storeIdParam },
+  responses: { 200: { description: 'Sessions' } },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/restock-sessions/{sessionId}',
+  summary: 'A session and its lines, used to resume after a reload',
+  tags: operatorTags,
+  request: { params: z.object({ sessionId: z.string().uuid() }) },
+  responses: {
+    200: { description: 'Session plus lines, each with a derived count status' },
+    404: { description: 'Session not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'put',
+  path: '/api/operator/restock-sessions/{sessionId}/lines/{itemId}',
+  summary: 'Record one slot',
+  description:
+    'Upserts on (session_id, item_id) so a retry is safe. countedQty may be null, which records that the restocker chose to skip counting rather than that data is missing. A removal without a reason is rejected.',
+  tags: operatorTags,
+  request: {
+    params: z.object({
+      sessionId: z.string().uuid(),
+      itemId: z.string().uuid(),
+    }),
+    body: { content: { 'application/json': { schema: restockLineSchema } } },
+  },
+  responses: {
+    200: { description: 'The stored line' },
+    400: { description: 'Removal with no reason, or a reason outside the enum' },
+    404: { description: 'Session not found' },
+    409: { description: 'Session already complete' },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/operator/restock-sessions/{sessionId}/complete',
+  summary: 'Apply a session to inventory',
+  description:
+    'The only call that changes stock. One transaction. A second completion is a 409 rather than a no-op, so a double submit from a phone cannot apply the adds and removes twice.',
+  tags: operatorTags,
+  request: {
+    params: z.object({ sessionId: z.string().uuid() }),
+    body: { content: { 'application/json': { schema: completeSessionSchema } } },
+  },
+  responses: {
+    200: { description: 'Session, frozen lines, updated items and an activity event' },
+    404: { description: 'Session not found' },
+    409: { description: 'Session already complete' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/stores/{storeId}/promotions',
+  summary: 'Promotions for a store, status derived per read',
+  tags: operatorTags,
+  request: { params: storeIdParam },
+  responses: { 200: { description: 'Promotions' } },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/operator/stores/{storeId}/promotions',
+  summary: 'Schedule a promotion',
+  description:
+    'Targets one product or the whole store. Emits a price-update activity event. Nothing mutates inventory.price; the discount applies at read time so the list price survives.',
+  tags: operatorTags,
+  request: {
+    params: storeIdParam,
+    body: { content: { 'application/json': { schema: promotionBodySchema } } },
+  },
+  responses: {
+    201: { description: 'The scheduled promotion' },
+    400: { description: 'Percent outside 1-90, or an end before its start' },
+    404: { description: 'Store not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/operator/promotions/{promotionId}/end',
+  summary: 'End a promotion now',
+  description: 'Closes it rather than deleting it; the history is the point.',
+  tags: operatorTags,
+  request: { params: z.object({ promotionId: z.string().uuid() }) },
+  responses: {
+    200: { description: 'The ended promotion' },
+    404: { description: 'Promotion not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/operator/promotions/{promotionId}/performance',
+  summary: 'What a promotion did, against the period before it',
+  description:
+    'A before-and-after against the equal-length period immediately before the window, NOT attribution. Seasonality and unrelated changes move the same number, so both raw totals are returned alongside a note saying so. Windows longer than 180 days are clamped to their most recent 180, and the response says when that happened.',
+  tags: operatorTags,
+  request: { params: z.object({ promotionId: z.string().uuid() }) },
+  responses: {
+    200: { description: 'Window and baseline totals, deltas, and the measured range' },
+    404: { description: 'Promotion not found' },
+  },
 });

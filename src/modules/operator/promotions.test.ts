@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  MAX_MEASURE_DAYS,
   appliesTo,
+  measurementWindow,
   comparePerformance,
   discountedPrice,
   promotionStatus,
@@ -150,5 +152,33 @@ describe('comparePerformance', () => {
       windowEnd,
     );
     expect(result.window.units).toBe(34); // 8 + 6 + 20
+  });
+});
+
+describe('measurementWindow', () => {
+  const startedLongAgo = new Date('2024-01-01T00:00:00.000Z');
+  const now = new Date('2026-08-10T12:00:00.000Z');
+
+  test('leaves a normal window alone', () => {
+    const from = new Date('2026-08-01T00:00:00.000Z');
+    const to = new Date('2026-08-11T00:00:00.000Z');
+    const win = measurementWindow(from, to);
+    expect(win.start.toISOString()).toBe(from.toISOString());
+    expect(win.clamped).toBe(false);
+  });
+
+  test('clamps an open-ended promotion that has run for years', () => {
+    // Otherwise the baseline doubles the fetch and we pull years of sales to
+    // answer one question.
+    const win = measurementWindow(startedLongAgo, now);
+    const days = (win.end.getTime() - win.start.getTime()) / 86_400_000;
+    expect(days).toBe(MAX_MEASURE_DAYS);
+    expect(win.clamped).toBe(true);
+  });
+
+  test('clamping keeps the end fixed and moves the start forward', () => {
+    const win = measurementWindow(startedLongAgo, now);
+    expect(win.end.toISOString()).toBe(now.toISOString());
+    expect(win.start.getTime()).toBeGreaterThan(startedLongAgo.getTime());
   });
 });

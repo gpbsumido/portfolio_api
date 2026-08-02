@@ -52,27 +52,6 @@ export async function listInventory(
     .orderBy(operatorInventory.productName);
 }
 
-/** Restock the given items to full capacity, returning the updated rows. */
-export async function restockItems(
-  storeId: string,
-  itemIds: readonly string[],
-): Promise<OperatorInventoryItem[]> {
-  if (itemIds.length === 0) return [];
-  return db
-    .update(operatorInventory)
-    .set({
-      currentStock: sql`${operatorInventory.capacity}`,
-      lastRestocked: new Date(),
-    })
-    .where(
-      and(
-        eq(operatorInventory.storeId, storeId),
-        inArray(operatorInventory.id, [...itemIds]),
-      ),
-    )
-    .returning();
-}
-
 export async function listAlerts(storeId: string): Promise<OperatorAlert[]> {
   return db
     .select()

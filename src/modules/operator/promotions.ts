@@ -43,6 +43,39 @@ export type PerformanceComparison = {
   revenueChangePercent: number | null;
 };
 
+/**
+ * The longest stretch we will measure a promotion over.
+ *
+ * An open-ended promotion started a year ago has a window of a year, and the
+ * baseline doubles the fetch, so measuring it would pull two years of sales to
+ * answer one question. Clamping keeps the query bounded no matter how long a
+ * promotion has been left running. The clamp is reported rather than hidden,
+ * because a number quietly measured over a different period than the reader
+ * assumes is the kind of thing that gets acted on.
+ */
+export const MAX_MEASURE_DAYS = 180;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type MeasurementWindow = {
+  start: Date;
+  end: Date;
+  clamped: boolean;
+};
+
+/**
+ * The window we will actually measure, clamped to the most recent
+ * MAX_MEASURE_DAYS. The end stays put and the start moves forward, so a long
+ * promotion is measured over its most recent stretch rather than its oldest.
+ */
+export function measurementWindow(start: Date, end: Date): MeasurementWindow {
+  const maxMs = MAX_MEASURE_DAYS * DAY_MS;
+  if (end.getTime() - start.getTime() <= maxMs) {
+    return { start, end, clamped: false };
+  }
+  return { start: new Date(end.getTime() - maxMs), end, clamped: true };
+}
+
 function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
 }

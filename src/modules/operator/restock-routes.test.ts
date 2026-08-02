@@ -8,7 +8,6 @@ vi.mock('./repository.js', () => ({
   listStores: vi.fn(),
   getStore: vi.fn(),
   listInventory: vi.fn(),
-  restockItems: vi.fn(),
   listAlerts: vi.fn(),
   dismissAlert: vi.fn(),
   listActivity: vi.fn(),
