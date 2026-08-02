@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "3.0.0",
+  "version": "3.5.0",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -17,7 +17,8 @@
     "migrate": "tsx node_modules/knex/bin/cli.js migrate:latest --knexfile knexfile.ts",
     "migrate:rollback": "tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile knexfile.ts",
     "migrate:make": "tsx node_modules/knex/bin/cli.js migrate:make --knexfile knexfile.ts -x ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "seed:operator": "tsx scripts/operator/seed.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [

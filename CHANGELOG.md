@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-01 - version 3.5.0
+
+- **Added a scheduled re-seed for the operator demo.** The operator dashboard has time-relative views (the 24-hour alert trend, the day/week sales ranges) built on static seed timestamps, so the data thins out as it ages. A new `reseed-operator` cron job wipes and re-inserts the fleet on a schedule (suggested daily, `0 4 * * *`), restoring the canonical demo and refreshing every timestamp — the same approach `reset-feature-flags` uses for the flags console. To keep the CLI seed and the job from drifting, both now call a single `seedOperator()` (one transactional wipe-and-insert from the pure builder); `scripts/operator/seed.ts` became a thin wrapper. Wire it up in the scheduler with `RUN_CRON=true CRON_JOB=reseed-operator`. paul-explore shows a note on the dashboard so the periodic reset isn't a surprise.
+
+## 2026-08-01 - version 3.4.1
+
+- **Fixed operator stores drifting into "offline" once paul-explore read them from the database.** A store's `last_ping` is sensor telemetry — a real device reports it continuously — but the seed writes it once, so as time passed since seeding the value aged past the dashboard's 10-minute offline threshold and every store showed "offline" with no way to recover. The store DTO now synthesizes a recent ping per read from the store's status (online reads as a strong ~30s-old signal, degraded/offline as a stale ~7-minute one), mirroring the freshening the in-memory demo used to do. The rest of the store row is real DB data; only `last_ping`, which can't be static and still be meaningful, is derived.
+
+## 2026-08-01 - version 3.4.0
+
+- **Operator backend, part four: a demo seed.** `pnpm seed:operator` wipes and re-populates the operator tables with a realistic demo fleet — 6 stores (one degraded), 36 inventory items, 24 alerts, 36 activity events, 360 sales spread across ~18 months so every analytics range has data, and a planogram per store (items plus a spare empty shelf). The dataset comes from a pure, deterministic builder (`buildOperatorSeed(uuid, now)`) that's unit-tested for its counts, its foreign-key relationships (every child row points at a real store, every planogram box references that store's own items or is empty), the 18-month sales spread, and reproducibility; the runner in `scripts/operator/seed.ts` just inserts it inside a transaction. With this, the operator backend is complete and demo-runnable end to end.
+
+## 2026-08-01 - version 3.3.0
+
+- **Operator backend, part three: the planogram and the fleet summary.** Migration `015_operator_planogram` adds `operator_planograms` (one JSONB `boxes` row per store), and the module gains `GET /api/operator/stores/:storeId/planogram` and `PATCH …/planogram` — the PATCH takes either the whole new box layout (an upsert) or a `{ resyncItemId }` to clear one slot's sensor mismatch. It also gains `GET /api/operator/fleet-summary`, the dashboard's aggregated view: per-store alert counts and inventory health, fleet-wide totals, and a 24-hour alert trend. The heavy lifting is grouped SQL — alerts-by-store and inventory-by-store use filtered aggregates (`count(*) filter (where …)`, `avg(stock/capacity)`), and the trend is a `date_trunc('hour', …) GROUP BY` — so the summary is a few small queries, not the whole alert and inventory tables pulled into the app. The sparse rows are folded into the dashboard shape by a pure, clock-injectable `assembleFleetSummary`. 130 tests green (mocked repo + supertest for the routes, unit tests for the assembly and the 24-hour trend fill), no live DB. Still to come: a demo seed.
+
+## 2026-08-01 - version 3.2.0
+
+- **Operator backend, part two: the per-store read entities.** Building on the stores + sales foundation, the `operator` module now covers the rest of the store-detail data the paul-explore dashboard needs. Migration `014_operator_entities` completes the store row (temperature, uptime, 24h revenue, last ping) and adds `operator_inventory`, `operator_alerts`, and `operator_activity`, all indexed on `store_id`. New endpoints: `GET /api/operator/stores/:storeId` (one store, 404 when unknown), `GET …/inventory`, `POST …/restock` (sets items to full capacity and logs an activity event), `GET …/alerts`, `PATCH /api/operator/alerts/:alertId/dismiss`, and `GET …/activity`. Params are uuid-validated, so a malformed id is a clean 400. As with part one, the routes are covered with a mocked repository and supertest (DTO shapes, restock-then-log, dismiss, 404s, validation) — 123 tests green, no live DB needed. Still to come: the planogram, the fleet-summary aggregation, and a demo seed.
+
+## 2026-07-31 - version 3.1.0
+
+- **New: the `operator` module** — moves the paul-explore operator dashboard off in-memory demo data and onto real tables. A `013_operator` migration creates `operator_stores` and `operator_sales` (indexed on `store_id` and `occurred_at`), with matching Drizzle schema. `GET /api/operator/stores` returns the fleet, and `GET /api/operator/sales-analytics?granularity=day|week|month|year` returns a fleet-wide sales rollup. The reason it lives in the DB: the analytics are two grouped SQL queries — one `date_trunc(...) … GROUP BY` for the time buckets and one `GROUP BY store` (left join so zero-sales stores still rank) — instead of pulling every sale row into the app and summing there. The controller fills the sparse DB rows into the fixed window (7 days / 8 weeks / 12 months / 5 years) and logs the aggregation time so the efficiency is measurable. Bucket assembly is a pure, clock-injectable helper covered by unit tests; the routes are covered with a mocked repository, so the suite still needs no live database. This is part one (stores + sales); inventory, alerts, activity, and the planogram are follow-ups.
+
+## 2026-07-28 - version 3.0.1
+
+- Ignore the agent harness scratch directories (`.harness/`, `.harness-logs/`). They were untracked but not ignored, so a `git add -A` picked them up -- which nearly put session logs into a PR. paul-explore already ignored them; this brings the API into line
+
 ## 2026-07-28 - version 3.0.0
 
 Release to production. Rolls up everything since 2.16.0.

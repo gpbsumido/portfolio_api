@@ -19,6 +19,7 @@ import type {
   FlagKind,
   Variation,
 } from '../../modules/feature-flags/types.js';
+import type { PlanogramBox } from '../../modules/operator/types.js';
 
 // ── users ──────────────────────────────────────────────────────────────────
 export const users = pgTable('users', {
@@ -208,3 +209,120 @@ export const featureFlagAudit = pgTable('feature_flag_audit', {
 
 export type FeatureFlagAudit = InferSelectModel<typeof featureFlagAudit>;
 export type NewFeatureFlagAudit = InferInsertModel<typeof featureFlagAudit>;
+
+// ── operator_stores ──────────────────────────────────────────────────────────
+// Backs the paul-explore operator dashboard. Moves the demo off in-memory data
+// onto real rows so the fleet reads and the sales analytics are real DB calls.
+export const operatorStores = pgTable("operator_stores", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  location: text("location").notNull().default(""),
+  province: text("province").notNull().default("ON"),
+  status: text("status").notNull().default("online"),
+  temperature: doublePrecision("temperature").notNull().default(4),
+  uptime: doublePrecision("uptime").notNull().default(99),
+  revenue24h: doublePrecision("revenue_24h").notNull().default(0),
+  lastPing: timestamp("last_ping", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorStore = InferSelectModel<typeof operatorStores>;
+export type NewOperatorStore = InferInsertModel<typeof operatorStores>;
+
+// ── operator_inventory ───────────────────────────────────────────────────────
+export const operatorInventory = pgTable("operator_inventory", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  productName: text("product_name").notNull(),
+  category: text("category").notNull().default(""),
+  currentStock: integer("current_stock").notNull().default(0),
+  capacity: integer("capacity").notNull().default(1),
+  price: doublePrecision("price").notNull().default(0),
+  lastRestocked: timestamp("last_restocked", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorInventoryItem = InferSelectModel<typeof operatorInventory>;
+export type NewOperatorInventoryItem = InferInsertModel<
+  typeof operatorInventory
+>;
+
+// ── operator_alerts ──────────────────────────────────────────────────────────
+export const operatorAlerts = pgTable("operator_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  severity: text("severity").notNull(),
+  category: text("category").notNull(),
+  message: text("message").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  acknowledged: boolean("acknowledged").notNull().default(false),
+});
+
+export type OperatorAlert = InferSelectModel<typeof operatorAlerts>;
+export type NewOperatorAlert = InferInsertModel<typeof operatorAlerts>;
+
+// ── operator_activity ────────────────────────────────────────────────────────
+export const operatorActivity = pgTable("operator_activity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  actor: text("actor"),
+});
+
+export type OperatorActivityEvent = InferSelectModel<typeof operatorActivity>;
+export type NewOperatorActivityEvent = InferInsertModel<
+  typeof operatorActivity
+>;
+
+// ── operator_planograms ──────────────────────────────────────────────────────
+// One row per store; the layout is a JSONB array of boxes so the client can
+// read and replace the whole arrangement in one call.
+export const operatorPlanograms = pgTable("operator_planograms", {
+  storeId: uuid("store_id")
+    .primaryKey()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  boxes: jsonb("boxes").$type<PlanogramBox[]>().notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorPlanogram = InferSelectModel<typeof operatorPlanograms>;
+export type NewOperatorPlanogram = InferInsertModel<typeof operatorPlanograms>;
+
+// ── operator_sales ───────────────────────────────────────────────────────────
+export const operatorSales = pgTable("operator_sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  productName: text("product_name").notNull(),
+  category: text("category").notNull().default(""),
+  unitPrice: doublePrecision("unit_price").notNull().default(0),
+  quantity: integer("quantity").notNull().default(1),
+  total: doublePrecision("total").notNull().default(0),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type OperatorSale = InferSelectModel<typeof operatorSales>;
+export type NewOperatorSale = InferInsertModel<typeof operatorSales>;
