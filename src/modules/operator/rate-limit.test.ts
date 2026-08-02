@@ -55,7 +55,7 @@ function makeApp() {
 }
 
 const PROMO_ID = '88888888-8888-8888-8888-888888888888';
-const WRITE_LIMIT = 30;
+const WRITE_LIMIT = 200;
 
 describe('operator rate limiting', () => {
   // These routes are unauthenticated by design (public demo), so the limiter is

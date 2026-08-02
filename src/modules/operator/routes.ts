@@ -28,13 +28,24 @@ const ctrl = new OperatorController();
  * Putting checkJwt on the writes would 401 every restock from the demo, and the
  * frontend would quietly fall back to its in-memory seed -- which is exactly the
  * fiction this feature set removed. Auth belongs here the moment there is a real
- * tenant to protect; until then rate limiting is what actually bounds the abuse,
- * and the nightly reseed job puts the demo data back regardless.
+ * tenant to protect; until then the limiter is what bounds abuse, and the
+ * nightly reseed puts the demo data back regardless.
  *
- * Same numbers as the feature-flags module, which is the precedent in this repo.
+ * The limits are deliberately much higher than the feature-flags module's,
+ * because this traffic does not arrive the way that module's does. Every
+ * legitimate operator request reaches us server-side from paul-explore's BFF,
+ * so it all shares a handful of Vercel egress IPs rather than one bucket per
+ * visitor. A single open dashboard polls roughly 8 times a minute, so a
+ * flags-sized 120/min ceiling would start 429ing real users at about fifteen
+ * concurrent tabs while doing nothing about distributed abuse.
+ *
+ * So this is a runaway backstop, not per-user fairness: high enough that no
+ * amount of normal browsing trips it, low enough to stop a loop hammering the
+ * database. Per-user limiting needs the BFF to forward the caller's identity,
+ * which is the same wiring that auth would need.
  */
-const readLimiter = createIpLimiter({ windowMs: 60_000, max: 120 });
-const writeLimiter = createIpLimiter({ windowMs: 60_000, max: 30 });
+const readLimiter = createIpLimiter({ windowMs: 60_000, max: 1_000 });
+const writeLimiter = createIpLimiter({ windowMs: 60_000, max: 200 });
 
 // GET /api/operator/stores — the fleet list
 router.get('/stores', readLimiter, (req, res, next) => ctrl.listStores(req, res, next));
