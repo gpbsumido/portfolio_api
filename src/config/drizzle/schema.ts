@@ -218,6 +218,7 @@ export const operatorStores = pgTable("operator_stores", {
   name: text("name").notNull(),
   location: text("location").notNull().default(""),
   province: text("province").notNull().default("ON"),
+  timezone: text("timezone"),
   status: text("status").notNull().default("online"),
   temperature: doublePrecision("temperature").notNull().default(4),
   uptime: doublePrecision("uptime").notNull().default(99),
