@@ -4,9 +4,15 @@
 // The DB returns sparse, truncated period sums; these fill them into a fixed
 // set of windows (7 days / 8 weeks / 12 months / 5 years) with labels. Kept
 // pure and clock-injectable so the bucket boundaries are testable.
+//
+// Every boundary here used to be Date.UTC, which put a Toronto store's day
+// boundary at 8pm the previous evening. Boundaries now resolve in a caller-
+// supplied IANA zone, and the DB truncates in the same zone, so the join key
+// between a period row and its bucket is simply the instant they both land on.
 // ---------------------------------------------------------------------------
 
 import type { PeriodRow } from './repository.js';
+import { weekdayOf, zonedInstant, zonedParts } from './timezone.js';
 import type { SalesGranularity, SalesPeriodBucket } from './types.js';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -24,7 +30,6 @@ const MONTH_LABELS = [
   'Nov',
   'Dec',
 ] as const;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const PERIOD_COUNT: Record<SalesGranularity, number> = {
   day: 7,
@@ -37,74 +42,88 @@ export function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** The oldest-first list of period-start Dates for a granularity, ending now. */
-function periodStarts(granularity: SalesGranularity, now: Date): Date[] {
+/**
+ * The oldest-first list of period-start instants for a granularity, ending in
+ * the period `now` falls in.
+ *
+ * Steps are taken on the local calendar rather than by subtracting fixed
+ * milliseconds, which is what keeps a 23-hour spring-forward day from shifting
+ * every earlier bucket by an hour.
+ */
+function periodStarts(
+  granularity: SalesGranularity,
+  now: Date,
+  timeZone: string,
+): Date[] {
   const count = PERIOD_COUNT[granularity];
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const d = now.getUTCDate();
+  const { year, month, day } = zonedParts(now, timeZone);
   const starts: Date[] = [];
 
   for (let i = count - 1; i >= 0; i--) {
     if (granularity === 'day') {
-      starts.push(new Date(Date.UTC(y, m, d - i)));
+      starts.push(zonedInstant(year, month, day - i, 0, timeZone));
     } else if (granularity === 'week') {
-      const dow = new Date(Date.UTC(y, m, d)).getUTCDay();
-      const mondayOffset = (dow + 6) % 7;
-      starts.push(new Date(Date.UTC(y, m, d - mondayOffset) - i * 7 * MS_PER_DAY));
+      const mondayOffset = (weekdayOf(zonedParts(now, timeZone)) + 6) % 7;
+      starts.push(
+        zonedInstant(year, month, day - mondayOffset - i * 7, 0, timeZone),
+      );
     } else if (granularity === 'month') {
-      starts.push(new Date(Date.UTC(y, m - i, 1)));
+      starts.push(zonedInstant(year, month - i, 1, 0, timeZone));
     } else {
-      starts.push(new Date(Date.UTC(y - i, 0, 1)));
+      starts.push(zonedInstant(year - i, 1, 1, 0, timeZone));
     }
   }
   return starts;
 }
 
 /** The start of the visible window (the oldest bucket's start). */
-export function windowStart(granularity: SalesGranularity, now: Date): Date {
-  return periodStarts(granularity, now)[0];
+export function windowStart(
+  granularity: SalesGranularity,
+  now: Date,
+  timeZone: string,
+): Date {
+  return periodStarts(granularity, now, timeZone)[0];
 }
 
-/** A comparable key for matching a DB-truncated period to a fixed bucket. */
-function keyOf(granularity: SalesGranularity, date: Date): string {
-  const iso = date.toISOString();
-  if (granularity === 'year') return iso.slice(0, 4);
-  if (granularity === 'month') return iso.slice(0, 7);
-  return iso.slice(0, 10);
-}
+function labelOf(
+  granularity: SalesGranularity,
+  date: Date,
+  timeZone: string,
+): string {
+  const parts = zonedParts(date, timeZone);
 
-function labelOf(granularity: SalesGranularity, date: Date): string {
-  if (granularity === 'day') return DAY_LABELS[date.getUTCDay()];
+  if (granularity === 'day') return DAY_LABELS[weekdayOf(parts)];
   if (granularity === 'week') {
-    return `${MONTH_LABELS[date.getUTCMonth()]} ${date.getUTCDate()}`;
+    return `${MONTH_LABELS[parts.month - 1]} ${parts.day}`;
   }
   if (granularity === 'month') {
-    return `${MONTH_LABELS[date.getUTCMonth()]} ${String(
-      date.getUTCFullYear(),
-    ).slice(2)}`;
+    return `${MONTH_LABELS[parts.month - 1]} ${String(parts.year).slice(2)}`;
   }
-  return String(date.getUTCFullYear());
+  return String(parts.year);
 }
 
 /**
  * Fills the sparse DB period rows into the fixed set of buckets for the
  * granularity, oldest first, with labels and cents-rounded revenue.
+ *
+ * Rows are keyed by the exact instant their truncated period starts at, which
+ * lines up with `periodStarts` because both truncate in the same zone.
  */
 export function buildBuckets(
   granularity: SalesGranularity,
   rows: readonly PeriodRow[],
   now: Date,
+  timeZone: string,
 ): SalesPeriodBucket[] {
-  const byKey = new Map<string, PeriodRow>();
+  const byInstant = new Map<number, PeriodRow>();
   for (const row of rows) {
-    byKey.set(keyOf(granularity, new Date(row.period)), row);
+    byInstant.set(new Date(row.period).getTime(), row);
   }
 
-  return periodStarts(granularity, now).map((start) => {
-    const row = byKey.get(keyOf(granularity, start));
+  return periodStarts(granularity, now, timeZone).map((start) => {
+    const row = byInstant.get(start.getTime());
     return {
-      label: labelOf(granularity, start),
+      label: labelOf(granularity, start, timeZone),
       start: start.toISOString(),
       revenue: roundCents(row?.revenue ?? 0),
       units: row?.units ?? 0,

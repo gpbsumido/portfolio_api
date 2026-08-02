@@ -114,8 +114,12 @@ export type PeriodRow = { period: Date; revenue: number; units: number };
 export async function salesByPeriod(
   granularity: SalesGranularity,
   since: Date,
+  timeZone: string,
 ): Promise<PeriodRow[]> {
-  const period = sql<Date>`date_trunc(${granularity}, ${operatorSales.occurredAt})`;
+  // The three-argument date_trunc(field, source, zone) is Postgres 16 and this
+  // project runs 15, so we do the round trip by hand: shift the timestamptz into
+  // local wall clock, truncate there, shift the result back to an instant.
+  const period = sql<Date>`date_trunc(${granularity}, ${operatorSales.occurredAt} AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}`;
   return db
     .select({
       period,
@@ -236,8 +240,11 @@ export async function inventoryStatsByStore(): Promise<InventoryStatRow[]> {
 
 export type AlertTrendRow = { hour: Date; count: number };
 
-export async function alertHourlyTrend(since: Date): Promise<AlertTrendRow[]> {
-  const hour = sql<Date>`date_trunc('hour', ${operatorAlerts.occurredAt})`;
+export async function alertHourlyTrend(
+  since: Date,
+  timeZone: string,
+): Promise<AlertTrendRow[]> {
+  const hour = sql<Date>`date_trunc('hour', ${operatorAlerts.occurredAt} AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}`;
   return db
     .select({ hour, count: sql<number>`count(*)::int` })
     .from(operatorAlerts)

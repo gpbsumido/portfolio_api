@@ -143,7 +143,7 @@ function offsetMsAt(instant: Date, timeZone: string): number {
  * corrects it using the offset actually in force there -- which is what makes
  * the 23- and 25-hour DST days come out right.
  */
-function instantFromWallClock(
+export function zonedInstant(
   year: number,
   month: number,
   day: number,
@@ -158,7 +158,7 @@ function instantFromWallClock(
 /** Local midnight of the day an instant falls in. */
 export function dayStartInZone(instant: Date, timeZone: string): Date {
   const { year, month, day } = zonedParts(instant, timeZone);
-  return instantFromWallClock(year, month, day, 0, timeZone);
+  return zonedInstant(year, month, day, 0, timeZone);
 }
 
 /** The day of the week (0 = Sunday) for a local calendar date. */
@@ -178,17 +178,17 @@ export function startOfPeriodInZone(
   const parts = zonedParts(instant, timeZone);
 
   if (granularity === 'day') {
-    return instantFromWallClock(parts.year, parts.month, parts.day, 0, timeZone);
+    return zonedInstant(parts.year, parts.month, parts.day, 0, timeZone);
   }
 
   if (granularity === 'week') {
     const mondayOffset = (weekdayOf(parts) + 6) % 7;
-    return instantFromWallClock(parts.year, parts.month, parts.day - mondayOffset, 0, timeZone);
+    return zonedInstant(parts.year, parts.month, parts.day - mondayOffset, 0, timeZone);
   }
 
   if (granularity === 'month') {
-    return instantFromWallClock(parts.year, parts.month, 1, 0, timeZone);
+    return zonedInstant(parts.year, parts.month, 1, 0, timeZone);
   }
 
-  return instantFromWallClock(parts.year, 1, 1, 0, timeZone);
+  return zonedInstant(parts.year, 1, 1, 0, timeZone);
 }

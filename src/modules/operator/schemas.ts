@@ -4,9 +4,20 @@
 
 import { z } from 'zod';
 
+import { isValidTimeZone } from './timezone.js';
+
 export const salesGranularitySchema = z.enum(['day', 'week', 'month', 'year']);
 
 export type SalesGranularityInput = z.infer<typeof salesGranularitySchema>;
+
+/**
+ * An IANA zone the runtime actually knows. Unlike `granularity`, which falls
+ * back silently, a bad zone is rejected: every bucket boundary depends on it, so
+ * a typo would quietly shift a whole chart by hours rather than fail loudly.
+ */
+export const timeZoneSchema = z
+  .string()
+  .refine(isValidTimeZone, { message: 'unknown IANA time zone' });
 
 export const storeIdParamSchema = z.object({
   storeId: z.string().uuid(),

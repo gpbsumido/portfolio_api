@@ -9,6 +9,8 @@ export type StoreDto = {
   name: string;
   location: string;
   province: string;
+  /** IANA zone the store's day is measured in. */
+  timezone: string;
   status: string;
   temperature: number;
   uptime: number;

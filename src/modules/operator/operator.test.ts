@@ -123,6 +123,33 @@ describe('operator routes', () => {
     expect(res.body.stores[0]).not.toHaveProperty('createdAt');
   });
 
+  test('GET /stores derives a timezone from the province', async () => {
+    vi.mocked(repo.listStores).mockResolvedValue([
+      store({ province: 'BC', timezone: null }),
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/operator/stores');
+    expect(res.body.stores[0].timezone).toBe('America/Vancouver');
+  });
+
+  test('GET /stores prefers the stored timezone over the province', async () => {
+    vi.mocked(repo.listStores).mockResolvedValue([
+      store({ province: 'BC', timezone: 'America/Dawson_Creek' }),
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/operator/stores');
+    expect(res.body.stores[0].timezone).toBe('America/Dawson_Creek');
+  });
+
+  test('GET /stores still resolves a zone before migration 016 has run', async () => {
+    // A row read from a database without the column has no `timezone` key at
+    // all; the province default has to carry it.
+    vi.mocked(repo.listStores).mockResolvedValue([store()] as never);
+
+    const res = await request(makeApp()).get('/api/operator/stores');
+    expect(res.body.stores[0].timezone).toBe('America/Toronto');
+  });
+
   test('GET /sales-analytics defaults to month with 12 buckets and a ranking', async () => {
     vi.mocked(repo.salesByPeriod).mockResolvedValue([]);
     vi.mocked(repo.salesByStore).mockResolvedValue([
@@ -158,6 +185,57 @@ describe('operator routes', () => {
     );
     expect(res.body.granularity).toBe('month');
     expect(res.body.buckets).toHaveLength(12);
+  });
+
+  test('GET /sales-analytics buckets in the tz query param', async () => {
+    vi.mocked(repo.salesByPeriod).mockResolvedValue([]);
+    vi.mocked(repo.salesByStore).mockResolvedValue([]);
+
+    const res = await request(makeApp()).get(
+      '/api/operator/sales-analytics?granularity=day&tz=America/Vancouver',
+    );
+    expect(res.status).toBe(200);
+    // Local midnight in PDT is 07:00Z, not 00:00Z.
+    expect(res.body.buckets[6].start.slice(11)).toBe('07:00:00.000Z');
+    expect(vi.mocked(repo.salesByPeriod).mock.calls[0][2]).toBe(
+      'America/Vancouver',
+    );
+  });
+
+  test('GET /sales-analytics defaults to UTC when tz is absent', async () => {
+    vi.mocked(repo.salesByPeriod).mockResolvedValue([]);
+    vi.mocked(repo.salesByStore).mockResolvedValue([]);
+
+    const res = await request(makeApp()).get(
+      '/api/operator/sales-analytics?granularity=day',
+    );
+    expect(res.body.buckets[6].start.slice(11)).toBe('00:00:00.000Z');
+  });
+
+  test('GET /sales-analytics rejects an unknown tz rather than falling back', async () => {
+    vi.mocked(repo.salesByPeriod).mockResolvedValue([]);
+    vi.mocked(repo.salesByStore).mockResolvedValue([]);
+
+    const res = await request(makeApp()).get(
+      '/api/operator/sales-analytics?tz=Mars/Olympus_Mons',
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Mars/Olympus_Mons');
+  });
+
+  test('GET /fleet-summary passes the tz through to the alert trend', async () => {
+    vi.mocked(repo.listStores).mockResolvedValue([]);
+    vi.mocked(repo.alertStatsByStore).mockResolvedValue([]);
+    vi.mocked(repo.inventoryStatsByStore).mockResolvedValue([]);
+    vi.mocked(repo.alertHourlyTrend).mockResolvedValue([]);
+
+    const res = await request(makeApp()).get(
+      '/api/operator/fleet-summary?tz=America/Halifax',
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(repo.alertHourlyTrend).mock.calls[0][1]).toBe(
+      'America/Halifax',
+    );
   });
 });
 
@@ -367,6 +445,7 @@ describe('assembleFleetSummary', () => {
       ],
       [],
       now,
+      'UTC',
     );
     expect(result.summaries).toHaveLength(2);
     expect(result.summaries[0].inventoryHealth).toBe(50);
@@ -385,9 +464,26 @@ describe('fillAlertTrend', () => {
     const buckets = fillAlertTrend(
       [{ hour: new Date('2026-08-01T12:00:00.000Z'), count: 5 }],
       now,
+      'UTC',
     );
     expect(buckets).toHaveLength(24);
     expect(buckets[23]).toEqual({ hour: '12:00', count: 5 });
+  });
+
+  test('labels the newest hour in the requested zone', () => {
+    // 12:30 UTC is 08:30 in Toronto during EDT.
+    const buckets = fillAlertTrend([], now, 'America/Toronto');
+    expect(buckets[23].hour).toBe('08:00');
+  });
+
+  test('matches a row to its bucket in a half-hour-offset zone', () => {
+    // Newfoundland is UTC-3:30, so local hour starts land on :30 past the UTC
+    // hour -- the case a UTC-truncating implementation silently drops.
+    const hour = new Date('2026-08-01T11:30:00.000Z');
+    const buckets = fillAlertTrend([{ hour, count: 4 }], now, 'America/St_Johns');
+    const hit = buckets.find((b) => b.count === 4);
+    expect(hit).toBeDefined();
+    expect(hit?.hour).toBe('09:00');
   });
 });
 
@@ -395,10 +491,10 @@ describe('buildBuckets', () => {
   const now = new Date('2026-07-15T12:00:00.000Z');
 
   test('returns the fixed count of buckets per granularity', () => {
-    expect(buildBuckets('day', [], now)).toHaveLength(7);
-    expect(buildBuckets('week', [], now)).toHaveLength(8);
-    expect(buildBuckets('month', [], now)).toHaveLength(12);
-    expect(buildBuckets('year', [], now)).toHaveLength(5);
+    expect(buildBuckets('day', [], now, 'UTC')).toHaveLength(7);
+    expect(buildBuckets('week', [], now, 'UTC')).toHaveLength(8);
+    expect(buildBuckets('month', [], now, 'UTC')).toHaveLength(12);
+    expect(buildBuckets('year', [], now, 'UTC')).toHaveLength(5);
   });
 
   test('fills a DB period row into the matching bucket', () => {
@@ -406,14 +502,36 @@ describe('buildBuckets', () => {
       { period: new Date('2026-07-01T00:00:00.000Z'), revenue: 100, units: 5 },
       { period: new Date('2026-06-01T00:00:00.000Z'), revenue: 50, units: 2 },
     ];
-    const buckets = buildBuckets('month', rows, now);
+    const buckets = buildBuckets('month', rows, now, 'UTC');
     expect(buckets[11].revenue).toBe(100); // current month, newest
     expect(buckets[10].revenue).toBe(50);
   });
 
+  test('matches a zoned period row to its bucket', () => {
+    // Toronto's July starts at 04:00Z on Jul 1, which is what the zoned
+    // date_trunc round trip returns -- not midnight UTC.
+    const rows = [
+      { period: new Date('2026-07-01T04:00:00.000Z'), revenue: 100, units: 5 },
+    ];
+    const buckets = buildBuckets('month', rows, now, 'America/Toronto');
+    expect(buckets[11].revenue).toBe(100);
+  });
+
+  test('day buckets start on local midnight, not UTC midnight', () => {
+    const buckets = buildBuckets('day', [], now, 'America/Vancouver');
+    expect(buckets[6].start).toBe('2026-07-15T07:00:00.000Z');
+  });
+
   test('windowStart is the oldest bucket boundary', () => {
-    const start = windowStart('month', now);
+    const start = windowStart('month', now, 'UTC');
     // 12 months back from July 2026 → August 2025
     expect(start.toISOString().slice(0, 7)).toBe('2025-08');
+  });
+
+  test('windowStart shifts with the zone', () => {
+    const utc = windowStart('month', now, 'UTC');
+    const vancouver = windowStart('month', now, 'America/Vancouver');
+    // PDT is UTC-7, so Vancouver's August 2025 starts 7 hours later.
+    expect(vancouver.getTime() - utc.getTime()).toBe(7 * 60 * 60 * 1000);
   });
 });

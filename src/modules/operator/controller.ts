@@ -9,7 +9,10 @@ import type {
   OperatorInventoryItem,
   OperatorStore,
 } from '../../config/drizzle/schema.js';
-import { NotFoundError } from '../../shared/errors/AppError.js';
+import {
+  NotFoundError,
+  ValidationError,
+} from '../../shared/errors/AppError.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
 import { assembleFleetSummary } from './fleet-summary.js';
@@ -18,7 +21,9 @@ import {
   type PlanogramUpdateInput,
   type RestockInput,
   salesGranularitySchema,
+  timeZoneSchema,
 } from './schemas.js';
+import { FALLBACK_ZONE, resolveStoreTimezone } from './timezone.js';
 import type {
   ActivityEventDto,
   AlertDto,
@@ -59,12 +64,31 @@ function resolveGranularity(raw: string): SalesGranularity {
   return parsed.success ? parsed.data : 'month';
 }
 
+/**
+ * Resolve the tz query param.
+ *
+ * Absent means UTC, which is what every bucket already resolved to, so a client
+ * that has not been updated sees exactly what it saw before. Present but bogus
+ * is a 400 rather than a silent fallback: a wrong zone shifts every boundary in
+ * the response, and a chart that is quietly hours out is worse than an error.
+ */
+function resolveZone(raw: string): string {
+  if (!raw) return FALLBACK_ZONE;
+
+  const parsed = timeZoneSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ValidationError(`unknown IANA time zone: ${raw}`);
+  }
+  return parsed.data;
+}
+
 function toStoreDto(row: OperatorStore): StoreDto {
   return {
     id: row.id,
     name: row.name,
     location: row.location,
     province: row.province,
+    timezone: resolveStoreTimezone(row),
     status: row.status,
     temperature: row.temperature,
     uptime: row.uptime,
@@ -234,18 +258,26 @@ export class OperatorController {
   }
 
   /** GET /api/operator/fleet-summary — aggregated per-store health + trend. */
-  async fleetSummary(_req: Request, res: Response, next: NextFunction) {
+  async fleetSummary(req: Request, res: Response, next: NextFunction) {
     try {
+      const timeZone = resolveZone(param(req.query.tz as string));
       const now = new Date();
       const since = new Date(now.getTime() - DAY_MS);
       const [stores, alertStats, inventoryStats, trend] = await Promise.all([
         repo.listStores(),
         repo.alertStatsByStore(),
         repo.inventoryStatsByStore(),
-        repo.alertHourlyTrend(since),
+        repo.alertHourlyTrend(since, timeZone),
       ]);
       res.json(
-        assembleFleetSummary(stores, alertStats, inventoryStats, trend, now),
+        assembleFleetSummary(
+          stores,
+          alertStats,
+          inventoryStats,
+          trend,
+          now,
+          timeZone,
+        ),
       );
     } catch (err) {
       next(err);
@@ -256,22 +288,23 @@ export class OperatorController {
   async salesAnalytics(req: Request, res: Response, next: NextFunction) {
     try {
       const granularity = resolveGranularity(param(req.query.granularity as string));
+      const timeZone = resolveZone(param(req.query.tz as string));
       const now = new Date();
-      const since = windowStart(granularity, now);
+      const since = windowStart(granularity, now, timeZone);
 
       const startedAt = Date.now();
       const [periodRows, storeRows] = await Promise.all([
-        repo.salesByPeriod(granularity, since),
+        repo.salesByPeriod(granularity, since, timeZone),
         repo.salesByStore(since),
       ]);
       // The efficiency win we moved here for: two grouped queries, not a full
       // table scan summed in the app. Surface the timing for the dev-thoughts.
       log.info(
-        { granularity, ms: Date.now() - startedAt, periods: periodRows.length },
+        { granularity, timeZone, ms: Date.now() - startedAt, periods: periodRows.length },
         'fleet sales analytics aggregated in SQL',
       );
 
-      const buckets = buildBuckets(granularity, periodRows, now);
+      const buckets = buildBuckets(granularity, periodRows, now, timeZone);
       const byStore = storeRows.map((row) => ({
         storeId: row.storeId,
         storeName: row.storeName,
