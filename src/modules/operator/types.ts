@@ -69,6 +69,18 @@ export type FleetSalesAnalyticsDto = {
   totalRevenue: number;
 };
 
+export type PromotionDto = {
+  id: string;
+  storeId: string;
+  /** Null means the whole store. */
+  productName: string | null;
+  percent: number;
+  startsAt: string;
+  endsAt: string | null;
+  /** Derived from the window and the clock, never stored. */
+  status: string;
+};
+
 export type RestockSessionDto = {
   id: string;
   storeId: string;

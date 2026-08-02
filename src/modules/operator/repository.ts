@@ -6,7 +6,7 @@
 // every sale row into the app and summing there. The database does the fan-in.
 // ---------------------------------------------------------------------------
 
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type OperatorActivityEvent,
@@ -17,6 +17,8 @@ import {
   operatorAlerts,
   operatorInventory,
   operatorPlanograms,
+  type OperatorPromotion,
+  operatorPromotions,
   type OperatorRestockLine,
   type OperatorRestockSession,
   operatorRestockLines,
@@ -401,6 +403,89 @@ export async function completeSession(
 
     return { session: closed, lines: frozen, items: applied, activity };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+export async function listPromotions(
+  storeId: string,
+): Promise<OperatorPromotion[]> {
+  return db
+    .select()
+    .from(operatorPromotions)
+    .where(eq(operatorPromotions.storeId, storeId))
+    .orderBy(desc(operatorPromotions.startsAt));
+}
+
+export async function getPromotion(
+  id: string,
+): Promise<OperatorPromotion | null> {
+  const rows = await db
+    .select()
+    .from(operatorPromotions)
+    .where(eq(operatorPromotions.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function insertPromotion(values: {
+  storeId: string;
+  productName: string | null;
+  percent: number;
+  startsAt: Date;
+  endsAt: Date | null;
+  actor: string | null;
+}): Promise<OperatorPromotion> {
+  const [row] = await db.insert(operatorPromotions).values(values).returning();
+  return row;
+}
+
+/** End a promotion now rather than deleting it -- the history is the point. */
+export async function endPromotion(
+  id: string,
+  at: Date,
+): Promise<OperatorPromotion | null> {
+  const rows = await db
+    .update(operatorPromotions)
+    .set({ endsAt: at })
+    .where(eq(operatorPromotions.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export type PromoSaleRow = {
+  productName: string;
+  quantity: number;
+  total: number;
+  occurredAt: Date;
+};
+
+/**
+ * Sales for a store between two instants. Filtered in SQL so measuring a
+ * two-week promotion does not drag eighteen months of history into Node.
+ */
+export async function salesInWindow(
+  storeId: string,
+  from: Date,
+  to: Date,
+): Promise<PromoSaleRow[]> {
+  return db
+    .select({
+      productName: operatorSales.productName,
+      quantity: operatorSales.quantity,
+      total: operatorSales.total,
+      occurredAt: operatorSales.occurredAt,
+    })
+    .from(operatorSales)
+    .where(
+      and(
+        eq(operatorSales.storeId, storeId),
+        gte(operatorSales.occurredAt, from),
+        lt(operatorSales.occurredAt, to),
+      ),
+    );
 }
 
 export type AlertTrendRow = { hour: Date; count: number };

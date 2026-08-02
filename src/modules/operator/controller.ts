@@ -7,6 +7,7 @@ import type {
   OperatorActivityEvent,
   OperatorAlert,
   OperatorInventoryItem,
+  OperatorPromotion,
   OperatorRestockLine,
   OperatorRestockSession,
   OperatorStore,
@@ -20,10 +21,12 @@ import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
 import { assembleFleetSummary } from './fleet-summary.js';
 import * as repo from './repository.js';
+import { comparePerformance, promotionStatus } from './promotions.js';
 import { countStatusOf } from './restock.js';
 import {
   type CompleteSessionInput,
   type PlanogramUpdateInput,
+  type PromotionInput,
   type RestockInput,
   type RestockLineInputBody,
   salesGranularitySchema,
@@ -36,6 +39,7 @@ import type {
   FleetSalesAnalyticsDto,
   InventoryItemDto,
   PlanogramBox,
+  PromotionDto,
   RestockLineDto,
   RestockSessionDto,
   SalesGranularity,
@@ -106,6 +110,19 @@ function toStoreDto(row: OperatorStore): StoreDto {
     uptime: row.uptime,
     revenue24h: row.revenue24h,
     lastPing: freshLastPing(row.status),
+  };
+}
+
+function toPromotionDto(row: OperatorPromotion, now: Date): PromotionDto {
+  return {
+    id: row.id,
+    storeId: row.storeId,
+    productName: row.productName,
+    percent: row.percent,
+    startsAt: row.startsAt.toISOString(),
+    endsAt: row.endsAt ? row.endsAt.toISOString() : null,
+    // Derived per read, never stored, so it cannot go stale between cron runs.
+    status: promotionStatus(row, now),
   };
 }
 
@@ -380,6 +397,108 @@ export class OperatorController {
     try {
       const events = await repo.listActivity(param(req.params.storeId));
       res.json({ events: events.map(toActivityDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/stores/:storeId/promotions — with derived status. */
+  async listPromotions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rows = await repo.listPromotions(param(req.params.storeId));
+      const now = new Date();
+      res.json({ promotions: rows.map((row) => toPromotionDto(row, now)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/operator/stores/:storeId/promotions — schedule one.
+   *
+   * Emits a price-update activity event. That type has been in the enum since
+   * the beginning with a label, a colour and an icon, and nothing has ever
+   * created one. This is the write path it was waiting for.
+   */
+  async createPromotion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const storeId = param(req.params.storeId);
+      const store = await repo.getStore(storeId);
+      if (!store) throw new NotFoundError('store not found');
+
+      const body = req.body as PromotionInput;
+      const promotion = await repo.insertPromotion({
+        storeId,
+        productName: body.productName,
+        percent: body.percent,
+        startsAt: new Date(body.startsAt),
+        endsAt: body.endsAt ? new Date(body.endsAt) : null,
+        actor: DEFAULT_ACTOR,
+      });
+
+      const target = body.productName ?? 'every product';
+      await repo.insertActivity({
+        storeId,
+        type: 'price-update',
+        description: `Scheduled ${body.percent}% off ${target}`,
+        actor: DEFAULT_ACTOR,
+      });
+
+      res
+        .status(201)
+        .json({ promotion: toPromotionDto(promotion, new Date()) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/operator/promotions/:promotionId/end — stop it now. */
+  async endPromotion(req: Request, res: Response, next: NextFunction) {
+    try {
+      const now = new Date();
+      // Ended, not deleted: the history is the point of persisting these.
+      const ended = await repo.endPromotion(param(req.params.promotionId), now);
+      if (!ended) throw new NotFoundError('promotion not found');
+
+      res.json({ promotion: toPromotionDto(ended, now) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/operator/promotions/:promotionId/performance.
+   *
+   * A before-and-after, not attribution. The response carries both raw totals so
+   * the client can show them rather than only a headline delta.
+   */
+  async promotionPerformance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const promotion = await repo.getPromotion(param(req.params.promotionId));
+      if (!promotion) throw new NotFoundError('promotion not found');
+
+      const now = new Date();
+      const windowStart = promotion.startsAt;
+      const windowEnd = promotion.endsAt ?? now;
+      const span = windowEnd.getTime() - windowStart.getTime();
+      const sales = await repo.salesInWindow(
+        promotion.storeId,
+        new Date(windowStart.getTime() - span),
+        windowEnd,
+      );
+
+      const comparison = comparePerformance(
+        promotion,
+        sales,
+        windowStart,
+        windowEnd,
+      );
+
+      res.json({
+        promotion: toPromotionDto(promotion, now),
+        ...comparison,
+        note: 'Comparison against the equal-length period before this promotion. It is not a claim that the promotion caused the difference.',
+      });
     } catch (err) {
       next(err);
     }

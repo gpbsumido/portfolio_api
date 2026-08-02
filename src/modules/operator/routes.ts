@@ -9,6 +9,8 @@ import {
   alertIdParamSchema,
   completeSessionSchema,
   planogramUpdateSchema,
+  promotionBodySchema,
+  promotionIdParamSchema,
   restockBodySchema,
   restockLineSchema,
   sessionIdParamSchema,
@@ -72,6 +74,39 @@ router.post(
   validateParams(sessionIdParamSchema),
   validateBody(completeSessionSchema),
   (req, res, next) => ctrl.completeRestockSession(req, res, next),
+);
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+// GET /api/operator/stores/:storeId/promotions — every promotion, with status
+router.get(
+  '/stores/:storeId/promotions',
+  validateParams(storeIdParamSchema),
+  (req, res, next) => ctrl.listPromotions(req, res, next),
+);
+
+// POST /api/operator/stores/:storeId/promotions — schedule one
+router.post(
+  '/stores/:storeId/promotions',
+  validateParams(storeIdParamSchema),
+  validateBody(promotionBodySchema),
+  (req, res, next) => ctrl.createPromotion(req, res, next),
+);
+
+// PATCH /api/operator/promotions/:promotionId/end — end one now
+router.patch(
+  '/promotions/:promotionId/end',
+  validateParams(promotionIdParamSchema),
+  (req, res, next) => ctrl.endPromotion(req, res, next),
+);
+
+// GET /api/operator/promotions/:promotionId/performance — window vs baseline
+router.get(
+  '/promotions/:promotionId/performance',
+  validateParams(promotionIdParamSchema),
+  (req, res, next) => ctrl.promotionPerformance(req, res, next),
 );
 
 // GET /api/operator/stores/:storeId/planogram — the shelf layout

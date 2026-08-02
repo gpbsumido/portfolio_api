@@ -83,6 +83,32 @@ export const completeSessionSchema = z.object({
 
 export type CompleteSessionInput = z.infer<typeof completeSessionSchema>;
 
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+export const promotionIdParamSchema = z.object({
+  promotionId: z.string().uuid(),
+});
+
+/**
+ * Percent is bounded 1-90: zero is not a promotion and anything approaching 100
+ * is a giveaway that is far likelier to be a typo than an intention.
+ */
+export const promotionBodySchema = z
+  .object({
+    productName: z.string().min(1).nullable().default(null),
+    percent: z.number().int().min(1).max(90),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().nullable().default(null),
+  })
+  .refine(
+    (p) => p.endsAt === null || Date.parse(p.endsAt) > Date.parse(p.startsAt),
+    { message: 'endsAt must be after startsAt', path: ['endsAt'] },
+  );
+
+export type PromotionInput = z.infer<typeof promotionBodySchema>;
+
 export const planogramBoxSchema = z.object({
   itemId: z.string().uuid().nullable(),
   sensorMatch: z.boolean(),
