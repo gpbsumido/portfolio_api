@@ -344,6 +344,27 @@ export const operatorRestockLines = pgTable("operator_restock_lines", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+// ── operator_promotions ──────────────────────────────────────────────────────
+// No status column: it is derived from the window and the clock, because a
+// stored status needs a job to flip it and is wrong between runs.
+export const operatorPromotions = pgTable("operator_promotions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  /** Null means the whole store. */
+  productName: text("product_name"),
+  percent: integer("percent").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  /** Null means open-ended. */
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export type OperatorPromotion = InferSelectModel<typeof operatorPromotions>;
+export type NewOperatorPromotion = InferInsertModel<typeof operatorPromotions>;
+
 export type OperatorRestockLine = InferSelectModel<typeof operatorRestockLines>;
 export type NewOperatorRestockLine = InferInsertModel<
   typeof operatorRestockLines
