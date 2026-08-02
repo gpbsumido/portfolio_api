@@ -69,6 +69,30 @@ export type FleetSalesAnalyticsDto = {
   totalRevenue: number;
 };
 
+export type RestockSessionDto = {
+  id: string;
+  storeId: string;
+  startedAt: string;
+  completedAt: string | null;
+  actor: string | null;
+  notes: string | null;
+};
+
+export type RestockLineDto = {
+  id: string;
+  sessionId: string;
+  itemId: string;
+  expectedQty: number;
+  /** Null means the restocker deliberately skipped counting this slot. */
+  countedQty: number | null;
+  added: number;
+  removed: number;
+  removalReason: string | null;
+  resultingStock: number | null;
+  /** Derived: matches-expected | correction | not-counted. */
+  countStatus: string;
+};
+
 /** A planogram box: the item it holds (null = empty) and its sensor state. */
 export type PlanogramBox = {
   itemId: string | null;

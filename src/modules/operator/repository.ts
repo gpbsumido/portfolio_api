@@ -17,9 +17,14 @@ import {
   operatorAlerts,
   operatorInventory,
   operatorPlanograms,
+  type OperatorRestockLine,
+  type OperatorRestockSession,
+  operatorRestockLines,
+  operatorRestockSessions,
   operatorSales,
   operatorStores,
 } from '../../config/drizzle/schema.js';
+import { describeSession, resultingStock, summarizeSession } from './restock.js';
 import type { PlanogramBox, SalesGranularity } from './types.js';
 
 export async function listStores(): Promise<OperatorStore[]> {
@@ -236,6 +241,166 @@ export async function inventoryStatsByStore(): Promise<InventoryStatRow[]> {
     })
     .from(operatorInventory)
     .groupBy(operatorInventory.storeId);
+}
+
+// ---------------------------------------------------------------------------
+// Restock sessions
+//
+// Inventory is never written directly any more. Lines accumulate while the
+// restocker works the shelf, and completeSession is the one place that touches
+// operator_inventory -- in a single transaction, so a phone that drops signal
+// mid-restock leaves either nothing applied or all of it.
+// ---------------------------------------------------------------------------
+
+export async function openSession(
+  storeId: string,
+  actor: string,
+): Promise<OperatorRestockSession> {
+  const [row] = await db
+    .insert(operatorRestockSessions)
+    .values({ storeId, actor })
+    .returning();
+  return row;
+}
+
+export async function getSession(
+  id: string,
+): Promise<OperatorRestockSession | null> {
+  const rows = await db
+    .select()
+    .from(operatorRestockSessions)
+    .where(eq(operatorRestockSessions.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listSessions(
+  storeId: string,
+  limit = 20,
+): Promise<OperatorRestockSession[]> {
+  return db
+    .select()
+    .from(operatorRestockSessions)
+    .where(eq(operatorRestockSessions.storeId, storeId))
+    .orderBy(desc(operatorRestockSessions.startedAt))
+    .limit(limit);
+}
+
+export async function listSessionLines(
+  sessionId: string,
+): Promise<OperatorRestockLine[]> {
+  return db
+    .select()
+    .from(operatorRestockLines)
+    .where(eq(operatorRestockLines.sessionId, sessionId));
+}
+
+export type RestockLineValues = {
+  expectedQty: number;
+  countedQty: number | null;
+  added: number;
+  removed: number;
+  removalReason: string | null;
+};
+
+/**
+ * Upsert one slot's line. Keyed on (session_id, item_id) so a restocker tapping
+ * the same slot repeatedly updates one row instead of growing the table.
+ */
+export async function upsertLine(
+  sessionId: string,
+  itemId: string,
+  values: RestockLineValues,
+): Promise<OperatorRestockLine> {
+  const [row] = await db
+    .insert(operatorRestockLines)
+    .values({ sessionId, itemId, ...values })
+    .onConflictDoUpdate({
+      target: [operatorRestockLines.sessionId, operatorRestockLines.itemId],
+      set: { ...values, updatedAt: new Date() },
+    })
+    .returning();
+  return row;
+}
+
+export type CompletedSession = {
+  session: OperatorRestockSession;
+  lines: OperatorRestockLine[];
+  items: OperatorInventoryItem[];
+  activity: OperatorActivityEvent;
+};
+
+/**
+ * Apply a session: derive each item's resulting stock from its own line, write
+ * it, freeze the derived value on the line, close the session and log one
+ * activity event. All inside one transaction.
+ */
+export async function completeSession(
+  sessionId: string,
+  notes: string | null,
+): Promise<CompletedSession | null> {
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(operatorRestockSessions)
+      .where(eq(operatorRestockSessions.id, sessionId))
+      .limit(1);
+    if (!session) return null;
+
+    const lines = await tx
+      .select()
+      .from(operatorRestockLines)
+      .where(eq(operatorRestockLines.sessionId, sessionId));
+
+    const itemIds = lines.map((line) => line.itemId);
+    const stock =
+      itemIds.length > 0
+        ? await tx
+            .select()
+            .from(operatorInventory)
+            .where(inArray(operatorInventory.id, itemIds))
+        : [];
+    const capacityOf = new Map(stock.map((row) => [row.id, row.capacity]));
+
+    const applied: OperatorInventoryItem[] = [];
+    const frozen: OperatorRestockLine[] = [];
+
+    for (const line of lines) {
+      const resulting = resultingStock(line, capacityOf.get(line.itemId) ?? 0);
+
+      const [item] = await tx
+        .update(operatorInventory)
+        .set({ currentStock: resulting, lastRestocked: new Date() })
+        .where(eq(operatorInventory.id, line.itemId))
+        .returning();
+      if (item) applied.push(item);
+
+      const [updatedLine] = await tx
+        .update(operatorRestockLines)
+        .set({ resultingStock: resulting })
+        .where(eq(operatorRestockLines.id, line.id))
+        .returning();
+      frozen.push(updatedLine ?? line);
+    }
+
+    const [activity] = await tx
+      .insert(operatorActivity)
+      .values({
+        storeId: session.storeId,
+        type: 'restock',
+        description: describeSession(summarizeSession(frozen)),
+        actor: session.actor,
+      })
+      .returning();
+
+    const [closed] = await tx
+      .update(operatorRestockSessions)
+      .set({ completedAt: new Date(), notes })
+      .where(eq(operatorRestockSessions.id, sessionId))
+      .returning();
+
+    return { session: closed, lines: frozen, items: applied, activity };
+  });
 }
 
 export type AlertTrendRow = { hour: Date; count: number };

@@ -7,8 +7,12 @@ import { validateBody, validateParams } from '../../middleware/validate.js';
 import { OperatorController } from './controller.js';
 import {
   alertIdParamSchema,
+  completeSessionSchema,
   planogramUpdateSchema,
   restockBodySchema,
+  restockLineSchema,
+  sessionIdParamSchema,
+  sessionLineParamSchema,
   storeIdParamSchema,
 } from './schemas.js';
 
@@ -26,6 +30,48 @@ router.get('/sales-analytics', (req, res, next) =>
 // GET /api/operator/fleet-summary — aggregated per-store health + alert trend
 router.get('/fleet-summary', (req, res, next) =>
   ctrl.fleetSummary(req, res, next),
+);
+
+// ---------------------------------------------------------------------------
+// Restock sessions. Registered before /stores/:storeId so the more specific
+// path wins, same as the planogram and dismiss routes above.
+// ---------------------------------------------------------------------------
+
+// POST /api/operator/stores/:storeId/restock-sessions — open a session
+router.post(
+  '/stores/:storeId/restock-sessions',
+  validateParams(storeIdParamSchema),
+  (req, res, next) => ctrl.openRestockSession(req, res, next),
+);
+
+// GET /api/operator/stores/:storeId/restock-sessions — session history
+router.get(
+  '/stores/:storeId/restock-sessions',
+  validateParams(storeIdParamSchema),
+  (req, res, next) => ctrl.listRestockSessions(req, res, next),
+);
+
+// GET /api/operator/restock-sessions/:sessionId — a session and its lines
+router.get(
+  '/restock-sessions/:sessionId',
+  validateParams(sessionIdParamSchema),
+  (req, res, next) => ctrl.getRestockSession(req, res, next),
+);
+
+// PUT /api/operator/restock-sessions/:sessionId/lines/:itemId — record a slot
+router.put(
+  '/restock-sessions/:sessionId/lines/:itemId',
+  validateParams(sessionLineParamSchema),
+  validateBody(restockLineSchema),
+  (req, res, next) => ctrl.putRestockLine(req, res, next),
+);
+
+// POST /api/operator/restock-sessions/:sessionId/complete — apply the session
+router.post(
+  '/restock-sessions/:sessionId/complete',
+  validateParams(sessionIdParamSchema),
+  validateBody(completeSessionSchema),
+  (req, res, next) => ctrl.completeRestockSession(req, res, next),
 );
 
 // GET /api/operator/stores/:storeId/planogram — the shelf layout

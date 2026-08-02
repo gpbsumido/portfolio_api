@@ -19,6 +19,12 @@ vi.mock('./repository.js', () => ({
   alertHourlyTrend: vi.fn(),
   salesByPeriod: vi.fn(),
   salesByStore: vi.fn(),
+  openSession: vi.fn(),
+  getSession: vi.fn(),
+  listSessionLines: vi.fn(),
+  listSessions: vi.fn(),
+  upsertLine: vi.fn(),
+  completeSession: vi.fn(),
 }));
 
 vi.mock('../../shared/utils/logger.js', () => ({
@@ -279,11 +285,32 @@ describe('operator entity routes', () => {
   });
 
   test('POST /stores/:id/restock restocks and logs an activity event', async () => {
+    // Quick-fill now routes through a restock session so it cannot bypass the
+    // audit trail, but the response contract for the existing client is the same.
     vi.mocked(repo.getStore).mockResolvedValue(store() as never);
-    vi.mocked(repo.restockItems).mockResolvedValue([
-      item({ currentStock: 12 }),
-    ] as never);
-    vi.mocked(repo.insertActivity).mockResolvedValue(activity() as never);
+    vi.mocked(repo.listInventory).mockResolvedValue([item()] as never);
+    vi.mocked(repo.openSession).mockResolvedValue({
+      id: '55555555-5555-5555-5555-555555555555',
+      storeId: STORE_ID,
+      startedAt: new Date('2026-08-02T15:00:00.000Z'),
+      completedAt: null,
+      actor: 'operator@smartstore.example',
+      notes: null,
+    } as never);
+    vi.mocked(repo.upsertLine).mockResolvedValue({} as never);
+    vi.mocked(repo.completeSession).mockResolvedValue({
+      session: {
+        id: '55555555-5555-5555-5555-555555555555',
+        storeId: STORE_ID,
+        startedAt: new Date('2026-08-02T15:00:00.000Z'),
+        completedAt: new Date('2026-08-02T15:01:00.000Z'),
+        actor: 'operator@smartstore.example',
+        notes: null,
+      },
+      lines: [],
+      items: [item({ currentStock: 12 })],
+      activity: activity(),
+    } as never);
 
     const res = await request(makeApp())
       .post(`/api/operator/stores/${STORE_ID}/restock`)
@@ -292,7 +319,6 @@ describe('operator entity routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.items[0].currentStock).toBe(12);
     expect(res.body.activity.type).toBe('restock');
-    expect(vi.mocked(repo.insertActivity)).toHaveBeenCalledOnce();
   });
 
   test('POST /stores/:id/restock 404s for an unknown store', async () => {

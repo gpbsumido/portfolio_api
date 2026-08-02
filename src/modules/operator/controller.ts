@@ -7,9 +7,12 @@ import type {
   OperatorActivityEvent,
   OperatorAlert,
   OperatorInventoryItem,
+  OperatorRestockLine,
+  OperatorRestockSession,
   OperatorStore,
 } from '../../config/drizzle/schema.js';
 import {
+  ConflictError,
   NotFoundError,
   ValidationError,
 } from '../../shared/errors/AppError.js';
@@ -17,9 +20,12 @@ import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
 import { assembleFleetSummary } from './fleet-summary.js';
 import * as repo from './repository.js';
+import { countStatusOf } from './restock.js';
 import {
+  type CompleteSessionInput,
   type PlanogramUpdateInput,
   type RestockInput,
+  type RestockLineInputBody,
   salesGranularitySchema,
   timeZoneSchema,
 } from './schemas.js';
@@ -30,6 +36,8 @@ import type {
   FleetSalesAnalyticsDto,
   InventoryItemDto,
   PlanogramBox,
+  RestockLineDto,
+  RestockSessionDto,
   SalesGranularity,
   StoreDto,
 } from './types.js';
@@ -37,6 +45,10 @@ import type {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const log = createModuleLogger('operator');
+
+const DEFAULT_ACTOR = 'operator@smartstore.example';
+const QUICK_FILL_ACTOR = 'operator@smartstore.example';
+const QUICK_FILL_NOTE = 'Quick fill to capacity (no physical count)';
 
 const ONLINE_PING_MS = 30_000; // ~30s ago -> "strong signal"
 const STALE_PING_MS = 7 * 60_000; // 7min ago -> the degraded/offline demo tier
@@ -94,6 +106,36 @@ function toStoreDto(row: OperatorStore): StoreDto {
     uptime: row.uptime,
     revenue24h: row.revenue24h,
     lastPing: freshLastPing(row.status),
+  };
+}
+
+function toSessionDto(row: OperatorRestockSession): RestockSessionDto {
+  return {
+    id: row.id,
+    storeId: row.storeId,
+    startedAt: (row.startedAt ?? new Date()).toISOString(),
+    completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    actor: row.actor,
+    notes: row.notes,
+  };
+}
+
+/**
+ * The count status is derived here rather than stored, so it can never drift
+ * from the counted/expected pair it describes.
+ */
+function toLineDto(row: OperatorRestockLine): RestockLineDto {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    itemId: row.itemId,
+    expectedQty: row.expectedQty,
+    countedQty: row.countedQty,
+    added: row.added,
+    removed: row.removed,
+    removalReason: row.removalReason,
+    resultingStock: row.resultingStock,
+    countStatus: countStatusOf(row),
   };
 }
 
@@ -165,7 +207,16 @@ export class OperatorController {
     }
   }
 
-  /** POST /api/operator/stores/:storeId/restock — restock items to capacity. */
+  /**
+   * POST /api/operator/stores/:storeId/restock — the one-tap fill.
+   *
+   * Kept, because turning a bulk "top everything up" into a six-step wizard
+   * would be a worse product. But it no longer writes inventory directly: it
+   * opens a session, records a line per item, and completes it, so quick-fill
+   * leaves the same audit trail as a walked shelf. One write path, no bypass.
+   *
+   * The response shape is unchanged for the existing client.
+   */
   async restock(req: Request, res: Response, next: NextFunction) {
     try {
       const storeId = param(req.params.storeId);
@@ -174,17 +225,129 @@ export class OperatorController {
       const store = await repo.getStore(storeId);
       if (!store) throw new NotFoundError('store not found');
 
-      const items = await repo.restockItems(storeId, itemIds);
-      const activity = await repo.insertActivity({
-        storeId,
-        type: 'restock',
-        description: `Restocked ${items.length} item(s) to full capacity`,
-        actor: 'operator@smartstore.example',
-      });
+      const inventory = await repo.listInventory(storeId);
+      const wanted = new Set(itemIds);
+      const targets = inventory.filter((row) => wanted.has(row.id));
+
+      const session = await repo.openSession(storeId, QUICK_FILL_ACTOR);
+      for (const target of targets) {
+        await repo.upsertLine(session.id, target.id, {
+          expectedQty: target.currentStock,
+          // Not counted: nobody looked at the shelf, they pressed a button.
+          countedQty: null,
+          added: Math.max(target.capacity - target.currentStock, 0),
+          removed: 0,
+          removalReason: null,
+        });
+      }
+
+      const applied = await repo.completeSession(session.id, QUICK_FILL_NOTE);
+      if (!applied) throw new NotFoundError('restock session not found');
 
       res.json({
-        items: items.map(toInventoryDto),
-        activity: toActivityDto(activity),
+        items: applied.items.map(toInventoryDto),
+        activity: toActivityDto(applied.activity),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/operator/stores/:storeId/restock-sessions — open a session. */
+  async openRestockSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      const storeId = param(req.params.storeId);
+      const store = await repo.getStore(storeId);
+      if (!store) throw new NotFoundError('store not found');
+
+      const session = await repo.openSession(storeId, DEFAULT_ACTOR);
+      res.status(201).json({ session: toSessionDto(session) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/stores/:storeId/restock-sessions — history. */
+  async listRestockSessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessions = await repo.listSessions(param(req.params.storeId));
+      res.json({ sessions: sessions.map(toSessionDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/restock-sessions/:sessionId — session plus lines. */
+  async getRestockSession(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessionId = param(req.params.sessionId);
+      const session = await repo.getSession(sessionId);
+      if (!session) throw new NotFoundError('restock session not found');
+
+      const lines = await repo.listSessionLines(sessionId);
+      res.json({
+        session: toSessionDto(session),
+        lines: lines.map(toLineDto),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PUT /api/operator/restock-sessions/:sessionId/lines/:itemId. */
+  async putRestockLine(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sessionId = param(req.params.sessionId);
+      const session = await repo.getSession(sessionId);
+      if (!session) throw new NotFoundError('restock session not found');
+      if (session.completedAt) {
+        throw new ConflictError('restock session is already complete');
+      }
+
+      const body = req.body as RestockLineInputBody;
+      const line = await repo.upsertLine(sessionId, param(req.params.itemId), {
+        expectedQty: body.expectedQty,
+        countedQty: body.countedQty,
+        added: body.added,
+        removed: body.removed,
+        removalReason: body.removalReason,
+      });
+
+      res.json({ line: toLineDto(line) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/operator/restock-sessions/:sessionId/complete.
+   *
+   * A second completion is a 409 rather than a no-op. A double submit from a
+   * phone with a flaky connection is the likeliest failure here, and applying
+   * the adds and removes twice would silently corrupt the shelf.
+   */
+  async completeRestockSession(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) {
+    try {
+      const sessionId = param(req.params.sessionId);
+      const session = await repo.getSession(sessionId);
+      if (!session) throw new NotFoundError('restock session not found');
+      if (session.completedAt) {
+        throw new ConflictError('restock session is already complete');
+      }
+
+      const { notes } = req.body as CompleteSessionInput;
+      const applied = await repo.completeSession(sessionId, notes);
+      if (!applied) throw new NotFoundError('restock session not found');
+
+      res.json({
+        session: toSessionDto(applied.session),
+        lines: applied.lines.map(toLineDto),
+        items: applied.items.map(toInventoryDto),
+        activity: toActivityDto(applied.activity),
       });
     } catch (err) {
       next(err);
