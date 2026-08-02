@@ -113,8 +113,12 @@ describe('operator routes', () => {
       temperature: 4.2,
       uptime: 99.1,
       revenue24h: 142.5,
-      lastPing: '2026-07-20T00:00:00.000Z',
     });
+    // lastPing is synthesized fresh per read so an online store never ages into
+    // "offline"; it should be a recent timestamp, not the static seed value.
+    const age = Date.now() - Date.parse(res.body.stores[0].lastPing);
+    expect(age).toBeGreaterThanOrEqual(0);
+    expect(age).toBeLessThan(2 * 60_000);
     // the createdAt column is not leaked to the client
     expect(res.body.stores[0]).not.toHaveProperty('createdAt');
   });
@@ -163,7 +167,11 @@ describe('operator entity routes', () => {
     const ok = await request(makeApp()).get(`/api/operator/stores/${STORE_ID}`);
     expect(ok.status).toBe(200);
     expect(ok.body.store.id).toBe(STORE_ID);
-    expect(ok.body.store.lastPing).toBe('2026-07-20T00:00:00.000Z');
+    // lastPing is freshened per read (see toStoreDto), so it is recent, not the
+    // static seed value.
+    expect(Date.now() - Date.parse(ok.body.store.lastPing)).toBeLessThan(
+      2 * 60_000,
+    );
 
     vi.mocked(repo.getStore).mockResolvedValueOnce(null);
     const missing = await request(makeApp()).get(
