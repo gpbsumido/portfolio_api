@@ -10,6 +10,9 @@ if (process.env.RUN_CRON === "true") {
     // Restore the feature-flags demo to its canonical seed (every 6h, 0 */6 * * *).
     "reset-feature-flags": () =>
       require("./dist/jobs/resetFeatureFlags").resetFeatureFlags(),
+    // Re-seed the operator demo so its time-relative views stay fresh (daily, 0 4 * * *).
+    "reseed-operator": () =>
+      require("./dist/jobs/reseedOperator").reseedOperator(),
   };
 
   const run = jobs[job];
