@@ -30,12 +30,19 @@ const PRODUCTS = [
   { name: 'Energy Bar', category: 'snacks', price: 2.99, capacity: 24 },
 ] as const;
 
-const ALERT_DEFS = [
-  { severity: 'critical', category: 'low-stock', message: 'Turkey Club Sandwich out of stock' },
-  { severity: 'warning', category: 'temperature-warning', message: 'Internal temperature reached 8.2C (threshold 7C)' },
-  { severity: 'warning', category: 'low-stock', message: 'Coca-Cola stock below 20%' },
-  { severity: 'info', category: 'door-ajar', message: 'Door open for more than 60 seconds' },
-] as const;
+/**
+ * Alerts are derived from each store's own data rather than stamped on from a
+ * fixed list.
+ *
+ * They used to be a constant four, identical for every store, which meant a
+ * store with a full shelf still reported "Turkey Club Sandwich out of stock"
+ * and a store sitting at 4C still warned that it had reached 8.2C. Anyone
+ * comparing the alerts tab against the inventory tab saw the contradiction
+ * immediately, which is a bad look for a dashboard whose whole pitch is that
+ * the data is real.
+ */
+const LOW_STOCK_RATIO = 0.2;
+const TEMPERATURE_THRESHOLD_C = 7;
 
 const ACTIVITY_DEFS = [
   { type: 'restock', description: 'Restocked 12 units of Coca-Cola 355ml' },
@@ -142,13 +149,16 @@ export function buildOperatorSeed(
   STORE_DEFS.forEach((def, storeIndex) => {
     const degraded = storeIndex === 2;
     const storeId = uuid();
+    const temperature = degraded
+      ? 8.4
+      : Number((3 + rand(storeIndex) * 2).toFixed(1));
     seed.stores.push({
       id: storeId,
       name: def.name,
       location: def.location,
       province: def.province,
       status: degraded ? 'degraded' : 'online',
-      temperature: degraded ? 8.4 : Number((3 + rand(storeIndex) * 2).toFixed(1)),
+      temperature,
       uptime: degraded ? 72.3 : Number((97 + rand(storeIndex + 1) * 3).toFixed(1)),
       revenue24h: Number((80 + rand(storeIndex + 2) * 160).toFixed(2)),
       lastPing: new Date(nowMs - (degraded ? 7 * 60 * 1000 : 30 * 1000)),
@@ -172,18 +182,51 @@ export function buildOperatorSeed(
       });
     });
 
-    // Alerts.
-    ALERT_DEFS.forEach((alert, a) => {
+    // Alerts, derived from what this store's inventory and sensors actually say.
+    const storeInventory = seed.inventory.filter((i) => i.storeId === storeId);
+    let alertIndex = 0;
+    const pushAlert = (
+      severity: string,
+      category: string,
+      message: string,
+    ): void => {
       seed.alerts.push({
         id: uuid(),
         storeId,
-        severity: alert.severity,
-        category: alert.category,
-        message: alert.message,
-        occurredAt: new Date(nowMs - rand(storeIndex + a) * 24 * 60 * 60 * 1000),
+        severity,
+        category,
+        message,
+        occurredAt: new Date(
+          nowMs - rand(storeIndex + alertIndex++) * 24 * 60 * 60 * 1000,
+        ),
         acknowledged: false,
       });
-    });
+    };
+
+    for (const item of storeInventory) {
+      const ratio = item.capacity > 0 ? item.currentStock / item.capacity : 0;
+      if (item.currentStock === 0) {
+        pushAlert('critical', 'low-stock', `${item.productName} out of stock`);
+      } else if (ratio < LOW_STOCK_RATIO) {
+        pushAlert(
+          'warning',
+          'low-stock',
+          `${item.productName} stock below ${Math.round(LOW_STOCK_RATIO * 100)}%`,
+        );
+      }
+    }
+
+    if (temperature > TEMPERATURE_THRESHOLD_C) {
+      pushAlert(
+        'warning',
+        'temperature-warning',
+        `Internal temperature reached ${temperature.toFixed(1)}C (threshold ${TEMPERATURE_THRESHOLD_C}C)`,
+      );
+    }
+
+    // A transient event rather than a claim about current state, so it does not
+    // contradict anything the other tabs show.
+    pushAlert('info', 'door-ajar', 'Door open for more than 60 seconds');
 
     // Activity feed.
     ACTIVITY_DEFS.forEach((event, e) => {

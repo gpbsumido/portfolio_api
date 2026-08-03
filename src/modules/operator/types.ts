@@ -9,6 +9,8 @@ export type StoreDto = {
   name: string;
   location: string;
   province: string;
+  /** IANA zone the store's day is measured in. */
+  timezone: string;
   status: string;
   temperature: number;
   uptime: number;
@@ -46,6 +48,17 @@ export type ActivityEventDto = {
   actor?: string;
 };
 
+export type SaleDto = {
+  id: string;
+  storeId: string;
+  productName: string;
+  category: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  timestamp: string;
+};
+
 export type SalesPeriodBucket = {
   label: string;
   start: string;
@@ -65,6 +78,42 @@ export type FleetSalesAnalyticsDto = {
   buckets: SalesPeriodBucket[];
   byStore: FleetStoreTotal[];
   totalRevenue: number;
+};
+
+export type PromotionDto = {
+  id: string;
+  storeId: string;
+  /** Null means the whole store. */
+  productName: string | null;
+  percent: number;
+  startsAt: string;
+  endsAt: string | null;
+  /** Derived from the window and the clock, never stored. */
+  status: string;
+};
+
+export type RestockSessionDto = {
+  id: string;
+  storeId: string;
+  startedAt: string;
+  completedAt: string | null;
+  actor: string | null;
+  notes: string | null;
+};
+
+export type RestockLineDto = {
+  id: string;
+  sessionId: string;
+  itemId: string;
+  expectedQty: number;
+  /** Null means the restocker deliberately skipped counting this slot. */
+  countedQty: number | null;
+  added: number;
+  removed: number;
+  removalReason: string | null;
+  resultingStock: number | null;
+  /** Derived: matches-expected | correction | not-counted. */
+  countStatus: string;
 };
 
 /** A planogram box: the item it holds (null = empty) and its sensor state. */

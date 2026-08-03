@@ -6,7 +6,7 @@
 // every sale row into the app and summing there. The database does the fan-in.
 // ---------------------------------------------------------------------------
 
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type OperatorActivityEvent,
@@ -17,9 +17,17 @@ import {
   operatorAlerts,
   operatorInventory,
   operatorPlanograms,
+  type OperatorPromotion,
+  operatorPromotions,
+  type OperatorRestockLine,
+  type OperatorRestockSession,
+  type OperatorSale,
+  operatorRestockLines,
+  operatorRestockSessions,
   operatorSales,
   operatorStores,
 } from '../../config/drizzle/schema.js';
+import { describeSession, resultingStock, summarizeSession } from './restock.js';
 import type { PlanogramBox, SalesGranularity } from './types.js';
 
 export async function listStores(): Promise<OperatorStore[]> {
@@ -45,25 +53,20 @@ export async function listInventory(
     .orderBy(operatorInventory.productName);
 }
 
-/** Restock the given items to full capacity, returning the updated rows. */
-export async function restockItems(
-  storeId: string,
-  itemIds: readonly string[],
-): Promise<OperatorInventoryItem[]> {
-  if (itemIds.length === 0) return [];
+/**
+ * A store's sales, newest first.
+ *
+ * This was missing entirely. The Sales and Tax tabs call it, and without it the
+ * frontend fell through to its in-memory seed, which is keyed by seed ids and
+ * so had nothing to say about a real store UUID. Both tabs rendered empty
+ * against the live backend while looking fine against fixtures.
+ */
+export async function listSales(storeId: string): Promise<OperatorSale[]> {
   return db
-    .update(operatorInventory)
-    .set({
-      currentStock: sql`${operatorInventory.capacity}`,
-      lastRestocked: new Date(),
-    })
-    .where(
-      and(
-        eq(operatorInventory.storeId, storeId),
-        inArray(operatorInventory.id, [...itemIds]),
-      ),
-    )
-    .returning();
+    .select()
+    .from(operatorSales)
+    .where(eq(operatorSales.storeId, storeId))
+    .orderBy(desc(operatorSales.occurredAt));
 }
 
 export async function listAlerts(storeId: string): Promise<OperatorAlert[]> {
@@ -114,8 +117,12 @@ export type PeriodRow = { period: Date; revenue: number; units: number };
 export async function salesByPeriod(
   granularity: SalesGranularity,
   since: Date,
+  timeZone: string,
 ): Promise<PeriodRow[]> {
-  const period = sql<Date>`date_trunc(${granularity}, ${operatorSales.occurredAt})`;
+  // The three-argument date_trunc(field, source, zone) is Postgres 16 and this
+  // project runs 15, so we do the round trip by hand: shift the timestamptz into
+  // local wall clock, truncate there, shift the result back to an instant.
+  const period = sql<Date>`date_trunc(${granularity}, ${operatorSales.occurredAt} AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}`;
   return db
     .select({
       period,
@@ -124,8 +131,14 @@ export async function salesByPeriod(
     })
     .from(operatorSales)
     .where(gte(operatorSales.occurredAt, since))
-    .groupBy(period)
-    .orderBy(period);
+    // Group by ordinal, not by repeating the expression. Drizzle re-emits an
+    // interpolated sql fragment with fresh parameter numbers each time it is
+    // used, so the GROUP BY copy reads $5/$6 where the SELECT reads $1/$2.
+    // Postgres compares those parse trees and sees two different expressions,
+    // then rejects the query for selecting an ungrouped column. Referring to
+    // the select item by position sidesteps the whole comparison.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 }
 
 export type StoreTotalRow = {
@@ -234,14 +247,261 @@ export async function inventoryStatsByStore(): Promise<InventoryStatRow[]> {
     .groupBy(operatorInventory.storeId);
 }
 
+// ---------------------------------------------------------------------------
+// Restock sessions
+//
+// Inventory is never written directly any more. Lines accumulate while the
+// restocker works the shelf, and completeSession is the one place that touches
+// operator_inventory -- in a single transaction, so a phone that drops signal
+// mid-restock leaves either nothing applied or all of it.
+// ---------------------------------------------------------------------------
+
+export async function openSession(
+  storeId: string,
+  actor: string,
+): Promise<OperatorRestockSession> {
+  const [row] = await db
+    .insert(operatorRestockSessions)
+    .values({ storeId, actor })
+    .returning();
+  return row;
+}
+
+export async function getSession(
+  id: string,
+): Promise<OperatorRestockSession | null> {
+  const rows = await db
+    .select()
+    .from(operatorRestockSessions)
+    .where(eq(operatorRestockSessions.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listSessions(
+  storeId: string,
+  limit = 20,
+): Promise<OperatorRestockSession[]> {
+  return db
+    .select()
+    .from(operatorRestockSessions)
+    .where(eq(operatorRestockSessions.storeId, storeId))
+    .orderBy(desc(operatorRestockSessions.startedAt))
+    .limit(limit);
+}
+
+export async function listSessionLines(
+  sessionId: string,
+): Promise<OperatorRestockLine[]> {
+  return db
+    .select()
+    .from(operatorRestockLines)
+    .where(eq(operatorRestockLines.sessionId, sessionId));
+}
+
+export type RestockLineValues = {
+  expectedQty: number;
+  countedQty: number | null;
+  added: number;
+  removed: number;
+  removalReason: string | null;
+};
+
+/**
+ * Upsert one slot's line. Keyed on (session_id, item_id) so a restocker tapping
+ * the same slot repeatedly updates one row instead of growing the table.
+ */
+export async function upsertLine(
+  sessionId: string,
+  itemId: string,
+  values: RestockLineValues,
+): Promise<OperatorRestockLine> {
+  const [row] = await db
+    .insert(operatorRestockLines)
+    .values({ sessionId, itemId, ...values })
+    .onConflictDoUpdate({
+      target: [operatorRestockLines.sessionId, operatorRestockLines.itemId],
+      set: { ...values, updatedAt: new Date() },
+    })
+    .returning();
+  return row;
+}
+
+export type CompletedSession = {
+  session: OperatorRestockSession;
+  lines: OperatorRestockLine[];
+  items: OperatorInventoryItem[];
+  activity: OperatorActivityEvent;
+};
+
+/**
+ * Apply a session: derive each item's resulting stock from its own line, write
+ * it, freeze the derived value on the line, close the session and log one
+ * activity event. All inside one transaction.
+ */
+export async function completeSession(
+  sessionId: string,
+  notes: string | null,
+): Promise<CompletedSession | null> {
+  return db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(operatorRestockSessions)
+      .where(eq(operatorRestockSessions.id, sessionId))
+      .limit(1);
+    if (!session) return null;
+
+    const lines = await tx
+      .select()
+      .from(operatorRestockLines)
+      .where(eq(operatorRestockLines.sessionId, sessionId));
+
+    const itemIds = lines.map((line) => line.itemId);
+    const stock =
+      itemIds.length > 0
+        ? await tx
+            .select()
+            .from(operatorInventory)
+            .where(inArray(operatorInventory.id, itemIds))
+        : [];
+    const capacityOf = new Map(stock.map((row) => [row.id, row.capacity]));
+
+    const applied: OperatorInventoryItem[] = [];
+    const frozen: OperatorRestockLine[] = [];
+
+    for (const line of lines) {
+      const resulting = resultingStock(line, capacityOf.get(line.itemId) ?? 0);
+
+      const [item] = await tx
+        .update(operatorInventory)
+        .set({ currentStock: resulting, lastRestocked: new Date() })
+        .where(eq(operatorInventory.id, line.itemId))
+        .returning();
+      if (item) applied.push(item);
+
+      const [updatedLine] = await tx
+        .update(operatorRestockLines)
+        .set({ resultingStock: resulting })
+        .where(eq(operatorRestockLines.id, line.id))
+        .returning();
+      frozen.push(updatedLine ?? line);
+    }
+
+    const [activity] = await tx
+      .insert(operatorActivity)
+      .values({
+        storeId: session.storeId,
+        type: 'restock',
+        description: describeSession(summarizeSession(frozen)),
+        actor: session.actor,
+      })
+      .returning();
+
+    const [closed] = await tx
+      .update(operatorRestockSessions)
+      .set({ completedAt: new Date(), notes })
+      .where(eq(operatorRestockSessions.id, sessionId))
+      .returning();
+
+    return { session: closed, lines: frozen, items: applied, activity };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+export async function listPromotions(
+  storeId: string,
+): Promise<OperatorPromotion[]> {
+  return db
+    .select()
+    .from(operatorPromotions)
+    .where(eq(operatorPromotions.storeId, storeId))
+    .orderBy(desc(operatorPromotions.startsAt));
+}
+
+export async function getPromotion(
+  id: string,
+): Promise<OperatorPromotion | null> {
+  const rows = await db
+    .select()
+    .from(operatorPromotions)
+    .where(eq(operatorPromotions.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function insertPromotion(values: {
+  storeId: string;
+  productName: string | null;
+  percent: number;
+  startsAt: Date;
+  endsAt: Date | null;
+  actor: string | null;
+}): Promise<OperatorPromotion> {
+  const [row] = await db.insert(operatorPromotions).values(values).returning();
+  return row;
+}
+
+/** End a promotion now rather than deleting it -- the history is the point. */
+export async function endPromotion(
+  id: string,
+  at: Date,
+): Promise<OperatorPromotion | null> {
+  const rows = await db
+    .update(operatorPromotions)
+    .set({ endsAt: at })
+    .where(eq(operatorPromotions.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export type PromoSaleRow = {
+  productName: string;
+  quantity: number;
+  total: number;
+  occurredAt: Date;
+};
+
+/**
+ * Sales for a store between two instants. Filtered in SQL so measuring a
+ * two-week promotion does not drag eighteen months of history into Node.
+ */
+export async function salesInWindow(
+  storeId: string,
+  from: Date,
+  to: Date,
+): Promise<PromoSaleRow[]> {
+  return db
+    .select({
+      productName: operatorSales.productName,
+      quantity: operatorSales.quantity,
+      total: operatorSales.total,
+      occurredAt: operatorSales.occurredAt,
+    })
+    .from(operatorSales)
+    .where(
+      and(
+        eq(operatorSales.storeId, storeId),
+        gte(operatorSales.occurredAt, from),
+        lt(operatorSales.occurredAt, to),
+      ),
+    );
+}
+
 export type AlertTrendRow = { hour: Date; count: number };
 
-export async function alertHourlyTrend(since: Date): Promise<AlertTrendRow[]> {
-  const hour = sql<Date>`date_trunc('hour', ${operatorAlerts.occurredAt})`;
+export async function alertHourlyTrend(
+  since: Date,
+  timeZone: string,
+): Promise<AlertTrendRow[]> {
+  const hour = sql<Date>`date_trunc('hour', ${operatorAlerts.occurredAt} AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}`;
   return db
     .select({ hour, count: sql<number>`count(*)::int` })
     .from(operatorAlerts)
     .where(gte(operatorAlerts.occurredAt, since))
-    .groupBy(hour)
-    .orderBy(hour);
+    // Ordinal, for the same reason as salesByPeriod above.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 }

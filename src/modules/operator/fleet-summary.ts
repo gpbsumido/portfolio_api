@@ -11,6 +11,7 @@ import type {
   AlertTrendRow,
   InventoryStatRow,
 } from './repository.js';
+import { zonedInstant, zonedParts } from './timezone.js';
 import type {
   AlertTrendBucketDto,
   FleetSummaryDto,
@@ -20,30 +21,40 @@ import type {
 const TREND_HOURS = 24;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** Fills the sparse hourly alert counts into the last 24 UTC-hour buckets. */
+/**
+ * Fills the sparse hourly alert counts into the last 24 hourly buckets, labelled
+ * with the local hour in the given zone.
+ *
+ * Hour boundaries are not always aligned to UTC ones -- Newfoundland sits at
+ * -3:30 -- so the current hour is resolved through the local wall clock rather
+ * than by truncating UTC. Stepping back is plain subtraction because an hour is
+ * an hour regardless of what the calendar is doing.
+ */
 export function fillAlertTrend(
   rows: readonly AlertTrendRow[],
   now: Date,
+  timeZone: string,
 ): AlertTrendBucketDto[] {
-  const byHour = new Map<string, number>();
+  const byInstant = new Map<number, number>();
   for (const row of rows) {
-    byHour.set(new Date(row.hour).toISOString().slice(0, 13), row.count);
+    byInstant.set(new Date(row.hour).getTime(), row.count);
   }
 
-  const currentHour = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    now.getUTCHours(),
+  const parts = zonedParts(now, timeZone);
+  const currentHour = zonedInstant(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    timeZone,
   );
 
   const buckets: AlertTrendBucketDto[] = [];
   for (let i = TREND_HOURS - 1; i >= 0; i--) {
-    const at = new Date(currentHour - i * HOUR_MS);
-    const key = at.toISOString().slice(0, 13);
+    const at = new Date(currentHour.getTime() - i * HOUR_MS);
     buckets.push({
-      hour: `${String(at.getUTCHours()).padStart(2, '0')}:00`,
-      count: byHour.get(key) ?? 0,
+      hour: `${String(zonedParts(at, timeZone).hour).padStart(2, '0')}:00`,
+      count: byInstant.get(at.getTime()) ?? 0,
     });
   }
   return buckets;
@@ -60,6 +71,7 @@ export function assembleFleetSummary(
   inventoryStats: readonly InventoryStatRow[],
   trendRows: readonly AlertTrendRow[],
   now: Date,
+  timeZone: string,
 ): FleetSummaryDto {
   const alertMap = new Map(alertStats.map((a) => [a.storeId, a]));
   const invMap = new Map(inventoryStats.map((i) => [i.storeId, i]));
@@ -101,6 +113,6 @@ export function assembleFleetSummary(
       avgInventoryHealth:
         totalItems > 0 ? Math.round((totalRatio / totalItems) * 100) : 0,
     },
-    alertTrend: fillAlertTrend(trendRows, now),
+    alertTrend: fillAlertTrend(trendRows, now, timeZone),
   };
 }
