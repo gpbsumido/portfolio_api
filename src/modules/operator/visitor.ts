@@ -24,6 +24,7 @@
 // honestly as an anonymous session rather than dressed up as a named operator.
 // ---------------------------------------------------------------------------
 
+import { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
 export const VISITOR_HEADER = 'x-operator-visitor';
@@ -56,7 +57,15 @@ export function visitorIdOf(req: Request): string | null {
  */
 export function rateLimitKeyOf(req: Request): string {
   const sub = (req as MaybeAuthed).auth?.payload?.sub;
-  return visitorIdOf(req) ?? sub ?? req.ip ?? 'unknown';
+  const identified = visitorIdOf(req) ?? sub;
+  if (identified) return identified;
+
+  // Last resort, and the only branch where the key is an address. It goes
+  // through ipKeyGenerator because an IPv6 user is typically handed a whole /64
+  // -- keying on the full address would let one person mint effectively
+  // unlimited buckets just by varying the low bits, which is the bypass this
+  // limiter exists to prevent. v4 addresses pass through unchanged.
+  return req.ip ? ipKeyGenerator(req.ip) : 'unknown';
 }
 
 /**

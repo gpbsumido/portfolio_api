@@ -62,6 +62,35 @@ describe('rateLimitKeyOf', () => {
   });
 });
 
+describe('rateLimitKeyOf and IPv6', () => {
+  test('collapses an IPv6 address to its /64 so one user cannot mint buckets', () => {
+    // A single IPv6 user is typically handed a whole /64. Keying on the full
+    // address would let them vary the low bits and get a fresh budget every
+    // request, which is the bypass the limiter exists to prevent.
+    const a = rateLimitKeyOf(req({ ip: '2001:db8:1234:5678::1' }));
+    const b = rateLimitKeyOf(req({ ip: '2001:db8:1234:5678::dead:beef' }));
+    expect(a).toBe(b);
+  });
+
+  test('keeps different IPv6 /64s apart', () => {
+    const a = rateLimitKeyOf(req({ ip: '2001:db8:1234:5678::1' }));
+    const b = rateLimitKeyOf(req({ ip: '2001:db8:1234:9999::1' }));
+    expect(a).not.toBe(b);
+  });
+
+  test('leaves an IPv4 address alone', () => {
+    expect(rateLimitKeyOf(req({ ip: '203.0.113.7' }))).toContain('203.0.113.7');
+  });
+
+  test('never reaches the IP branch when a visitor id is present', () => {
+    // The whole point: two visitors behind one BFF egress IP stay separate.
+    const a = rateLimitKeyOf(req({ visitor: 'v_aaa', ip: '203.0.113.7' }));
+    const b = rateLimitKeyOf(req({ visitor: 'v_bbb', ip: '203.0.113.7' }));
+    expect(a).toBe('v_aaa');
+    expect(b).toBe('v_bbb');
+  });
+});
+
 describe('actorOf', () => {
   test('prefers a real identity over a pseudonymous one', () => {
     expect(actorOf(req({ sub: 'auth0|123', visitor: 'v_abc' }))).toBe(
