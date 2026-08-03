@@ -4,10 +4,12 @@
 
 import { Router } from 'express';
 import { env } from '../../config/index.js';
-import { createIpLimiter } from '../../middleware/rateLimiter.js';
+import { optionalCheckJwt } from '../../config/auth.js';
+import { createKeyedLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody, validateParams } from '../../middleware/validate.js';
 import { OperatorController } from './controller.js';
 import { requireServiceToken } from './service-token.js';
+import { rateLimitKeyOf } from './visitor.js';
 import {
   alertIdParamSchema,
   completeSessionSchema,
@@ -53,8 +55,22 @@ const requireService = requireServiceToken(env.OPERATOR_SERVICE_TOKEN);
  * This is a runaway backstop, not per-user fairness. Doing fairness properly
  * needs the BFF to forward who the caller is, which is a bigger piece of work.
  */
-const readLimiter = createIpLimiter({ windowMs: 60_000, max: 1_000 });
-const writeLimiter = createIpLimiter({ windowMs: 60_000, max: 200 });
+const readLimiter = createKeyedLimiter({
+  windowMs: 60_000,
+  max: 1_000,
+  keyGenerator: rateLimitKeyOf,
+});
+const writeLimiter = createKeyedLimiter({
+  windowMs: 60_000,
+  max: 200,
+  keyGenerator: rateLimitKeyOf,
+});
+
+/**
+ * Optional, never required. A signed-in caller gets attributed properly; an
+ * anonymous one carries on, because the demo has to work without an account.
+ */
+router.use(optionalCheckJwt);
 
 // GET /api/operator/stores — the fleet list
 router.get('/stores', readLimiter, (req, res, next) => ctrl.listStores(req, res, next));

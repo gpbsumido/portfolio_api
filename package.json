@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "3.10.0",
+  "version": "4.0.0",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {

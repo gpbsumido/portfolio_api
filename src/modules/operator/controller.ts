@@ -29,6 +29,7 @@ import {
   promotionStatus,
 } from './promotions.js';
 import { countStatusOf } from './restock.js';
+import { actorOf } from './visitor.js';
 import {
   type CompleteSessionInput,
   type PlanogramUpdateInput,
@@ -57,8 +58,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const log = createModuleLogger('operator');
 
-const DEFAULT_ACTOR = 'operator@smartstore.example';
-const QUICK_FILL_ACTOR = 'operator@smartstore.example';
 const QUICK_FILL_NOTE = 'Quick fill to capacity (no physical count)';
 
 const ONLINE_PING_MS = 30_000; // ~30s ago -> "strong signal"
@@ -267,7 +266,7 @@ export class OperatorController {
       const wanted = new Set(itemIds);
       const targets = inventory.filter((row) => wanted.has(row.id));
 
-      const session = await repo.openSession(storeId, QUICK_FILL_ACTOR);
+      const session = await repo.openSession(storeId, actorOf(req));
       for (const target of targets) {
         await repo.upsertLine(session.id, target.id, {
           expectedQty: target.currentStock,
@@ -298,7 +297,7 @@ export class OperatorController {
       const store = await repo.getStore(storeId);
       if (!store) throw new NotFoundError('store not found');
 
-      const session = await repo.openSession(storeId, DEFAULT_ACTOR);
+      const session = await repo.openSession(storeId, actorOf(req));
       res.status(201).json({ session: toSessionDto(session) });
     } catch (err) {
       next(err);
@@ -464,7 +463,7 @@ export class OperatorController {
         percent: body.percent,
         startsAt: new Date(body.startsAt),
         endsAt: body.endsAt ? new Date(body.endsAt) : null,
-        actor: DEFAULT_ACTOR,
+        actor: actorOf(req),
       });
 
       const target = body.productName ?? 'every product';
@@ -472,7 +471,7 @@ export class OperatorController {
         storeId,
         type: 'price-update',
         description: `Scheduled ${body.percent}% off ${target}`,
-        actor: DEFAULT_ACTOR,
+        actor: actorOf(req),
       });
 
       res

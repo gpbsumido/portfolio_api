@@ -134,7 +134,35 @@ GOOGLE_STATE_SECRET=
 GOOGLE_WEBHOOK_URL=https://api.paulsumido.com/api/google/webhook
 # the frontend URL the OAuth callback redirects back to after connect/disconnect
 FRONTEND_URL=https://paulsumido.com
+
+# Operator dashboard writes (required in any deployed environment)
+# Must match OPERATOR_SERVICE_TOKEN in paul-explore. Generate with:
+#   openssl rand -hex 32
+# Leave it unset locally and the check is a deliberate no-op, so a fresh clone
+# works with no setup. Set it on one side only and reads keep working while
+# every write 401s, which presents as a baffling partial outage -- so set both
+# or neither.
+OPERATOR_SERVICE_TOKEN=
 ```
+
+### Operator dashboard auth
+
+Three layers answering three different questions. They are not interchangeable:
+
+| Layer | Question | Enforced by |
+| --- | --- | --- |
+| `OPERATOR_SERVICE_TOKEN` | Can this caller write at all? | `requireServiceToken` on every write |
+| `x-operator-visitor` | Which visitor is this? | `createKeyedLimiter`, and the audit actor |
+| Auth0 JWT (optional) | Who is this, really? | `optionalCheckJwt` on the operator router |
+
+Reads are open on purpose: the dashboard is a public demo and it has to work
+without an account. Writes are closed, so nobody can point curl at these
+endpoints and mutate the data around the app.
+
+The visitor id is **self-asserted and not a security control**. Clearing the
+cookie gets you a fresh rate-limit budget, which is fine, because the service
+token already decides who reaches these endpoints at all — a fairness limit only
+has to tell honest callers apart. Never hang an authorization decision on it.
 
 ### Google Calendar watch channel renewal
 
