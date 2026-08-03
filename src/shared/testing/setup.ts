@@ -5,6 +5,15 @@ process.env.NEXT_PUBLIC_AUTH0_AUDIENCE = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE 
 process.env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL =
   process.env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL || 'https://test.auth0.com/';
 
+/**
+ * The operator write guard reads this at import time, so a developer who has a
+ * real token in their .env would watch every write-route test 401 while CI,
+ * which has no .env, stayed green. A suite whose result depends on whose laptop
+ * it runs on is worse than no suite, so the guard is off by default here and
+ * the tests that care about it set it explicitly.
+ */
+process.env.OPERATOR_SERVICE_TOKEN = '';
+
 // Mock the database pool so tests don't need a real DB connection
 vi.mock('../../config/database.js', () => ({
   pool: {

@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Router } from 'express';
 import request from 'supertest';
 import { describe, expect, test, vi } from 'vitest';
 
