@@ -114,8 +114,14 @@ export async function salesByPeriod(
     })
     .from(operatorSales)
     .where(gte(operatorSales.occurredAt, since))
-    .groupBy(period)
-    .orderBy(period);
+    // Group by ordinal, not by repeating the expression. Drizzle re-emits an
+    // interpolated sql fragment with fresh parameter numbers each time it is
+    // used, so the GROUP BY copy reads $5/$6 where the SELECT reads $1/$2.
+    // Postgres compares those parse trees and sees two different expressions,
+    // then rejects the query for selecting an ungrouped column. Referring to
+    // the select item by position sidesteps the whole comparison.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 }
 
 export type StoreTotalRow = {
@@ -478,6 +484,7 @@ export async function alertHourlyTrend(
     .select({ hour, count: sql<number>`count(*)::int` })
     .from(operatorAlerts)
     .where(gte(operatorAlerts.occurredAt, since))
-    .groupBy(hour)
-    .orderBy(hour);
+    // Ordinal, for the same reason as salesByPeriod above.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
 }
