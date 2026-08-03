@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { buildOperatorSeed } from './seed-data.js';
 
+// One inventory row per product, per store.
+const PRODUCTS_PER_STORE = 6;
+
 function counterUuid() {
   let n = 0;
   return () => `id-${String(++n).padStart(4, '0')}`;
@@ -13,7 +16,13 @@ describe('buildOperatorSeed', () => {
     const seed = buildOperatorSeed(counterUuid(), NOW);
     expect(seed.stores).toHaveLength(6);
     expect(seed.inventory).toHaveLength(36); // 6 stores x 6 items
-    expect(seed.alerts).toHaveLength(24); // 6 x 4
+    // Alerts are derived from each store's own inventory and temperature now,
+    // so the count follows the data rather than being a fixed four per store.
+    // Every store still raises the door-ajar event, so there is at least one.
+    expect(seed.alerts.length).toBeGreaterThanOrEqual(seed.stores.length);
+    expect(seed.alerts.length).toBeLessThanOrEqual(
+      seed.stores.length * (PRODUCTS_PER_STORE + 2),
+    );
     expect(seed.activity).toHaveLength(36); // 6 x 6
     expect(seed.sales).toHaveLength(360); // 6 x 60
     expect(seed.planograms).toHaveLength(6);
@@ -67,5 +76,77 @@ describe('buildOperatorSeed', () => {
     const a = buildOperatorSeed(counterUuid(), NOW);
     const b = buildOperatorSeed(counterUuid(), NOW);
     expect(a).toEqual(b);
+  });
+});
+
+describe('alerts agree with the data they describe', () => {
+  const seed = buildOperatorSeed(counterUuid(), NOW);
+
+  /**
+   * Alerts used to be a fixed list stamped onto every store, so a full shelf
+   * still reported "Turkey Club Sandwich out of stock" and a store at 4C still
+   * warned it had reached 8.2C. Anyone comparing two tabs saw the contradiction.
+   */
+  test('an out-of-stock alert names a product that is actually at zero', () => {
+    const outOfStock = seed.alerts.filter((a) =>
+      a.message.includes('out of stock'),
+    );
+
+    for (const alert of outOfStock) {
+      const product = alert.message.replace(' out of stock', '');
+      const item = seed.inventory.find(
+        (i) => i.storeId === alert.storeId && i.productName === product,
+      );
+      expect(item, `${product} in ${alert.storeId}`).toBeDefined();
+      expect(item?.currentStock).toBe(0);
+    }
+  });
+
+  test('a low-stock alert names a product that is actually low', () => {
+    const low = seed.alerts.filter((a) => a.message.includes('stock below'));
+
+    for (const alert of low) {
+      const product = alert.message.replace(/ stock below \d+%$/, '');
+      const item = seed.inventory.find(
+        (i) => i.storeId === alert.storeId && i.productName === product,
+      );
+      expect(item).toBeDefined();
+      const ratio = (item?.currentStock ?? 0) / (item?.capacity ?? 1);
+      expect(ratio).toBeLessThan(0.2);
+      expect(item?.currentStock).toBeGreaterThan(0);
+    }
+  });
+
+  test('every genuinely empty slot has an alert raised for it', () => {
+    const empty = seed.inventory.filter((i) => i.currentStock === 0);
+
+    for (const item of empty) {
+      const raised = seed.alerts.some(
+        (a) =>
+          a.storeId === item.storeId &&
+          a.message === `${item.productName} out of stock`,
+      );
+      expect(raised, `${item.productName} in ${item.storeId}`).toBe(true);
+    }
+  });
+
+  test('only a store that is actually warm warns about temperature', () => {
+    for (const store of seed.stores) {
+      const warned = seed.alerts.some(
+        (a) => a.storeId === store.id && a.category === 'temperature-warning',
+      );
+      expect(warned, `${store.name} at ${store.temperature}C`).toBe(
+        store.temperature > 7,
+      );
+    }
+  });
+
+  test('the temperature alert quotes the reading the store reports', () => {
+    for (const store of seed.stores.filter((s) => s.temperature > 7)) {
+      const alert = seed.alerts.find(
+        (a) => a.storeId === store.id && a.category === 'temperature-warning',
+      );
+      expect(alert?.message).toContain(store.temperature.toFixed(1));
+    }
   });
 });

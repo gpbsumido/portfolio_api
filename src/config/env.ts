@@ -23,6 +23,10 @@ export const envSchema = z.object({
   NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
 
   // AWS S3
+  // Shared secret paul-explore's BFF sends on operator writes. Unset means the
+  // guard is off, which keeps a fresh clone and local dev working.
+  OPERATOR_SERVICE_TOKEN: z.string().optional(),
+
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),

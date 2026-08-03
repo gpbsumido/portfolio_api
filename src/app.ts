@@ -35,6 +35,14 @@ import youtubeRoutes from './modules/youtube/routes.js';
 
 export const app = express();
 
+/**
+ * Railway terminates TLS at its edge, so without this every request looks like
+ * it came from the proxy and any IP-keyed rate limiter buckets the whole world
+ * together. One hop, because that is what sits in front of us; trusting the
+ * whole chain would let a caller spoof X-Forwarded-For and dodge the limiter.
+ */
+app.set('trust proxy', 1);
+
 // ── Global middleware ─────────────────────────────────────────────────────
 
 app.use(helmet());

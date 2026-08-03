@@ -218,6 +218,7 @@ export const operatorStores = pgTable("operator_stores", {
   name: text("name").notNull(),
   location: text("location").notNull().default(""),
   province: text("province").notNull().default("ON"),
+  timezone: text("timezone"),
   status: text("status").notNull().default("online"),
   temperature: doublePrecision("temperature").notNull().default(4),
   uptime: doublePrecision("uptime").notNull().default(99),
@@ -303,6 +304,71 @@ export const operatorPlanograms = pgTable("operator_planograms", {
 });
 
 export type OperatorPlanogram = InferSelectModel<typeof operatorPlanograms>;
+
+// ── operator_restock_sessions ────────────────────────────────────────────────
+export const operatorRestockSessions = pgTable("operator_restock_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  actor: text("actor"),
+  notes: text("notes"),
+});
+
+export type OperatorRestockSession = InferSelectModel<
+  typeof operatorRestockSessions
+>;
+export type NewOperatorRestockSession = InferInsertModel<
+  typeof operatorRestockSessions
+>;
+
+// ── operator_restock_lines ───────────────────────────────────────────────────
+// countedQty is nullable on purpose: null means the restocker skipped counting
+// this slot, which is a recorded decision rather than missing data.
+export const operatorRestockLines = pgTable("operator_restock_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => operatorRestockSessions.id, { onDelete: "cascade" }),
+  itemId: uuid("item_id")
+    .notNull()
+    .references(() => operatorInventory.id, { onDelete: "cascade" }),
+  expectedQty: integer("expected_qty").notNull().default(0),
+  countedQty: integer("counted_qty"),
+  added: integer("added").notNull().default(0),
+  removed: integer("removed").notNull().default(0),
+  removalReason: text("removal_reason"),
+  resultingStock: integer("resulting_stock"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+// ── operator_promotions ──────────────────────────────────────────────────────
+// No status column: it is derived from the window and the clock, because a
+// stored status needs a job to flip it and is wrong between runs.
+export const operatorPromotions = pgTable("operator_promotions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => operatorStores.id, { onDelete: "cascade" }),
+  /** Null means the whole store. */
+  productName: text("product_name"),
+  percent: integer("percent").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  /** Null means open-ended. */
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export type OperatorPromotion = InferSelectModel<typeof operatorPromotions>;
+export type NewOperatorPromotion = InferInsertModel<typeof operatorPromotions>;
+
+export type OperatorRestockLine = InferSelectModel<typeof operatorRestockLines>;
+export type NewOperatorRestockLine = InferInsertModel<
+  typeof operatorRestockLines
+>;
 export type NewOperatorPlanogram = InferInsertModel<typeof operatorPlanograms>;
 
 // ── operator_sales ───────────────────────────────────────────────────────────
