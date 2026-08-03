@@ -211,6 +211,14 @@ router.post(
   (req, res, next) => ctrl.restock(req, res, next),
 );
 
+// GET /api/operator/stores/:storeId/sales
+router.get(
+  '/stores/:storeId/sales',
+  readLimiter,
+  validateParams(storeIdParamSchema),
+  (req, res, next) => ctrl.listSales(req, res, next),
+);
+
 // GET /api/operator/stores/:storeId/alerts
 router.get(
   '/stores/:storeId/alerts',

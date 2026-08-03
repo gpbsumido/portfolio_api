@@ -552,6 +552,17 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'get',
+  path: '/api/operator/stores/{storeId}/sales',
+  summary: "A store's transactions, newest first",
+  description:
+    'Backs the Sales and Tax tabs. The DB column occurred_at is called timestamp on the wire, matching alerts and activity.',
+  tags: operatorTags,
+  request: { params: storeIdParam },
+  responses: { 200: { description: 'Sales' } },
+});
+
+registry.registerPath({
   method: 'post',
   path: '/api/operator/stores/{storeId}/restock-sessions',
   summary: 'Open a restock session',

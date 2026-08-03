@@ -7,6 +7,7 @@ vi.mock('./repository.js', () => ({
   listStores: vi.fn(),
   getStore: vi.fn(),
   listInventory: vi.fn(),
+  listSales: vi.fn(),
   listAlerts: vi.fn(),
   dismissAlert: vi.fn(),
   listActivity: vi.fn(),
@@ -333,6 +334,38 @@ describe('operator entity routes', () => {
       .post(`/api/operator/stores/${STORE_ID}/restock`)
       .send({ itemIds: [] });
     expect(res.status).toBe(400);
+  });
+
+  test('GET /stores/:id/sales returns the store transactions as DTOs', async () => {
+    // This endpoint did not exist, so the frontend fell through to its seed and
+    // the Sales and Tax tabs rendered empty against the real backend.
+    vi.mocked(repo.listSales).mockResolvedValue([
+      {
+        id: 'sale-1',
+        storeId: STORE_ID,
+        productName: 'Cola',
+        category: 'beverages',
+        unitPrice: 2.5,
+        quantity: 2,
+        total: 5,
+        occurredAt: new Date('2026-08-01T10:00:00.000Z'),
+        createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      },
+    ] as never);
+
+    const res = await request(makeApp()).get(
+      `/api/operator/stores/${STORE_ID}/sales`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.sales[0]).toMatchObject({
+      productName: 'Cola',
+      quantity: 2,
+      total: 5,
+      // occurred_at is called timestamp on the wire.
+      timestamp: '2026-08-01T10:00:00.000Z',
+    });
+    expect(res.body.sales[0]).not.toHaveProperty('occurredAt');
   });
 
   test('GET /stores/:id/alerts returns alerts with a timestamp field', async () => {

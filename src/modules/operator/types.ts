@@ -48,6 +48,17 @@ export type ActivityEventDto = {
   actor?: string;
 };
 
+export type SaleDto = {
+  id: string;
+  storeId: string;
+  productName: string;
+  category: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  timestamp: string;
+};
+
 export type SalesPeriodBucket = {
   label: string;
   start: string;

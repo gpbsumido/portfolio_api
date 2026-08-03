@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-02 - version 3.10.0
+
+- **Added the per-store sales endpoint, which never existed.** `GET /stores/:storeId/sales` was called by the frontend's Sales and Tax tabs and had no implementation here, so those calls 404'd, the BFF fell through to its in-memory seed, and the seed is keyed by seed ids so it had nothing to say about a real store UUID. Both tabs rendered empty against the live backend while looking perfectly healthy against fixtures, which is why it went unnoticed for so long: the fallback that makes the demo resilient is the same thing that hid a missing endpoint. `occurred_at` is called `timestamp` on the wire, matching alerts and activity.
+
 ## 2026-08-02 - version 3.9.1
 
 - **Fixed two aggregate queries that no database would accept.** Making the time buckets timezone-aware left `salesByPeriod` and `alertHourlyTrend` repeating an interpolated expression in their `GROUP BY`. Drizzle re-emits a `sql` fragment with fresh parameter numbers each time it is used, so the GROUP BY copy read `$5/$6` where the SELECT read `$1/$2`, Postgres compared the two parse trees, decided they were different expressions and rejected both queries for selecting an ungrouped column. Both now group and order by ordinal, which sidesteps the comparison entirely. The symptom in the app was `/fleet-summary` returning 500, the frontend silently falling back to its seed, and every store card showing 0% inventory health because the seeded summaries were keyed by seed ids while the store list came back with real UUIDs.

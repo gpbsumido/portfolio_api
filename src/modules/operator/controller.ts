@@ -10,6 +10,7 @@ import type {
   OperatorPromotion,
   OperatorRestockLine,
   OperatorRestockSession,
+  OperatorSale,
   OperatorStore,
 } from '../../config/drizzle/schema.js';
 import {
@@ -47,6 +48,7 @@ import type {
   PromotionDto,
   RestockLineDto,
   RestockSessionDto,
+  SaleDto,
   SalesGranularity,
   StoreDto,
 } from './types.js';
@@ -171,6 +173,20 @@ function toInventoryDto(row: OperatorInventoryItem): InventoryItemDto {
     capacity: row.capacity,
     price: row.price,
     lastRestocked: row.lastRestocked.toISOString(),
+  };
+}
+
+function toSaleDto(row: OperatorSale): SaleDto {
+  return {
+    id: row.id,
+    storeId: row.storeId,
+    productName: row.productName,
+    category: row.category,
+    unitPrice: row.unitPrice,
+    quantity: row.quantity,
+    total: row.total,
+    // occurred_at is called timestamp on the wire, like alerts and activity.
+    timestamp: row.occurredAt.toISOString(),
   };
 }
 
@@ -371,6 +387,16 @@ export class OperatorController {
         items: applied.items.map(toInventoryDto),
         activity: toActivityDto(applied.activity),
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/stores/:storeId/sales — the store's transactions. */
+  async listSales(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sales = await repo.listSales(param(req.params.storeId));
+      res.json({ sales: sales.map(toSaleDto) });
     } catch (err) {
       next(err);
     }

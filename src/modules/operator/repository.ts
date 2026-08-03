@@ -21,6 +21,7 @@ import {
   operatorPromotions,
   type OperatorRestockLine,
   type OperatorRestockSession,
+  type OperatorSale,
   operatorRestockLines,
   operatorRestockSessions,
   operatorSales,
@@ -50,6 +51,22 @@ export async function listInventory(
     .from(operatorInventory)
     .where(eq(operatorInventory.storeId, storeId))
     .orderBy(operatorInventory.productName);
+}
+
+/**
+ * A store's sales, newest first.
+ *
+ * This was missing entirely. The Sales and Tax tabs call it, and without it the
+ * frontend fell through to its in-memory seed, which is keyed by seed ids and
+ * so had nothing to say about a real store UUID. Both tabs rendered empty
+ * against the live backend while looking fine against fixtures.
+ */
+export async function listSales(storeId: string): Promise<OperatorSale[]> {
+  return db
+    .select()
+    .from(operatorSales)
+    .where(eq(operatorSales.storeId, storeId))
+    .orderBy(desc(operatorSales.occurredAt));
 }
 
 export async function listAlerts(storeId: string): Promise<OperatorAlert[]> {
