@@ -3,9 +3,11 @@
 // ---------------------------------------------------------------------------
 
 import { Router } from 'express';
+import { env } from '../../config/index.js';
 import { createIpLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody, validateParams } from '../../middleware/validate.js';
 import { OperatorController } from './controller.js';
+import { requireServiceToken } from './service-token.js';
 import {
   alertIdParamSchema,
   completeSessionSchema,
@@ -23,26 +25,33 @@ const router = Router();
 const ctrl = new OperatorController();
 
 /**
- * These routes are unauthenticated, which is deliberate for now: the operator
- * dashboard is a public demo and its whole point is that the writes are real.
- * Putting checkJwt on the writes would 401 every restock from the demo, and the
- * frontend would quietly fall back to its in-memory seed -- which is exactly the
- * fiction this feature set removed. Auth belongs here the moment there is a real
- * tenant to protect; until then the limiter is what bounds abuse, and the
- * nightly reseed puts the demo data back regardless.
+ * Reads here are open on purpose: the operator dashboard is a public demo and
+ * anyone should be able to click around it without an account.
  *
- * The limits are deliberately much higher than the feature-flags module's,
+ * Writes are a different question. User auth via checkJwt would 401 every
+ * restock coming from the demo and the frontend would fall back to its
+ * in-memory seed, which is exactly the fiction this feature set removed. But
+ * leaving writes wide open means anyone can point curl at the API and mutate
+ * the data directly, going around the app entirely.
+ *
+ * So writes carry a shared secret that only paul-explore's BFF holds. Visitors
+ * are unaffected because the BFF calls these server-side on their behalf; a
+ * direct caller gets a 401. It authenticates the service, not the person, and
+ * the tradeoffs of that are written up in the operator-dashboard notes.
+ */
+const requireService = requireServiceToken(env.OPERATOR_SERVICE_TOKEN);
+
+/**
+ * Rate limits are deliberately much higher than the feature-flags module's,
  * because this traffic does not arrive the way that module's does. Every
- * legitimate operator request reaches us server-side from paul-explore's BFF,
- * so it all shares a handful of Vercel egress IPs rather than one bucket per
- * visitor. A single open dashboard polls roughly 8 times a minute, so a
- * flags-sized 120/min ceiling would start 429ing real users at about fifteen
- * concurrent tabs while doing nothing about distributed abuse.
+ * legitimate operator request reaches us server-side from the BFF, so it all
+ * shares a handful of Vercel egress IPs rather than one bucket per visitor. A
+ * single open dashboard polls roughly 8 times a minute, so a flags-sized
+ * 120/min ceiling would start 429ing real users at about fifteen concurrent
+ * tabs while doing nothing about distributed abuse.
  *
- * So this is a runaway backstop, not per-user fairness: high enough that no
- * amount of normal browsing trips it, low enough to stop a loop hammering the
- * database. Per-user limiting needs the BFF to forward the caller's identity,
- * which is the same wiring that auth would need.
+ * This is a runaway backstop, not per-user fairness. Doing fairness properly
+ * needs the BFF to forward who the caller is, which is a bigger piece of work.
  */
 const readLimiter = createIpLimiter({ windowMs: 60_000, max: 1_000 });
 const writeLimiter = createIpLimiter({ windowMs: 60_000, max: 200 });
@@ -69,6 +78,7 @@ router.get('/fleet-summary', readLimiter, (req, res, next) =>
 router.post(
   '/stores/:storeId/restock-sessions',
   writeLimiter,
+  requireService,
   validateParams(storeIdParamSchema),
   (req, res, next) => ctrl.openRestockSession(req, res, next),
 );
@@ -93,6 +103,7 @@ router.get(
 router.put(
   '/restock-sessions/:sessionId/lines/:itemId',
   writeLimiter,
+  requireService,
   validateParams(sessionLineParamSchema),
   validateBody(restockLineSchema),
   (req, res, next) => ctrl.putRestockLine(req, res, next),
@@ -102,6 +113,7 @@ router.put(
 router.post(
   '/restock-sessions/:sessionId/complete',
   writeLimiter,
+  requireService,
   validateParams(sessionIdParamSchema),
   validateBody(completeSessionSchema),
   (req, res, next) => ctrl.completeRestockSession(req, res, next),
@@ -123,6 +135,7 @@ router.get(
 router.post(
   '/stores/:storeId/promotions',
   writeLimiter,
+  requireService,
   validateParams(storeIdParamSchema),
   validateBody(promotionBodySchema),
   (req, res, next) => ctrl.createPromotion(req, res, next),
@@ -132,6 +145,7 @@ router.post(
 router.patch(
   '/promotions/:promotionId/end',
   writeLimiter,
+  requireService,
   validateParams(promotionIdParamSchema),
   (req, res, next) => ctrl.endPromotion(req, res, next),
 );
@@ -156,6 +170,7 @@ router.get(
 router.patch(
   '/stores/:storeId/planogram',
   writeLimiter,
+  requireService,
   validateParams(storeIdParamSchema),
   validateBody(planogramUpdateSchema),
   (req, res, next) => ctrl.updatePlanogram(req, res, next),
@@ -165,6 +180,7 @@ router.patch(
 router.patch(
   '/alerts/:alertId/dismiss',
   writeLimiter,
+  requireService,
   validateParams(alertIdParamSchema),
   (req, res, next) => ctrl.dismissAlert(req, res, next),
 );
@@ -189,6 +205,7 @@ router.get(
 router.post(
   '/stores/:storeId/restock',
   writeLimiter,
+  requireService,
   validateParams(storeIdParamSchema),
   validateBody(restockBodySchema),
   (req, res, next) => ctrl.restock(req, res, next),
