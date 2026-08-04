@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-04 - version 4.1.0
+
+- **Web Vitals reads are public now.** `/api/vitals/summary`, `/by-page`, `/by-version`, and `/versions` drop `checkJwt`. They return site-wide, non-personal P75 aggregates — there was never anything account-specific in them — and paul-explore is making its Web Vitals dashboard public, so an anonymous visitor's request has to reach the real numbers instead of a 401. Ingestion (`POST /api/vitals`) is unchanged: still open, still rate-limited. Same reads-public, writes-gated shape the feature-flags module already uses.
+
 ## 2026-08-03 - version 4.0.0
 
 **Major, because deploying this needs more than a pull.** Writes to every operator endpoint now require `OPERATOR_SERVICE_TOKEN` to match the value paul-explore holds, and migrations 016-018 must be applied. Neither fails loudly on its own — a mismatched token presents as a baffling partial outage where reads work and nothing saves, and a missing migration 500s the aggregate endpoints — so this is flagged as major to make the deploy checklist unmissable rather than because a route signature changed.
