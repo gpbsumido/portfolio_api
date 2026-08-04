@@ -81,4 +81,33 @@ describe.skipIf(!DATABASE_URL)('operator SQL against a real database', () => {
       salesInWindow(stores[0].id, since, new Date()),
     ).resolves.toBeDefined();
   });
+
+  // ---------------------------------------------------------------------------
+  // The fleet aggregation endpoints
+  // ---------------------------------------------------------------------------
+
+  test('fleet sales totals (planner benchmarks) run', async () => {
+    const { fleetSalesTotals } = await import('./repository.js');
+    await expect(fleetSalesTotals()).resolves.toBeDefined();
+  });
+
+  test('product sales in window group without an ungrouped-column error', async () => {
+    const { productSalesInWindow } = await import('./repository.js');
+    await expect(productSalesInWindow(since)).resolves.toBeDefined();
+  });
+
+  test('distinct inventory products run', async () => {
+    const { distinctInventoryProducts } = await import('./repository.js');
+    await expect(distinctInventoryProducts()).resolves.toBeDefined();
+  });
+
+  test('completed restock lines join across sessions, stores and inventory', async () => {
+    const { completedRestockLines } = await import('./repository.js');
+    await expect(completedRestockLines()).resolves.toBeDefined();
+  });
+
+  test('weekly gross buckets group by the rolling-week ordinal', async () => {
+    const { weeklyGrossBuckets } = await import('./repository.js');
+    await expect(weeklyGrossBuckets(new Date(), 8)).resolves.toBeDefined();
+  });
 });
