@@ -7,10 +7,19 @@
 // scripts/operator/seed.ts inserts what this returns.
 // ---------------------------------------------------------------------------
 
+import { REMOVAL_REASONS, resultingStock } from './restock.js';
 import type { PlanogramBox } from './types.js';
 
 const SHELF_WIDTH = 4;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Historical restock sessions so the shrink report has counts to reconcile
+// against on a fresh seed. Mirrors paul-explore's buildRestockHistory: a couple
+// of completed sessions per store, each walking a few slots through a shortfall,
+// a reasoned removal, a skipped count and a clean count, scaled per store so the
+// fleet has a real worst-first ranking.
+const HISTORY_SESSION_DAYS = [4, 11] as const;
+const HISTORY_SLOTS_PER_SESSION = 6;
 
 const STORE_DEFS = [
   { name: 'Lobby Fridge - Building A', location: 'Building A, Floor 1', province: 'ON' },
@@ -110,6 +119,27 @@ export type SeedSale = {
 
 export type SeedPlanogram = { storeId: string; boxes: PlanogramBox[] };
 
+export type SeedRestockSession = {
+  id: string;
+  storeId: string;
+  startedAt: Date;
+  completedAt: Date;
+  actor: string;
+  notes: string | null;
+};
+
+export type SeedRestockLine = {
+  id: string;
+  sessionId: string;
+  itemId: string;
+  expectedQty: number;
+  countedQty: number | null;
+  added: number;
+  removed: number;
+  removalReason: string | null;
+  resultingStock: number | null;
+};
+
 export type OperatorSeed = {
   stores: SeedStore[];
   inventory: SeedInventoryItem[];
@@ -117,6 +147,8 @@ export type OperatorSeed = {
   activity: SeedActivity[];
   sales: SeedSale[];
   planograms: SeedPlanogram[];
+  restockSessions: SeedRestockSession[];
+  restockLines: SeedRestockLine[];
 };
 
 /** Deterministic 0..1 pseudo-random from an integer seed (so the seed is stable). */
@@ -144,6 +176,8 @@ export function buildOperatorSeed(
     activity: [],
     sales: [],
     planograms: [],
+    restockSessions: [],
+    restockLines: [],
   };
 
   STORE_DEFS.forEach((def, storeIndex) => {
@@ -268,6 +302,58 @@ export function buildOperatorSeed(
       boxes.push({ itemId: null, sensorMatch: true });
     }
     seed.planograms.push({ storeId, boxes });
+
+    // Historical completed restock sessions, so the shrink report reconciles
+    // real counts against the live backend rather than an empty page.
+    const covered = storeInventory.slice(0, HISTORY_SLOTS_PER_SESSION);
+    HISTORY_SESSION_DAYS.forEach((daysAgo, sessionIdx) => {
+      const sessionId = uuid();
+      const completedMs = nowMs - daysAgo * MS_PER_DAY;
+      seed.restockSessions.push({
+        id: sessionId,
+        storeId,
+        startedAt: new Date(completedMs - 20 * 60 * 1000),
+        completedAt: new Date(completedMs),
+        actor: 'Field tech',
+        notes: null,
+      });
+
+      covered.forEach((item, i) => {
+        const expectedQty = Math.max(2, Math.round(item.capacity * 0.5));
+        const bucket = (i + sessionIdx) % 4;
+
+        let countedQty: number | null = expectedQty;
+        let removed = 0;
+        let removalReason: string | null = null;
+
+        if (bucket === 0) {
+          // Unexplained shrink, scaled per store for a real worst-first ranking.
+          const missing = Math.min(expectedQty, 1 + storeIndex + (i % 2));
+          countedQty = Math.max(0, expectedQty - missing);
+        } else if (bucket === 1) {
+          removed = 1 + (i % 2);
+          removalReason = REMOVAL_REASONS[i % REMOVAL_REASONS.length];
+        } else if (bucket === 2) {
+          countedQty = null;
+        }
+
+        const added = Math.max(0, item.capacity - expectedQty);
+        seed.restockLines.push({
+          id: uuid(),
+          sessionId,
+          itemId: item.id,
+          expectedQty,
+          countedQty,
+          added,
+          removed,
+          removalReason,
+          resultingStock: resultingStock(
+            { expectedQty, countedQty, added, removed },
+            item.capacity,
+          ),
+        });
+      });
+    });
   });
 
   return seed;
