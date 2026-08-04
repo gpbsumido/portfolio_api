@@ -25,6 +25,11 @@ vi.mock('./repository.js', () => ({
   listSessions: vi.fn(),
   upsertLine: vi.fn(),
   completeSession: vi.fn(),
+  fleetSalesTotals: vi.fn(),
+  productSalesInWindow: vi.fn(),
+  distinctInventoryProducts: vi.fn(),
+  completedRestockLines: vi.fn(),
+  weeklyGrossBuckets: vi.fn(),
 }));
 
 vi.mock('../../shared/utils/logger.js', () => ({
@@ -591,5 +596,97 @@ describe('buildBuckets', () => {
     const vancouver = windowStart('month', now, 'America/Vancouver');
     // PDT is UTC-7, so Vancouver's August 2025 starts 7 hours later.
     expect(vancouver.getTime() - utc.getTime()).toBe(7 * 60 * 60 * 1000);
+  });
+});
+
+describe('fleet aggregation endpoints', () => {
+  test('GET /planner/benchmarks returns fleet benchmarks', async () => {
+    vi.mocked(repo.fleetSalesTotals).mockResolvedValue({
+      revenue: 100,
+      units: 40,
+      txns: 20,
+    });
+    const res = await request(makeApp()).get('/api/operator/planner/benchmarks');
+    expect(res.status).toBe(200);
+    expect(res.body.benchmarks).toEqual({
+      avgItemPrice: 2.5,
+      itemsPerOrder: 2,
+      sampleSize: 20,
+    });
+  });
+
+  test('GET /product-performance ranks products and honours the range', async () => {
+    vi.mocked(repo.productSalesInWindow).mockResolvedValue([
+      { productName: 'Cola', category: 'beverages', units: 10, revenue: 40 },
+    ]);
+    vi.mocked(repo.distinctInventoryProducts).mockResolvedValue([
+      { productName: 'Cola', category: 'beverages' },
+      { productName: 'Water', category: 'beverages' },
+    ]);
+    const res = await request(makeApp()).get(
+      '/api/operator/product-performance?range=7d',
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.days).toBe(7);
+    expect(res.body.products[0].productName).toBe('Cola');
+    const water = res.body.products.find(
+      (p: { productName: string }) => p.productName === 'Water',
+    );
+    expect(water.hasSales).toBe(false);
+  });
+
+  test('GET /product-performance defaults to 30 days for an unknown range', async () => {
+    vi.mocked(repo.productSalesInWindow).mockResolvedValue([]);
+    vi.mocked(repo.distinctInventoryProducts).mockResolvedValue([]);
+    const res = await request(makeApp()).get(
+      '/api/operator/product-performance?range=decade',
+    );
+    expect(res.body.days).toBe(30);
+  });
+
+  test('GET /shrink-summary reconciles completed restock lines', async () => {
+    vi.mocked(repo.completedRestockLines).mockResolvedValue([
+      {
+        storeId: 's1',
+        storeName: 'Lobby',
+        expectedQty: 10,
+        countedQty: 7,
+        removed: 0,
+        removalReason: null,
+        price: 2,
+      },
+    ]);
+    const res = await request(makeApp()).get('/api/operator/shrink-summary');
+    expect(res.status).toBe(200);
+    expect(res.body.totals.unexplainedUnits).toBe(3);
+    expect(res.body.totals.unexplainedValue).toBe(6);
+    expect(res.body.stores[0].storeId).toBe('s1');
+  });
+
+  test('GET /search-index returns stores and distinct products', async () => {
+    vi.mocked(repo.listStores).mockResolvedValue([store()] as never);
+    vi.mocked(repo.distinctInventoryProducts).mockResolvedValue([
+      { productName: 'Cola', category: 'beverages' },
+    ]);
+    const res = await request(makeApp()).get('/api/operator/search-index');
+    expect(res.status).toBe(200);
+    expect(res.body.stores[0]).toMatchObject({
+      id: STORE_ID,
+      name: 'Lobby Fridge',
+      status: expect.any(String),
+    });
+    expect(res.body.products[0]).toEqual({ name: 'Cola', category: 'beverages' });
+  });
+
+  test('GET /finance nets weekly payouts after fees', async () => {
+    vi.mocked(repo.weeklyGrossBuckets).mockResolvedValue([
+      { bucket: 0, gross: 1000, txns: 200 },
+    ]);
+    vi.mocked(repo.listStores).mockResolvedValue([store()] as never);
+    const res = await request(makeApp()).get('/api/operator/finance');
+    expect(res.status).toBe(200);
+    expect(res.body.weeks).toHaveLength(8);
+    expect(res.body.weeks[0].netPayout).toBe(926);
+    expect(res.body.fees.transactionRate).toBe(0.04);
   });
 });
