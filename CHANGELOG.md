@@ -1,6 +1,10 @@
 # Changelog
 
-## 2026-08-04 - version 4.1.0
+## 2026-08-04 - version 4.2.0
+
+- **Five fleet aggregation endpoints for the operator dashboard.** `GET /api/operator/planner/benchmarks`, `/product-performance`, `/shrink-summary`, `/search-index` and `/finance` — the SQL behind five features that paul-explore had only ever computed from its in-memory seed. Each is a read, open like the other operator reads, aggregated in the database rather than by pulling rows into Node: benchmarks and finance sum sales in one grouped query, product performance groups by product within a day window, shrink joins completed restock lines to their store and item price, and search returns stores plus distinct products. The response shapes match paul-explore's Zod schemas exactly, so the BFF's live path validates without drift and falls back to the seed only when this service is unreachable.
+- **The fee model is duplicated on purpose.** Finance nets each week after the same transaction and platform fees the location planner projects with (`4% + $0.10` per transaction, `$60`/unit/month), defined here rather than shared across a package boundary — the same tradeoff the promotion arithmetic already makes across the two repos. The number the planner quotes and the number finance pays out are the same by construction.
+- **Pure helpers, mocked-repo tests, and SQL smoke.** The aggregation math lives in a pure `aggregations.ts` mirroring paul-explore's models, unit-tested with hand-checkable numbers; the endpoints are tested through the controller with a mocked repository; and the five new SELECTs are added to the SQL-smoke tier that runs against a real Postgres when a `DATABASE_URL` is present.
 
 - **Web Vitals reads are public now.** `/api/vitals/summary`, `/by-page`, `/by-version`, and `/versions` drop `checkJwt`. They return site-wide, non-personal P75 aggregates — there was never anything account-specific in them — and paul-explore is making its Web Vitals dashboard public, so an anonymous visitor's request has to reach the real numbers instead of a 401. Ingestion (`POST /api/vitals`) is unchanged: still open, still rate-limited. Same reads-public, writes-gated shape the feature-flags module already uses.
 
