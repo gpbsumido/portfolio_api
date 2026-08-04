@@ -147,3 +147,80 @@ export type FleetSummaryDto = {
   fleetStats: FleetStatsDto;
   alertTrend: AlertTrendBucketDto[];
 };
+
+// ---------------------------------------------------------------------------
+// Fleet aggregation endpoints (planner benchmarks, product performance,
+// shrink, search index, finance)
+// ---------------------------------------------------------------------------
+
+export type BenchmarksDto = {
+  avgItemPrice: number;
+  itemsPerOrder: number;
+  sampleSize: number;
+} | null;
+
+export type ProductPerformanceRowDto = {
+  productName: string;
+  category: string;
+  unitsSold: number;
+  revenue: number;
+  avgPerDay: number;
+  performanceIndex: number;
+  hasSales: boolean;
+};
+
+export type ProductPerformanceDto = {
+  rangeId: string;
+  days: number;
+  products: ProductPerformanceRowDto[];
+};
+
+export type ShrinkSummaryDto = {
+  unexplainedUnits: number;
+  unexplainedValue: number;
+  explainedUnits: number;
+  explainedValue: number;
+  explainedByReason: Record<string, number>;
+  countedLines: number;
+  notCountedLines: number;
+};
+
+export type StoreShrinkDto = ShrinkSummaryDto & {
+  storeId: string;
+  storeName: string;
+};
+
+export type FleetShrinkDto = {
+  stores: StoreShrinkDto[];
+  totals: ShrinkSummaryDto;
+};
+
+export type SearchIndexDto = {
+  stores: { id: string; name: string; status: string }[];
+  products: { name: string; category: string }[];
+};
+
+export type PayoutWeekDto = {
+  weekStart: string;
+  grossRevenue: number;
+  transactionCount: number;
+  transactionFees: number;
+  platformFees: number;
+  netPayout: number;
+};
+
+export type FinanceDto = {
+  weeks: PayoutWeekDto[];
+  totals: {
+    grossRevenue: number;
+    transactionCount: number;
+    transactionFees: number;
+    platformFees: number;
+    netPayout: number;
+  };
+  fees: {
+    transactionRate: number;
+    transactionFlat: number;
+    platformPerUnitMonthly: number;
+  };
+};

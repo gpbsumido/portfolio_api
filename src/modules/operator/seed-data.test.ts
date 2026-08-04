@@ -149,4 +149,29 @@ describe('alerts agree with the data they describe', () => {
       expect(alert?.message).toContain(store.temperature.toFixed(1));
     }
   });
+
+  test('seeds completed restock sessions so the shrink report has data', () => {
+    // Two sessions per store, all completed.
+    expect(seed.restockSessions).toHaveLength(seed.stores.length * 2);
+    expect(seed.restockSessions.every((s) => s.completedAt !== null)).toBe(true);
+    expect(seed.restockLines.length).toBeGreaterThan(0);
+    // Every line references a real session and a real inventory item.
+    const sessionIds = new Set(seed.restockSessions.map((s) => s.id));
+    const itemIds = new Set(seed.inventory.map((i) => i.id));
+    for (const line of seed.restockLines) {
+      expect(sessionIds.has(line.sessionId)).toBe(true);
+      expect(itemIds.has(line.itemId)).toBe(true);
+    }
+  });
+
+  test('the seeded counts include unexplained shrink to reconcile', () => {
+    // At least one counted line short of expected, with no removal reason: the
+    // exact signal the shrink report exists to surface. Without it the live
+    // endpoint would render an honest but empty page.
+    const shrink = seed.restockLines.filter(
+      (l) =>
+        l.countedQty !== null && l.countedQty < l.expectedQty && l.removed === 0,
+    );
+    expect(shrink.length).toBeGreaterThan(0);
+  });
 });

@@ -490,6 +490,129 @@ export async function salesInWindow(
     );
 }
 
+// ---------------------------------------------------------------------------
+// Fleet aggregation endpoints — one grouped query each, summed in SQL
+// ---------------------------------------------------------------------------
+
+export type FleetTotalsRow = { revenue: number; units: number; txns: number };
+
+/** Fleet-wide revenue, units and transaction count in one row, for benchmarks. */
+export async function fleetSalesTotals(): Promise<FleetTotalsRow> {
+  const rows = await db
+    .select({
+      revenue: sql<number>`coalesce(sum(${operatorSales.total}), 0)::float8`,
+      units: sql<number>`coalesce(sum(${operatorSales.quantity}), 0)::int`,
+      txns: sql<number>`count(*)::int`,
+    })
+    .from(operatorSales);
+  return rows[0] ?? { revenue: 0, units: 0, txns: 0 };
+}
+
+export type ProductSalesRow = {
+  productName: string;
+  category: string;
+  units: number;
+  revenue: number;
+};
+
+/** Units and revenue per product/category within the window, summed in SQL. */
+export async function productSalesInWindow(
+  since: Date,
+): Promise<ProductSalesRow[]> {
+  return db
+    .select({
+      productName: operatorSales.productName,
+      category: operatorSales.category,
+      units: sql<number>`sum(${operatorSales.quantity})::int`,
+      revenue: sql<number>`sum(${operatorSales.total})::float8`,
+    })
+    .from(operatorSales)
+    .where(gte(operatorSales.occurredAt, since))
+    .groupBy(operatorSales.productName, operatorSales.category);
+}
+
+export type InventoryProductRow = { productName: string; category: string };
+
+/** Distinct products the fleet stocks, so dead SKUs and search have a source. */
+export async function distinctInventoryProducts(): Promise<
+  InventoryProductRow[]
+> {
+  return db
+    .selectDistinct({
+      productName: operatorInventory.productName,
+      category: operatorInventory.category,
+    })
+    .from(operatorInventory)
+    .orderBy(operatorInventory.productName);
+}
+
+export type ShrinkLineRow = {
+  storeId: string;
+  storeName: string;
+  expectedQty: number;
+  countedQty: number | null;
+  removed: number;
+  removalReason: string | null;
+  price: number;
+};
+
+/**
+ * Every restock line from a completed session, joined to its store and the
+ * item's price, for the shrink reconciliation. Only completed sessions count:
+ * an in-progress count has not been reconciled yet.
+ */
+export async function completedRestockLines(): Promise<ShrinkLineRow[]> {
+  return db
+    .select({
+      storeId: operatorRestockSessions.storeId,
+      storeName: operatorStores.name,
+      expectedQty: operatorRestockLines.expectedQty,
+      countedQty: operatorRestockLines.countedQty,
+      removed: operatorRestockLines.removed,
+      removalReason: operatorRestockLines.removalReason,
+      price: sql<number>`coalesce(${operatorInventory.price}, 0)::float8`,
+    })
+    .from(operatorRestockLines)
+    .innerJoin(
+      operatorRestockSessions,
+      eq(operatorRestockLines.sessionId, operatorRestockSessions.id),
+    )
+    .innerJoin(
+      operatorStores,
+      eq(operatorRestockSessions.storeId, operatorStores.id),
+    )
+    .leftJoin(
+      operatorInventory,
+      eq(operatorRestockLines.itemId, operatorInventory.id),
+    )
+    .where(sql`${operatorRestockSessions.completedAt} is not null`);
+}
+
+export type WeekGrossRow = { bucket: number; gross: number; txns: number };
+
+/**
+ * Gross revenue and transaction count bucketed into rolling 7-day windows
+ * ending at `now` (bucket 0 = the most recent week), for `weeks` back. One
+ * GROUP BY, so the payload is a handful of rows regardless of sales volume.
+ */
+export async function weeklyGrossBuckets(
+  now: Date,
+  weeks: number,
+): Promise<WeekGrossRow[]> {
+  const since = new Date(now.getTime() - weeks * 7 * 24 * 60 * 60 * 1000);
+  const bucket = sql<number>`floor(extract(epoch from (${now.toISOString()}::timestamptz - ${operatorSales.occurredAt})) / ${7 * 24 * 60 * 60})::int`;
+  return db
+    .select({
+      bucket,
+      gross: sql<number>`sum(${operatorSales.total})::float8`,
+      txns: sql<number>`count(*)::int`,
+    })
+    .from(operatorSales)
+    .where(gte(operatorSales.occurredAt, since))
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
+}
+
 export type AlertTrendRow = { hour: Date; count: number };
 
 export async function alertHourlyTrend(

@@ -86,6 +86,37 @@ router.get('/fleet-summary', readLimiter, (req, res, next) =>
 );
 
 // ---------------------------------------------------------------------------
+// Fleet aggregation endpoints, all read-only and computed in SQL. Registered
+// before /stores/:storeId; their paths don't collide, but keeping the fleet
+// rollups together reads better.
+// ---------------------------------------------------------------------------
+
+// GET /api/operator/planner/benchmarks — fleet basket price + items/order
+router.get('/planner/benchmarks', readLimiter, (req, res, next) =>
+  ctrl.plannerBenchmarks(req, res, next),
+);
+
+// GET /api/operator/product-performance — per-product over a day window
+router.get('/product-performance', readLimiter, (req, res, next) =>
+  ctrl.productPerformance(req, res, next),
+);
+
+// GET /api/operator/shrink-summary — unexplained vs reasoned loss per store
+router.get('/shrink-summary', readLimiter, (req, res, next) =>
+  ctrl.shrinkSummary(req, res, next),
+);
+
+// GET /api/operator/search-index — stores + distinct fleet products
+router.get('/search-index', readLimiter, (req, res, next) =>
+  ctrl.searchIndex(req, res, next),
+);
+
+// GET /api/operator/finance — weekly payouts reconciled from sales
+router.get('/finance', readLimiter, (req, res, next) =>
+  ctrl.finance(req, res, next),
+);
+
+// ---------------------------------------------------------------------------
 // Restock sessions. Registered before /stores/:storeId so the more specific
 // path wins, same as the planogram and dismiss routes above.
 // ---------------------------------------------------------------------------

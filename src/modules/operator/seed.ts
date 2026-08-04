@@ -13,6 +13,8 @@ import {
   operatorAlerts,
   operatorInventory,
   operatorPlanograms,
+  operatorRestockLines,
+  operatorRestockSessions,
   operatorSales,
   operatorStores,
 } from '../../config/drizzle/schema.js';
@@ -25,6 +27,8 @@ export type SeedCounts = {
   activity: number;
   sales: number;
   planograms: number;
+  restockSessions: number;
+  restockLines: number;
 };
 
 /** Wipes and re-inserts the operator demo dataset. Safe to re-run. */
@@ -37,12 +41,19 @@ export async function seedOperator(now: Date = new Date()): Promise<SeedCounts> 
     await tx.delete(operatorSales);
     await tx.delete(operatorActivity);
     await tx.delete(operatorAlerts);
+    await tx.delete(operatorRestockLines);
+    await tx.delete(operatorRestockSessions);
     await tx.delete(operatorInventory);
     await tx.delete(operatorStores);
 
     if (data.stores.length) await tx.insert(operatorStores).values(data.stores);
     if (data.inventory.length)
       await tx.insert(operatorInventory).values(data.inventory);
+    // Sessions before lines: a line references its session and an inventory item.
+    if (data.restockSessions.length)
+      await tx.insert(operatorRestockSessions).values(data.restockSessions);
+    if (data.restockLines.length)
+      await tx.insert(operatorRestockLines).values(data.restockLines);
     if (data.alerts.length) await tx.insert(operatorAlerts).values(data.alerts);
     if (data.activity.length)
       await tx.insert(operatorActivity).values(data.activity);
@@ -58,5 +69,7 @@ export async function seedOperator(now: Date = new Date()): Promise<SeedCounts> 
     activity: data.activity.length,
     sales: data.sales.length,
     planograms: data.planograms.length,
+    restockSessions: data.restockSessions.length,
+    restockLines: data.restockLines.length,
   };
 }
