@@ -20,6 +20,12 @@ import {
 } from '../../shared/errors/AppError.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { buildBuckets, roundCents, windowStart } from './analytics.js';
+import {
+  benchmarksFrom,
+  buildFinance,
+  buildFleetShrink,
+  buildProductPerformance,
+} from './aggregations.js';
 import { assembleFleetSummary } from './fleet-summary.js';
 import * as repo from './repository.js';
 import {
@@ -84,6 +90,12 @@ function param(val: string | string[] | undefined): string {
 function resolveGranularity(raw: string): SalesGranularity {
   const parsed = salesGranularitySchema.safeParse(raw);
   return parsed.success ? parsed.data : 'month';
+}
+
+/** Day window for a product-performance range, defaulting to 30 days. */
+const RANGE_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90 };
+function daysForRange(range: string): number {
+  return RANGE_DAYS[range] ?? 30;
 }
 
 /**
@@ -642,6 +654,79 @@ export class OperatorController {
         totalRevenue,
       };
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/planner/benchmarks — fleet basket price + items/order. */
+  async plannerBenchmarks(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const totals = await repo.fleetSalesTotals();
+      res.json({ benchmarks: benchmarksFrom(totals) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/product-performance — per-product over a day window. */
+  async productPerformance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rangeId = param(req.query.range as string) || '30d';
+      const days = daysForRange(rangeId);
+      const since = new Date(Date.now() - days * DAY_MS);
+      const [sales, products] = await Promise.all([
+        repo.productSalesInWindow(since),
+        repo.distinctInventoryProducts(),
+      ]);
+      res.json({
+        rangeId,
+        days,
+        products: buildProductPerformance(sales, products, days),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/shrink-summary — unexplained vs reasoned loss, per store. */
+  async shrinkSummary(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const rows = await repo.completedRestockLines();
+      res.json(buildFleetShrink(rows));
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/search-index — stores + distinct fleet products. */
+  async searchIndex(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const [stores, products] = await Promise.all([
+        repo.listStores(),
+        repo.distinctInventoryProducts(),
+      ]);
+      res.json({
+        stores: stores.map((s) => ({ id: s.id, name: s.name, status: s.status })),
+        products: products.map((p) => ({
+          name: p.productName,
+          category: p.category,
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/operator/finance — weekly payouts reconciled from sales. */
+  async finance(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const now = new Date();
+      const [buckets, stores] = await Promise.all([
+        repo.weeklyGrossBuckets(now, 8),
+        repo.listStores(),
+      ]);
+      res.json(buildFinance(buckets, stores.length, now, 8));
     } catch (err) {
       next(err);
     }
