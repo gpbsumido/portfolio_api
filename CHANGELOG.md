@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-05 - version 4.2.1
+
+- **Documented the operator demo re-seed cron.** The job has existed since the operator work landed, but nothing wrote down how to run it, and it needs its own Railway cron service — a service carries one schedule and one `CRON_JOB`, so it can't share the feature-flags reset's. The README now covers the source and start command, the `0 4 * * *` schedule, the four variables, and the two things that bite: setting those vars project-wide boots the *web* service into cron mode, and `NODE_ENV=production` is required for SSL against the Railway Postgres. Also spells out that the job wipes and re-inserts the `operator_*` tables, so anything a visitor changed is reset — paul-explore says as much on the dashboard.
+
 ## 2026-08-04 - version 4.2.0
 
 - **Five fleet aggregation endpoints for the operator dashboard.** `GET /api/operator/planner/benchmarks`, `/product-performance`, `/shrink-summary`, `/search-index` and `/finance` — the SQL behind five features that paul-explore had only ever computed from its in-memory seed. Each is a read, open like the other operator reads, aggregated in the database rather than by pulling rows into Node: benchmarks and finance sum sales in one grouped query, product performance groups by product within a day window, shrink joins completed restock lines to their store and item price, and search returns stores plus distinct products. The response shapes match paul-explore's Zod schemas exactly, so the BFF's live path validates without drift and falls back to the seed only when this service is unreachable.
