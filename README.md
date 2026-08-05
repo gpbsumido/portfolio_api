@@ -194,6 +194,31 @@ web service into cron mode. `NODE_ENV=production` is required so the DB pool use
 SSL against the Railway Postgres (`src/config/database.ts`). Run manually with
 `node dist/jobs/resetFeatureFlags.js`.
 
+### Operator demo re-seed cron
+
+The operator dashboard is a public demo whose views are time-relative (the 24-hour
+alert trend, the day/week sales ranges) but whose seed timestamps are static, so
+the data thins out as it ages — and visitors can dismiss alerts or rearrange a
+planogram. A cron re-seeds the whole fleet daily, restoring the canonical demo and
+refreshing every timestamp. It reuses the same `seedOperator()` the CLI seed uses
+(`src/modules/operator/seed.ts`), so the two can't drift.
+
+Run it as its **own** Railway cron service (a service has only one schedule and one
+`CRON_JOB`):
+
+- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Schedule**: `0 4 * * *` (daily at 4am UTC)
+- **Variables**: `RUN_CRON=true`, `CRON_JOB=reseed-operator`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
+
+Same caveats as the feature-flags reset: set these vars **only on the cron service**
+(project-wide would boot the web service into cron mode), and `NODE_ENV=production`
+is required for SSL against the Railway Postgres. Run manually with
+`node dist/jobs/reseedOperator.js`, or locally with `pnpm seed:operator`.
+
+Note this **wipes and re-inserts** the `operator_*` tables, so anything a visitor
+changed is reset. paul-explore shows a note on the dashboard so that isn't a
+surprise.
+
 ### Database migrations
 
 Migrations are TypeScript (`src/migrations/`) run via knex through `tsx`:
