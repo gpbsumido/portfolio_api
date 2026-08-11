@@ -4,10 +4,11 @@ import { GalleryController } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
 import { validateBody } from '../../middleware/validate.js';
 import { createGalleryItemSchema } from './schemas.js';
+import { IMAGE_UPLOAD_LIMITS } from '../../shared/upload/limits.js';
 
 const router = Router();
 const ctrl = new GalleryController();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: IMAGE_UPLOAD_LIMITS });
 
 router.post('/', checkJwt, upload.single('file'), validateBody(createGalleryItemSchema), (req, res, next) =>
   ctrl.create(req, res, next),
