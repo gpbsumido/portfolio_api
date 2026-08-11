@@ -12,6 +12,10 @@ process.env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL =
  * it runs on is worse than no suite, so the guard is off by default here and
  * the tests that care about it set it explicitly.
  */
+// Without this the suite emits ~100k characters of pool debug chatter, which
+// pushes the failure summary out of anything that reads the tail of a run.
+process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'silent';
+
 process.env.OPERATOR_SERVICE_TOKEN = '';
 
 // Mock the database pool so tests don't need a real DB connection

@@ -24,7 +24,9 @@ export const REDACT_PATHS = [
 ];
 
 export const logger = pino({
-  level: isProduction ? 'info' : 'debug',
+  // LOG_LEVEL wins so a test run can silence this. The suite otherwise emits
+  // ~100k characters of pool debug chatter, which buries the failure summary.
+  level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
   redact: { paths: REDACT_PATHS, remove: true },
   ...(isProduction
     ? {}
