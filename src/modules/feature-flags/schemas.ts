@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ACCESS_TIERS } from './access.js';
+
 // ---------------------------------------------------------------------------
 // Feature-flag domain schemas — the single source of the wire contract.
 //
@@ -67,8 +69,14 @@ export const environmentConfigSchema = z.object({
 });
 
 /** A feature flag and its configuration across every environment. */
+export const accessSchema = z.enum(ACCESS_TIERS);
+
 export const flagSchema = z.object({
   key: z.string(),
+  // Which of the three access rungs this flag sits in. paul-explore renders
+  // and gates on this, so the API is the authority for it rather than the
+  // console guessing from a local map.
+  access: accessSchema,
   name: z.string(),
   description: z.string(),
   kind: flagKindSchema,

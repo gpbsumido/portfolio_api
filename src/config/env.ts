@@ -27,6 +27,11 @@ export const envSchema = z.object({
   // guard is off, which keeps a fresh clone and local dev working.
   OPERATOR_SERVICE_TOKEN: z.string().optional(),
 
+  // Shared secret paul-explore's BFF sends on open-tier feature-flag writes,
+  // which have no signed-in user to borrow a token from. Unset disables that
+  // path entirely and every write falls back to requiring a user.
+  FLAGS_SERVICE_TOKEN: z.string().optional(),
+
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),
