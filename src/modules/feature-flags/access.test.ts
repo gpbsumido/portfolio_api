@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ACCESS_TIERS, isProtectedFlag } from './access.js';
-import { CANONICAL_FLAGS, RESETTABLE_FLAGS } from './seed.js';
+import { CANONICAL_FLAGS, PROTECTED_FLAGS, RESETTABLE_FLAGS } from './seed.js';
 
 describe('flag access tiers', () => {
   test('every canonical flag declares a tier the console understands', () => {
@@ -56,5 +56,21 @@ describe('RESETTABLE_FLAGS', () => {
     expect(keys).toContain('dark-mode');
     expect(keys).toContain('new-checkout');
     expect(RESETTABLE_FLAGS.length).toBe(CANONICAL_FLAGS.length - 2);
+  });
+});
+
+describe('PROTECTED_FLAGS', () => {
+  test('holds exactly the live gates', () => {
+    expect(PROTECTED_FLAGS.map((f) => f.key)).toEqual(['pocket-tcg', 'world-live-presence']);
+  });
+
+  test('together with RESETTABLE_FLAGS accounts for every canonical flag exactly once', () => {
+    // The reset re-seeds one set and ensures the other exists. If a flag fell
+    // out of both, nothing would ever recreate it: the migration that inserted
+    // it only runs once, so a wipe would lose it permanently.
+    const covered = [...RESETTABLE_FLAGS, ...PROTECTED_FLAGS].map((f) => f.key).sort();
+    const canonical = CANONICAL_FLAGS.map((f) => f.key).sort();
+    expect(covered).toEqual(canonical);
+    expect(new Set(covered).size).toBe(covered.length);
   });
 });
