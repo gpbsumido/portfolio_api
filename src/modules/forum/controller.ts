@@ -80,18 +80,4 @@ export class ForumController {
     }
   }
 
-  async deleteMarker(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = param(req.params.id);
-      const deleted = await repo.deleteMarker(id);
-
-      if (!deleted) {
-        throw new NotFoundError('Marker not found');
-      }
-
-      res.status(200).json({ message: 'Marker deleted successfully', deleted });
-    } catch (error) {
-      next(error);
-    }
-  }
 }

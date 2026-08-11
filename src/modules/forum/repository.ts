@@ -45,11 +45,4 @@ export class ForumRepository {
     return result.rows;
   }
 
-  async deleteMarker(id: string): Promise<Marker | null> {
-    const result = await pool.query<Marker>(
-      'DELETE FROM locations WHERE id = $1 RETURNING *',
-      [id],
-    );
-    return result.rows[0] ?? null;
-  }
 }

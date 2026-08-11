@@ -19,6 +19,10 @@ router.post('/postforum', checkJwt, validateBody(createForumPostSchema), (req, r
 // Markers
 router.post('/markers', validateBody(createMarkerSchema), (req, res, next) => ctrl.createMarker(req, res, next));
 router.get('/markers', (req, res, next) => ctrl.getMarkers(req, res, next));
-router.delete('/markers/:id', checkJwt, (req, res, next) => ctrl.deleteMarker(req, res, next));
+// DELETE /markers/:id is deliberately absent. The locations table has no owner
+// column and POST /markers is unauthenticated, so checkJwt here was
+// authentication with no authorization behind it -- any signed-up user could
+// remove any pin. Nothing consumed the route. Moderation can come back as an
+// explicit admin permission, or with an owner column, rather than as a gap.
 
 export default router;
