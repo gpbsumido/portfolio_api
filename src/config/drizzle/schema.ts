@@ -13,6 +13,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { FlagAccess } from '../../modules/feature-flags/access.js';
 import type {
   AuditAction,
   EnvironmentConfig,
@@ -182,6 +183,10 @@ export type NewReferralClick = InferInsertModel<typeof referralClicks>;
 // mirrors the paul-explore `Flag` contract 1:1 (see modules/feature-flags).
 export const featureFlags = pgTable('feature_flags', {
   key: text('key').primaryKey(),
+  // Which access rung the flag sits in: open | authed | admin. Defaults to the
+  // loosest so an insert that predates the column stays valid; the seed is
+  // explicit for every flag.
+  access: text('access').$type<FlagAccess>().notNull().default('open'),
   name: text('name').notNull(),
   description: text('description').notNull(),
   kind: text('kind').$type<FlagKind>().notNull(),

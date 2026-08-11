@@ -1,17 +1,21 @@
 // ---------------------------------------------------------------------------
 // Feature-flags module — Express router
 //
-// Reads (list + audit) are public so the console works signed-out. The PATCH
-// write requires an authenticated Auth0 user, same as the NBA picks writes; a
-// signed-out toggle gets a 401 and the console shows a "sign in to change" state.
+// Reads (list + audit) are public so the console works signed-out. Writes are
+// guarded by tier: the open rung also accepts the BFF's shared secret, since a
+// signed-out visitor has no token to send and those flags are meant to be
+// usable without an account. Every rung above that still needs a real Auth0
+// user. See write-auth.ts for why the secret stops at the open rung.
 // ---------------------------------------------------------------------------
 
 import { Router } from 'express';
 import { checkJwt } from '../../config/auth.js';
+import { env } from '../../config/env.js';
 import { createIpLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody, validateParams } from '../../middleware/validate.js';
 import { FeatureFlagsController } from './controller.js';
 import { flagKeyParamSchema, updateFlagBodySchema } from './schemas.js';
+import { flagWriteAuth } from './write-auth.js';
 
 const router = Router();
 const ctrl = new FeatureFlagsController();
@@ -30,7 +34,7 @@ router.get('/audit', readLimiter, (req, res, next) => ctrl.audit(req, res, next)
 router.patch(
   '/:flagKey',
   writeLimiter,
-  checkJwt,
+  flagWriteAuth(env.FLAGS_SERVICE_TOKEN, checkJwt),
   validateParams(flagKeyParamSchema),
   validateBody(updateFlagBodySchema),
   (req, res, next) => ctrl.patch(req, res, next),

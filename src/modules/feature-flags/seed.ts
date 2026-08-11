@@ -8,6 +8,7 @@
 // audit log".
 // ---------------------------------------------------------------------------
 
+import { isProtectedFlag } from './access.js';
 import type { AuditEntry, EnvironmentConfig, Flag, RolloutWeight } from './types.js';
 
 const BOOLEAN: Flag['variations'] = [
@@ -29,10 +30,11 @@ function boolEnv(config: {
   };
 }
 
-/** The canonical five flags, in display order. */
+/** The canonical flags, in display order. */
 export const CANONICAL_FLAGS: Flag[] = [
   {
     key: 'new-checkout',
+    access: 'authed',
     name: 'New checkout flow',
     description:
       'Rebuilt checkout with saved cards and express pay. Rolling out gradually to watch conversion.',
@@ -68,6 +70,7 @@ export const CANONICAL_FLAGS: Flag[] = [
   },
   {
     key: 'ai-search',
+    access: 'open',
     name: 'AI-powered search',
     description:
       'Semantic search backed by embeddings. Gated to beta users and internal accounts while we tune relevance.',
@@ -111,6 +114,7 @@ export const CANONICAL_FLAGS: Flag[] = [
   },
   {
     key: 'checkout-experience',
+    access: 'authed',
     name: 'Checkout experiment (A/B/C)',
     description:
       'Multivariate test of three checkout layouts. Traffic is split evenly and bucketing is sticky so a user always sees the same layout.',
@@ -157,6 +161,7 @@ export const CANONICAL_FLAGS: Flag[] = [
   },
   {
     key: 'priority-support',
+    access: 'authed',
     name: 'Priority support queue',
     description:
       'Routes paid plans to the fast support queue. A pure targeting flag - no percentage rollout.',
@@ -205,6 +210,7 @@ export const CANONICAL_FLAGS: Flag[] = [
   },
   {
     key: 'dark-mode',
+    access: 'open',
     name: 'Dark mode',
     description:
       'Fully launched. Kept as a flag so it can be killed instantly if a regression appears.',
@@ -227,7 +233,73 @@ export const CANONICAL_FLAGS: Flag[] = [
       }),
     },
   },
+  // ── Live gates ─────────────────────────────────────────────────────────────
+  // These two are not demo data. They gate real pages on paul-explore, which is
+  // why they are admin-only and why the reset below leaves them alone. Seeded
+  // fully on so creating them changes nothing for visitors.
+  {
+    key: 'pocket-tcg',
+    access: 'admin',
+    name: 'Pok\u00e9mon TCG Pocket',
+    description:
+      'Gates the /tcg/pocket page for real visitors, evaluated server-side on a sticky per-visitor key. Flip the kill switch or dial the rollout down and real people lose access, stuck to their bucket.',
+    kind: 'boolean',
+    tags: ['tcg', 'release'],
+    variations: [...BOOLEAN],
+    createdAt: '2026-07-27T12:00:00.000Z',
+    environments: {
+      development: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      staging: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      production: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+    },
+  },
+  {
+    key: 'world-live-presence',
+    access: 'admin',
+    name: 'World live presence',
+    description:
+      'Kill switch for live multiplayer presence on /world \u2014 other explorers rendered from realtime snapshots. Off means visitors walk the city alone and the ghost stroll takes back over.',
+    kind: 'boolean',
+    tags: ['world', 'release'],
+    variations: [...BOOLEAN],
+    createdAt: '2026-07-29T12:00:00.000Z',
+    environments: {
+      development: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      staging: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      production: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+    },
+  },
 ];
+
+/**
+ * The flags the 6-hourly reset is allowed to touch.
+ *
+ * The reset wipes both tables and re-seeds, which keeps the demo pristine. A
+ * live kill switch must not be in that set: turning /tcg/pocket off after a
+ * regression would revert on its own within six hours, at whatever time of
+ * night the cron happens to run.
+ */
+export const RESETTABLE_FLAGS: Flag[] = CANONICAL_FLAGS.filter(
+  (flag) => !isProtectedFlag(flag.key),
+);
 
 /**
  * The canonical audit log, newest first. IDs are assigned by the database
