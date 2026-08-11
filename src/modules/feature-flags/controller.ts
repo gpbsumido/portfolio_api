@@ -18,6 +18,7 @@ const ENVIRONMENTS: Environment[] = ['development', 'staging', 'production'];
 function toFlagDto(row: FeatureFlag): Flag {
   return {
     key: row.key,
+    access: row.access,
     name: row.name,
     description: row.description,
     kind: row.kind,
