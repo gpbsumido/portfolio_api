@@ -19,6 +19,23 @@ function param(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
 }
 
+/**
+ * Whether `viewerSub` may see content authored by `authorSub`.
+ *
+ * Public profiles are visible to anyone, a private one only to its owner and to
+ * accepted followers. Mirrors the checks getPostsByUser already performs.
+ */
+async function canView(authorSub: string, viewerSub: string | null): Promise<boolean> {
+  if (viewerSub === authorSub) return true;
+
+  const profile = await repo.getProfileVisibilityBySub(authorSub);
+  if (!profile) return false;
+  if (profile.is_public) return true;
+  if (!viewerSub) return false;
+
+  return repo.isAcceptedFollower(viewerSub, authorSub);
+}
+
 // ── Multer ─────────────────────────────────────────────────────────────────
 
 // 200mb x 10 could never be honoured on a 512mb container: the buffers are held
@@ -222,9 +239,17 @@ export class PostsController {
   /** GET /api/posts/:id */
   async getById(req: Request, res: Response, next: NextFunction) {
     const id = param(req.params.id);
+    const viewerSub = (req as any).auth?.payload?.sub ?? null;
     try {
       const postRow = await repo.getPostById(id);
       if (!postRow) {
+        throw new NotFoundError('Post not found');
+      }
+
+      // Every other read path gates on this; fetching by id skipped it, so a
+      // post URL resolved for anyone who had it. 404 rather than 403 so the
+      // response doesn't confirm the post exists.
+      if (!(await canView(postRow.sub, viewerSub))) {
         throw new NotFoundError('Post not found');
       }
 

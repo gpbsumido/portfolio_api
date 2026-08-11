@@ -161,6 +161,24 @@ export async function getPostMediaByPostId(postId: string): Promise<MediaRow[]> 
 
 // ── Posts by username (with JSON_AGG) ──────────────────────────────────────
 
+/**
+ * Same as getProfileVisibility but keyed by sub, for paths that start from a
+ * post rather than a username.
+ */
+export async function getProfileVisibilityBySub(
+  userSub: string,
+): Promise<{ user_sub: string; is_public: boolean } | null> {
+  const rows = await db
+    .select({
+      user_sub: userProfiles.userSub,
+      is_public: userProfiles.isPublic,
+    })
+    .from(userProfiles)
+    .where(eq(userProfiles.userSub, userSub))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getProfileVisibility(
   username: string,
 ): Promise<{ user_sub: string; is_public: boolean } | null> {
