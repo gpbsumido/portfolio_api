@@ -302,6 +302,20 @@ export const RESETTABLE_FLAGS: Flag[] = CANONICAL_FLAGS.filter(
 );
 
 /**
+ * The flags the reset must never overwrite, but must make sure exist.
+ *
+ * Excluding them from the wipe was only half the job. The migration that first
+ * inserted them runs once, so if a row is ever lost -- an older reset that
+ * still deleted everything, a restore, a hand-run DELETE -- nothing would put
+ * it back, and the console's site-owner group would silently empty out while
+ * the gate quietly fell back to the value compiled into paul-explore.
+ *
+ * So the reset inserts these if they are missing and leaves them completely
+ * alone if they are not. Existence is guaranteed; state is never touched.
+ */
+export const PROTECTED_FLAGS: Flag[] = CANONICAL_FLAGS.filter((flag) => isProtectedFlag(flag.key));
+
+/**
  * The canonical audit log, newest first. IDs are assigned by the database
  * (uuid), so only the content and timestamps are seeded here.
  */
