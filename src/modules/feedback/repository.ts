@@ -138,10 +138,10 @@ export class FeedbackRepository {
     return rows[0];
   }
 
-  async delete(id: string): Promise<FeedbackRow | null> {
+  async delete(id: string, userSub: string): Promise<FeedbackRow | null> {
     const { rows } = await pool.query<FeedbackRow>(
-      'DELETE FROM feedback WHERE id = $1 RETURNING *',
-      [id],
+      'DELETE FROM feedback WHERE id = $1 AND user_sub = $2 RETURNING *',
+      [id, userSub],
     );
     return rows[0] ?? null;
   }
