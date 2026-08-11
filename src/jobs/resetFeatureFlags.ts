@@ -17,12 +17,15 @@
 // ---------------------------------------------------------------------------
 
 import { notInArray } from 'drizzle-orm';
-
 import { pool } from '../config/database.js';
 import { db } from '../config/drizzle/index.js';
 import { featureFlagAudit, featureFlags } from '../config/drizzle/schema.js';
 import { PROTECTED_FLAG_KEYS } from '../modules/feature-flags/access.js';
-import { CANONICAL_AUDIT, RESETTABLE_FLAGS } from '../modules/feature-flags/seed.js';
+import {
+  CANONICAL_AUDIT,
+  PROTECTED_FLAGS,
+  RESETTABLE_FLAGS,
+} from '../modules/feature-flags/seed.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
 
 const log = createModuleLogger('reset-feature-flags');
@@ -51,6 +54,25 @@ export async function resetFeatureFlags(): Promise<void> {
       })),
     );
 
+    // Existence only. onConflictDoNothing means a gate that is already there
+    // keeps whatever state it is in, including deliberately off.
+    await tx
+      .insert(featureFlags)
+      .values(
+        PROTECTED_FLAGS.map((flag) => ({
+          key: flag.key,
+          access: flag.access,
+          name: flag.name,
+          description: flag.description,
+          kind: flag.kind,
+          tags: flag.tags,
+          variations: flag.variations,
+          environments: flag.environments,
+          createdAt: new Date(flag.createdAt),
+        })),
+      )
+      .onConflictDoNothing({ target: featureFlags.key });
+
     await tx.insert(featureFlagAudit).values(
       CANONICAL_AUDIT.map((entry) => ({
         flagKey: entry.flagKey,
@@ -66,7 +88,7 @@ export async function resetFeatureFlags(): Promise<void> {
   log.info(
     {
       flags: RESETTABLE_FLAGS.length,
-      preserved: PROTECTED_FLAG_KEYS.length,
+      preserved: PROTECTED_FLAGS.length,
       audit: CANONICAL_AUDIT.length,
     },
     'feature flags reset complete',

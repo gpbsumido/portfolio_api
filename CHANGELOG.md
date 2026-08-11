@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-11 - version 4.3.1
+
+- **The flag reset now puts the live gates back if they go missing.** 4.3.0 excluded the admin-tier flags from the 6-hourly reset, which stops the job deleting them — but nothing guaranteed they exist. The migration that first inserted `pocket-tcg` and `world-live-presence` runs once, so a row lost to a restore, a hand-run `DELETE`, or an older build of the job would never come back: the migration is already recorded as applied, and the new reset deliberately skips protected keys, so neither path recreates it. The console's site-owner group would quietly empty out and the gates would fall back to the values compiled into paul-explore. The reset now inserts them on conflict-do-nothing, so a gate that is already there keeps whatever state it is in — including deliberately off — and a missing one comes back. Existence is guaranteed, state is never touched. A test pins the invariant: every canonical flag is in exactly one of the resettable or protected sets, so none can fall out of both and become unrecoverable.
+
 ## 2026-08-11 - version 4.3.0
 
 - **Feature flags now carry an access tier.** New `access` column and response field: `open`, `authed`, or `admin`. paul-explore's console groups flags by who may change them, and until now it worked that out from a map it kept locally — which disagreed with the server the moment the two flag sets diverged, so the console inferred every API-served flag as open while the BFF enforced from its own seed. The API is the authority for it now. Additive, so an older client that ignores the field is unaffected.
