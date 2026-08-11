@@ -13,24 +13,7 @@ function param(val: string | string[]): string {
 const repo = new ForumRepository();
 
 export class ForumController {
-  async getTables(_req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const tables = await repo.getTables();
-      res.status(200).json(tables);
-    } catch (error) {
-      next(error);
-    }
-  }
 
-  async getTableSchema(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const tableName = param(req.params.tableName);
-      const columns = await repo.getTableSchema(tableName);
-      res.status(200).json(columns);
-    } catch (error) {
-      next(error);
-    }
-  }
 
   async getForumPosts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

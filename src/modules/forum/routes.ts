@@ -7,11 +7,10 @@ import { createForumPostSchema, createMarkerSchema } from './schemas.js';
 const router = Router();
 const ctrl = new ForumController();
 
-// Tables
-router.get('/tables', checkJwt, (req, res, next) => ctrl.getTables(req, res, next));
-router.get('/table/:tableName', checkJwt, (req, res, next) =>
-  ctrl.getTableSchema(req, res, next),
-);
+// The /tables and /table/:tableName introspection endpoints used to live here.
+// They read information_schema and handed every table and column name to any
+// caller with an account -- a debugging convenience that shipped. Nothing in
+// either repo consumed them, so they are gone rather than gated.
 
 // Forum posts
 router.get('/postforum', (req, res, next) => ctrl.getForumPosts(req, res, next));
