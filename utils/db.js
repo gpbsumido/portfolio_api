@@ -1126,6 +1126,38 @@ async function getCalendarById(id, userSub) {
  * @param {string} userSub
  * @returns {Promise<Object|null>}
  */
+/**
+ * Resolve the owner of a push channel from the channel id Google sends back.
+ *
+ * The webhook is necessarily unauthenticated — Google calls it, not a user — so
+ * the notification has to identify itself. The channel token can't do that job:
+ * it is built from the Auth0 sub and calendar id, both of which appear in
+ * public responses elsewhere, so anyone can construct one. The channel id is a
+ * uuid4 that only Google and this database ever see, which makes it the thing
+ * worth trusting.
+ *
+ * Channel info lands on the calendars row when one matches, and falls back to
+ * google_auth for legacy channels, so both have to be checked.
+ *
+ * @param {string} channelId
+ * @returns {Promise<{userId: string, googleCalId: string}|null>}
+ */
+async function findChannelOwner(channelId) {
+  const { rows } = await pool.query(
+    `SELECT user_sub AS user_id, google_cal_id
+       FROM calendars
+      WHERE channel_id = $1
+      UNION ALL
+     SELECT user_id, google_cal_id
+       FROM google_auth
+      WHERE channel_id = $1
+      LIMIT 1`,
+    [channelId],
+  );
+  if (!rows[0]) return null;
+  return { userId: rows[0].user_id, googleCalId: rows[0].google_cal_id };
+}
+
 async function getCalendarByGoogleCalId(googleCalId, userSub) {
   const { rows } = await pool.query(
     "SELECT * FROM calendars WHERE google_cal_id = $1 AND user_sub = $2",
@@ -1609,6 +1641,7 @@ module.exports = {
   removeCalendarMember,
   getCalendars,
   getCalendarById,
+  findChannelOwner,
   getCalendarByGoogleCalId,
   getCalendarForMutation,
   createCalendar,

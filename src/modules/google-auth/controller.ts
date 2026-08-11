@@ -16,6 +16,7 @@ import {
   getGoogleAuth,
   upsertGoogleAuth,
   deleteGoogleAuth,
+  findChannelOwner,
   getCalendarByGoogleCalId,
   updateCalendar,
   getEventByGoogleId,
@@ -160,15 +161,23 @@ export class GoogleAuthController {
     // respond immediately so Google doesn't time out
     res.sendStatus(200);
 
-    const channelToken = req.headers['x-goog-channel-token'] as string | undefined;
+    const channelId = req.headers['x-goog-channel-id'] as string | undefined;
     const resourceState = req.headers['x-goog-resource-state'] as string | undefined;
 
-    if (!channelToken) return;
+    if (!channelId) return;
     if (resourceState === 'sync') return;
 
-    const colonIdx = channelToken.indexOf(':');
-    const userId = colonIdx !== -1 ? channelToken.slice(0, colonIdx) : channelToken;
-    const googleCalId = colonIdx !== -1 ? channelToken.slice(colonIdx + 1) : null;
+    // Identity comes from the stored channel, never from the request. The
+    // channel token used to decide this, but it is built from the Auth0 sub and
+    // calendar id — both of which this API publishes elsewhere — so anyone
+    // could construct one and drive a sync against another user's tokens.
+    const owner = await findChannelOwner(channelId);
+    if (!owner) {
+      log.info({ channelId }, 'notification for an unknown channel');
+      return;
+    }
+    const { userId } = owner;
+    const googleCalId = owner.googleCalId ?? null;
 
     enqueueForUser(userId, async () => {
       if (googleCalId) {
