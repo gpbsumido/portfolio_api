@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { NbaService } from './service.js';
 import { ValidationError, UnauthorizedError } from '../../shared/errors/index.js';
 import { env } from '../../config/env.js';
+import { bearerMatches } from '../../shared/secrets/constantTimeEqual.js';
 
 const service = new NbaService();
 
@@ -121,7 +122,7 @@ export class NbaController {
     try {
       const season = parseSeason(req.params.season);
       const secret = env.PLAYOFFS_ADMIN_SECRET;
-      if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
+      if (!bearerMatches(req.headers.authorization, secret)) {
         throw new UnauthorizedError();
       }
       const { picks } = req.body;
