@@ -1,6 +1,7 @@
 import { pool } from '../../config/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import type { SaveEntryInput } from './types.js';
+import { NotFoundError } from '../../shared/errors/AppError.js';
 
 export class MedJournalRepository {
   async saveOrUpdate(entry: SaveEntryInput, userSub: string): Promise<any> {
@@ -10,7 +11,11 @@ export class MedJournalRepository {
 
       let entryId: string;
       if (entry.id) {
-        await client.query(
+        // The id comes from the request body, so it isn't necessarily the
+        // caller's. The UPDATE is scoped, but without checking rowCount a
+        // foreign id updates nothing and then falls through to the feedback
+        // insert below, which the FK is happy to accept.
+        const updated = await client.query(
           `UPDATE med_journal
            SET "patientSetting" = $1, "interaction" = $2, "canmedsRoles" = $3, "learningObjectives" = $4,
                "rotation" = $5, "date" = $6, "location" = $7, "hospital" = $8, "doctor" = $9,
@@ -32,6 +37,9 @@ export class MedJournalRepository {
             userSub,
           ],
         );
+        if (updated.rowCount === 0) {
+          throw new NotFoundError('Journal entry not found');
+        }
         entryId = entry.id;
       } else {
         entryId = uuidv4();
@@ -82,7 +90,10 @@ export class MedJournalRepository {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('DELETE FROM feedback WHERE journal_entry_id = $1', [id]);
+      await client.query('DELETE FROM feedback WHERE journal_entry_id = $1 AND user_sub = $2', [
+        id,
+        userSub,
+      ]);
       await client.query('DELETE FROM med_journal WHERE id = $1 AND user_sub = $2', [id, userSub]);
       await client.query('COMMIT');
     } catch (e) {
