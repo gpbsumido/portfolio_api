@@ -52,3 +52,6 @@ Thumbs.db
 # Agent harness scratch — session logs and state, never part of the repo
 .harness/
 .harness-logs/
+
+# Local planning docs, never committed
+plans/

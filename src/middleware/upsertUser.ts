@@ -5,6 +5,12 @@ import { createModuleLogger } from '../shared/utils/logger.js';
 const log = createModuleLogger('upsertUser');
 
 /**
+ * Namespace the post-login Action writes the email claims under. Auth0 requires
+ * custom claims to be namespaced; unprefixed ones are silently dropped.
+ */
+const EMAIL_CLAIM_NS = 'https://paulsumido.com/';
+
+/**
  * Module-level cache: sub → email for subs seen this process lifetime.
  * Skips the DB upsert when the sub+email pair hasn't changed.
  */
@@ -20,13 +26,23 @@ export async function upsertUser(
   next: NextFunction,
 ): Promise<void> {
   const sub = req.auth?.payload?.sub;
+  const payload = req.auth?.payload as Record<string, unknown> | undefined;
+
+  // Namespaced claims only, set by the post-login Action. The x-user-email
+  // header used to be the fallback, but a header is caller-controlled: since
+  // users.email is what calendar sharing resolves an invite against, trusting
+  // it let anyone claim an address nobody had registered yet and receive the
+  // shares meant for it. Auth0 drops non-namespaced custom claims, so the bare
+  // `email` claim can't be relied on either, and it carries no verified flag.
+  const claimedEmail = payload?.[`${EMAIL_CLAIM_NS}email`];
+  const claimedVerified = payload?.[`${EMAIL_CLAIM_NS}email_verified`];
   const email =
-    (req.auth?.payload?.email as string | undefined) ??
-    (req.headers['x-user-email'] as string | undefined) ??
-    null;
+    typeof claimedEmail === 'string' && claimedVerified === true
+      ? claimedEmail.trim().toLowerCase()
+      : null;
 
   if (!sub || !email) {
-    log.warn('email not available from JWT or BFF header — sharing will not work for this user');
+    log.warn('no verified email claim on the token — sharing will not work for this user');
     return next();
   }
 

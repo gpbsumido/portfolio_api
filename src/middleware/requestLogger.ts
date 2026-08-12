@@ -12,8 +12,22 @@ const isProduction = env.NODE_ENV === 'production';
  * Silences health-check and readiness-probe requests to stay under
  * Railway's 500 logs/sec limit. Warns on slow requests (>500ms).
  */
+/**
+ * Replaces pino-std-serializers' default req serializer, which emits the whole
+ * headers object. Allow-list rather than deny-list: a new sensitive header can
+ * be added upstream at any time, and this way it is never logged by default.
+ */
+export function redactedReqSerializer(req: {
+  method?: string;
+  url?: string;
+  id?: unknown;
+}): { method?: string; url?: string; id?: unknown } {
+  return { method: req.method, url: req.url, id: req.id };
+}
+
 export const requestLogger = pinoHttp({
   logger,
+  serializers: { req: redactedReqSerializer },
   autoLogging: {
     ignore: (req) => SILENT_PATHS.has(req.url?.split('?')[0] ?? ''),
   },

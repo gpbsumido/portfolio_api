@@ -4,6 +4,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { VIDEO_UPLOAD_LIMITS } from '../../shared/upload/limits.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { NotFoundError, ValidationError } from '../../shared/errors/AppError.js';
 
@@ -18,15 +19,31 @@ function param(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
 }
 
+/**
+ * Whether `viewerSub` may see content authored by `authorSub`.
+ *
+ * Public profiles are visible to anyone, a private one only to its owner and to
+ * accepted followers. Mirrors the checks getPostsByUser already performs.
+ */
+async function canView(authorSub: string, viewerSub: string | null): Promise<boolean> {
+  if (viewerSub === authorSub) return true;
+
+  const profile = await repo.getProfileVisibilityBySub(authorSub);
+  if (!profile) return false;
+  if (profile.is_public) return true;
+  if (!viewerSub) return false;
+
+  return repo.isAcceptedFollower(viewerSub, authorSub);
+}
+
 // ── Multer ─────────────────────────────────────────────────────────────────
 
-const MAX_FILES = 10;
-const MAX_FILE_BYTES = 200 * 1024 * 1024;
-
+// 200mb x 10 could never be honoured on a 512mb container: the buffers are held
+// in memory, and processVideo then writes the whole thing to tmpdir on top.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_BYTES },
-}).array('files', MAX_FILES);
+  limits: VIDEO_UPLOAD_LIMITS,
+}).array('files', VIDEO_UPLOAD_LIMITS.files);
 
 function runMulter(req: Request, res: Response): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -77,7 +94,7 @@ export class PostsController {
         throw new ValidationError('File too large');
       }
       if (err.code === 'LIMIT_FILE_COUNT') {
-        throw new ValidationError(`Maximum ${MAX_FILES} files allowed`);
+        throw new ValidationError(`Maximum ${VIDEO_UPLOAD_LIMITS.files} files allowed`);
       }
       throw new ValidationError(err.message);
     }
@@ -116,8 +133,8 @@ export class PostsController {
       if (!files || files.length === 0) {
         throw new ValidationError('At least one file is required for a media post');
       }
-      if (files.length > 10) {
-        throw new ValidationError('Maximum 10 files allowed');
+      if (files.length > VIDEO_UPLOAD_LIMITS.files) {
+        throw new ValidationError(`Maximum ${VIDEO_UPLOAD_LIMITS.files} files allowed`);
       }
 
       try {
@@ -222,9 +239,17 @@ export class PostsController {
   /** GET /api/posts/:id */
   async getById(req: Request, res: Response, next: NextFunction) {
     const id = param(req.params.id);
+    const viewerSub = (req as any).auth?.payload?.sub ?? null;
     try {
       const postRow = await repo.getPostById(id);
       if (!postRow) {
+        throw new NotFoundError('Post not found');
+      }
+
+      // Every other read path gates on this; fetching by id skipped it, so a
+      // post URL resolved for anyone who had it. 404 rather than 403 so the
+      // response doesn't confirm the post exists.
+      if (!(await canView(postRow.sub, viewerSub))) {
         throw new NotFoundError('Post not found');
       }
 

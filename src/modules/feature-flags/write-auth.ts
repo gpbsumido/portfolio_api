@@ -23,7 +23,29 @@ import { CANONICAL_FLAGS } from './seed.js';
 
 export const FLAGS_TOKEN_HEADER = 'x-flags-token';
 
+/** Auth0 RBAC permission required to write an admin-tier flag. */
+export const FLAG_ADMIN_PERMISSION = 'write:flags';
+
 const ACCESS_BY_KEY = new Map(CANONICAL_FLAGS.map((flag) => [flag.key, flag.access]));
+
+/**
+ * Admin-tier flags gate shipped features, so being signed in is not the bar.
+ *
+ * An unclassified key is treated as admin too: the upstream flag set is wider
+ * than the local seed, and a key this map has never heard of is exactly the one
+ * we know least about. Falling back to the loosest rung there would mean the
+ * classification protects only the flags it can already see.
+ */
+function requiresAdmin(key: string | undefined): boolean {
+  if (typeof key !== 'string') return true;
+  const access = ACCESS_BY_KEY.get(key);
+  return access === undefined || access === 'admin';
+}
+
+function hasAdminPermission(req: Request): boolean {
+  const permissions = (req.auth?.payload as Record<string, unknown> | undefined)?.permissions;
+  return Array.isArray(permissions) && permissions.includes(FLAG_ADMIN_PERMISSION);
+}
 
 /** Constant-time compare, length-checked first so it cannot throw. */
 function matches(provided: string, expected: string): boolean {
@@ -64,6 +86,21 @@ export function flagWriteAuth(
       return;
     }
 
-    checkJwt(req, res, next);
+    // Authenticate first, then check the tier: the permission lives on the
+    // token, so there is nothing to inspect until checkJwt has populated it.
+    checkJwt(req, res, (err?: unknown) => {
+      if (err) {
+        next(err);
+        return;
+      }
+      if (requiresAdmin(typeof key === 'string' ? key : undefined) && !hasAdminPermission(req)) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: 'Insufficient permissions',
+        });
+        return;
+      }
+      next();
+    });
   };
 }

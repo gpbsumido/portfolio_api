@@ -62,222 +62,9 @@ async function getGalleryItems(pageNumber, limitNumber) {
   return rows; // Return the list of gallery items
 }
 
-// Function to save or update a med journal entry
-async function saveOrUpdateMedJournalEntry(entry, userSub) {
-  if (
-    !entry ||
-    !entry.patientSetting ||
-    !entry.interaction ||
-    !entry.date ||
-    !userSub
-  ) {
-    throw new Error("Invalid entry data or missing user sub");
-  }
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
 
-    let entryId;
-    if (entry.id) {
-      // Update existing journal entry
-      await client.query(
-        `UPDATE med_journal
-               SET "patientSetting" = $1, "interaction" = $2, "canmedsRoles" = $3, "learningObjectives" = $4,
-                   "rotation" = $5, "date" = $6, "location" = $7, "hospital" = $8, "doctor" = $9,
-                   "whatIDidWell" = $10, "whatICouldImprove" = $11
-               WHERE "id" = $12 AND "user_sub" = $13`,
-        [
-          entry.patientSetting,
-          entry.interaction,
-          JSON.stringify(entry.canmedsRoles),
-          JSON.stringify(entry.learningObjectives),
-          entry.rotation,
-          entry.date,
-          entry.location,
-          entry.hospital,
-          entry.doctor,
-          entry.whatIDidWell,
-          entry.whatICouldImprove,
-          entry.id,
-          userSub,
-        ],
-      );
-      entryId = entry.id;
-    } else {
-      // Insert new journal entry
-      entryId = uuidv4();
-      await client.query(
-        `INSERT INTO med_journal
-               ("id", "patientSetting", "interaction", "canmedsRoles", "learningObjectives", "rotation", "date", "location", "hospital", "doctor",
-                "whatIDidWell", "whatICouldImprove", "user_sub")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          entryId,
-          entry.patientSetting,
-          entry.interaction,
-          JSON.stringify(entry.canmedsRoles),
-          JSON.stringify(entry.learningObjectives),
-          entry.rotation,
-          entry.date,
-          entry.location,
-          entry.hospital,
-          entry.doctor,
-          entry.whatIDidWell,
-          entry.whatICouldImprove,
-          userSub,
-        ],
-      );
-      entry.id = entryId;
-    }
 
-    // If feedback text is provided, create a feedback entry within the same transaction
-    if (entry.feedbackText) {
-      const feedbackId = uuidv4();
-      await client.query(
-        `INSERT INTO feedback (id, text, rotation, journal_entry_id, user_sub)
-               VALUES ($1, $2, $3, $4, $5)`,
-        [feedbackId, entry.feedbackText, entry.rotation, entryId, userSub],
-      );
-    }
-
-    await client.query("COMMIT");
-
-    const completeEntry = await getMedJournalEntryById(entryId, userSub);
-    return completeEntry;
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
-  } finally {
-    client.release();
-  }
-}
-
-// Function to delete a med journal entry by ID
-async function deleteMedJournalEntry(id, userSub) {
-  if (!id || !userSub) {
-    throw new Error("Missing ID or user sub for deletion");
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("DELETE FROM feedback WHERE journal_entry_id = $1", [id]);
-    await client.query("DELETE FROM med_journal WHERE id = $1 AND user_sub = $2", [id, userSub]);
-    await client.query("COMMIT");
-  } catch (e) {
-    await client.query("ROLLBACK");
-    throw e;
-  } finally {
-    client.release();
-  }
-}
-
-// Function to fetch a med journal entry by ID
-async function getMedJournalEntryById(id, userSub) {
-  if (!id || !userSub) {
-    throw new Error("Missing ID or user sub for fetching entry");
-  }
-
-  const query = `
-        SELECT 
-            mj.*,
-            f.text as feedback_text,
-            f.rotation as feedback_rotation
-        FROM med_journal mj
-        LEFT JOIN feedback f ON f.journal_entry_id = mj.id
-        WHERE mj.id = $1 AND mj.user_sub = $2;
-    `;
-  const values = [id, userSub];
-
-  const { rows } = await pool.query(query, values);
-  if (rows[0]) {
-    const { feedback_text, feedback_rotation, ...entry } = rows[0];
-    return {
-      ...entry,
-      feedback: feedback_text
-        ? [
-            {
-              text: feedback_text,
-              rotation: feedback_rotation,
-            },
-          ]
-        : [],
-    };
-  }
-  return null;
-}
-
-// Function to fetch med journal entries with pagination
-async function getMedJournalEntriesWithPagination(
-  pageNumber,
-  limitNumber,
-  userSub,
-  searchTerm,
-  rotation,
-) {
-  if (!userSub) {
-    throw new Error("Missing user sub for fetching entries");
-  }
-
-  const offset = (pageNumber - 1) * limitNumber;
-
-  // Base query with search conditions
-  let query = `
-        SELECT 
-            mj.*,
-            json_agg(
-                CASE 
-                    WHEN f.id IS NOT NULL THEN 
-                        json_build_object(
-                            'id', f.id,
-                            'text', f.text,
-                            'rotation', f.rotation
-                        )
-                    ELSE NULL
-                END
-            ) FILTER (WHERE f.id IS NOT NULL) as feedback_array
-        FROM med_journal mj
-        LEFT JOIN feedback f ON f.journal_entry_id = mj.id
-        WHERE mj.user_sub = $3
-    `;
-  const values = [limitNumber, offset, userSub];
-
-  // Add rotation filter if provided
-  if (rotation) {
-    query += ` AND mj."rotation" = $${values.length + 1}`;
-    values.push(rotation);
-  }
-
-  // Add search conditions if searchTerm is provided
-  if (searchTerm) {
-    query += `
-            AND (
-                LOWER(mj."rotation") LIKE LOWER($${values.length + 1})
-                OR LOWER(mj."hospital") LIKE LOWER($${values.length + 1})
-                OR LOWER(mj."doctor") LIKE LOWER($${values.length + 1})
-                OR LOWER(mj."location") LIKE LOWER($${values.length + 1})
-                OR LOWER(mj."canmedsRoles"::text) LIKE LOWER($${values.length + 1})
-                OR LOWER(mj."learningObjectives"::text) LIKE LOWER($${values.length + 1})
-            )
-        `;
-    values.push(`%${searchTerm}%`);
-  }
-
-  query += `
-        GROUP BY mj.id
-        ORDER BY mj.date DESC
-        LIMIT $1 OFFSET $2;
-    `;
-
-  const { rows } = await pool.query(query, values);
-
-  // Format the entries with feedback
-  return rows.map((row) => ({
-    ...row,
-    feedback: row.feedback_array || [],
-  }));
-}
 
 // Function to fetch feedback with pagination and optional rotation filter
 async function getFeedbackWithPagination(
@@ -1126,6 +913,38 @@ async function getCalendarById(id, userSub) {
  * @param {string} userSub
  * @returns {Promise<Object|null>}
  */
+/**
+ * Resolve the owner of a push channel from the channel id Google sends back.
+ *
+ * The webhook is necessarily unauthenticated — Google calls it, not a user — so
+ * the notification has to identify itself. The channel token can't do that job:
+ * it is built from the Auth0 sub and calendar id, both of which appear in
+ * public responses elsewhere, so anyone can construct one. The channel id is a
+ * uuid4 that only Google and this database ever see, which makes it the thing
+ * worth trusting.
+ *
+ * Channel info lands on the calendars row when one matches, and falls back to
+ * google_auth for legacy channels, so both have to be checked.
+ *
+ * @param {string} channelId
+ * @returns {Promise<{userId: string, googleCalId: string}|null>}
+ */
+async function findChannelOwner(channelId) {
+  const { rows } = await pool.query(
+    `SELECT user_sub AS user_id, google_cal_id
+       FROM calendars
+      WHERE channel_id = $1
+      UNION ALL
+     SELECT user_id, google_cal_id
+       FROM google_auth
+      WHERE channel_id = $1
+      LIMIT 1`,
+    [channelId],
+  );
+  if (!rows[0]) return null;
+  return { userId: rows[0].user_id, googleCalId: rows[0].google_cal_id };
+}
+
 async function getCalendarByGoogleCalId(googleCalId, userSub) {
   const { rows } = await pool.query(
     "SELECT * FROM calendars WHERE google_cal_id = $1 AND user_sub = $2",
@@ -1578,10 +1397,6 @@ module.exports = {
   getGalleryItemById,
   deleteGalleryItem,
   getGalleryItems,
-  saveOrUpdateMedJournalEntry,
-  deleteMedJournalEntry,
-  getMedJournalEntryById,
-  getMedJournalEntriesWithPagination,
   getFeedbackWithPagination,
   addFeedback,
   updateFeedback,
@@ -1609,6 +1424,7 @@ module.exports = {
   removeCalendarMember,
   getCalendars,
   getCalendarById,
+  findChannelOwner,
   getCalendarByGoogleCalId,
   getCalendarForMutation,
   createCalendar,

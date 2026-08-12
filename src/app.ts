@@ -2,6 +2,7 @@ import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
+import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
@@ -46,13 +47,15 @@ app.set('trust proxy', 1);
 // ── Global middleware ─────────────────────────────────────────────────────
 
 app.use(helmet());
-app.use(
-  cors({
-    origin: ['https://paulsumido.com', 'https://develop.paulsumido.com', 'http://localhost:3000'],
-  }),
-);
+// localhost is a dev convenience, not something production should accept.
+const ALLOWED_ORIGINS = [
+  'https://paulsumido.com',
+  'https://develop.paulsumido.com',
+  ...(env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
+];
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(compression());
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(requestLogger);
 
 // ── Routes ────────────────────────────────────────────────────────────────
@@ -93,8 +96,8 @@ app.use('/api', forumRoutes);
 
 // ── Error handling ────────────────────────────────────────────────────────
 
-app.use(errorHandler);
-
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
+
+app.use(errorHandler);

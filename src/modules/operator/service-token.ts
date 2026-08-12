@@ -43,6 +43,17 @@ function matches(provided: string, expected: string): boolean {
 export function requireServiceToken(expected: string | undefined) {
   const secret = expected?.trim();
 
+  // A missing secret is fine locally, but in production it means every operator
+  // write is unguarded with nothing in the logs to say so. Fail at boot, where
+  // it is obvious, rather than serving unprotected writes. This lives here
+  // rather than in the env schema because the cron service boots with DB vars
+  // only and never builds this guard.
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'OPERATOR_SERVICE_TOKEN is required in production; without it the operator write guard is skipped',
+    );
+  }
+
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!secret) {
       next();

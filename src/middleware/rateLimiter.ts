@@ -1,4 +1,4 @@
-import rateLimit, { type Options } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
 import type { Request } from 'express';
 
 /**
@@ -11,7 +11,7 @@ export function createIpLimiter(opts: {
 }) {
   return rateLimit({
     windowMs: opts.windowMs,
-    max: opts.max,
+    limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
     message: {
@@ -31,11 +31,11 @@ export function createUserLimiter(opts: {
 }) {
   return rateLimit({
     windowMs: opts.windowMs,
-    max: opts.max,
+    limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req: Request) =>
-      (req as any).auth?.payload?.sub ?? req.ip ?? 'unknown',
+      (req as any).auth?.payload?.sub ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
     message: {
       error: opts.message ?? 'Too many requests, please try again later.',
     },
@@ -63,7 +63,7 @@ export function createKeyedLimiter(opts: {
 }) {
   return rateLimit({
     windowMs: opts.windowMs,
-    max: opts.max,
+    limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: opts.keyGenerator,

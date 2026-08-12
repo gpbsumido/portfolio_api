@@ -68,7 +68,14 @@ export class FeedbackController {
   async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = param(req.params.id);
-      await repo.delete(id);
+      const userSub = (req as any).auth?.payload?.sub as string | undefined;
+      if (!userSub) {
+        throw new UnauthorizedError('Missing user identity');
+      }
+      const deleted = await repo.delete(id, userSub);
+      if (!deleted) {
+        throw new NotFoundError('Feedback not found');
+      }
       res.status(200).json({ success: true });
     } catch (error) {
       next(error);

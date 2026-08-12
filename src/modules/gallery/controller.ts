@@ -1,5 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import sharp from 'sharp';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
+
+/** The three formats the resize branches below can actually emit. */
+const ALLOWED_GALLERY_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../shared/errors/AppError.js';
 
@@ -37,7 +41,14 @@ export class GalleryController {
 
     try {
       const userSub = (req as any).auth?.payload?.sub as string | undefined;
-      const mimetype = file.mimetype;
+      // Decide on the magic bytes, not file.mimetype: multer copies that
+      // straight from the multipart part header, so the client picks it.
+      // processImage already does this; this path was the outlier.
+      const detected = await fileTypeFromBuffer(file.buffer);
+      if (!detected || !ALLOWED_GALLERY_MIME.has(detected.mime)) {
+        throw new ValidationError('Unsupported image format.');
+      }
+      const mimetype = detected.mime;
       const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
 
       let optimizedBuffer: Buffer;
@@ -48,7 +59,7 @@ export class GalleryController {
         .rotate()
         .resize({ width: 1024, withoutEnlargement: true });
 
-      if (mimetype === 'image/jpeg' || mimetype === 'image/jpg') {
+      if (mimetype === 'image/jpeg') {
         optimizedBuffer = await transformer.jpeg({ quality: 80 }).toBuffer();
         outputFormat = 'jpg';
         contentType = 'image/jpeg';
