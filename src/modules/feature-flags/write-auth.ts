@@ -16,9 +16,9 @@
 // yet must not be writable by the service token just because it is unclassified.
 // ---------------------------------------------------------------------------
 
-import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
+import { constantTimeEqual } from '../../shared/secrets/constantTimeEqual.js';
 import { CANONICAL_FLAGS } from './seed.js';
 
 export const FLAGS_TOKEN_HEADER = 'x-flags-token';
@@ -47,14 +47,6 @@ function hasAdminPermission(req: Request): boolean {
   return Array.isArray(permissions) && permissions.includes(FLAG_ADMIN_PERMISSION);
 }
 
-/** Constant-time compare, length-checked first so it cannot throw. */
-function matches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
 /**
  * Guards PATCH /:flagKey.
  *
@@ -75,7 +67,7 @@ export function flagWriteAuth(
     const provided = req.get(FLAGS_TOKEN_HEADER);
 
     if (secret && access === 'open' && provided) {
-      if (matches(provided, secret)) {
+      if (constantTimeEqual(provided, secret)) {
         next();
         return;
       }

@@ -2,24 +2,7 @@ import { pool } from '../../config/database.js';
 import type { TableColumn, ForumPost, Marker } from './types.js';
 
 export class ForumRepository {
-  async getTables(): Promise<string[]> {
-    const result = await pool.query<{ table_name: string }>(
-      `SELECT table_name
-       FROM information_schema.tables
-       WHERE table_schema = 'public'`,
-    );
-    return result.rows.map((row) => row.table_name);
-  }
 
-  async getTableSchema(tableName: string): Promise<TableColumn[]> {
-    const result = await pool.query<TableColumn>(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_name = $1`,
-      [tableName],
-    );
-    return result.rows;
-  }
 
   async getForumPosts(
     page: number,
@@ -62,11 +45,4 @@ export class ForumRepository {
     return result.rows;
   }
 
-  async deleteMarker(id: string): Promise<Marker | null> {
-    const result = await pool.query<Marker>(
-      'DELETE FROM locations WHERE id = $1 RETURNING *',
-      [id],
-    );
-    return result.rows[0] ?? null;
-  }
 }

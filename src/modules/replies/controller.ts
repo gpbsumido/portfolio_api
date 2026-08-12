@@ -6,6 +6,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as service from './service.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
+import { canViewPost } from '../posts/visibility.js';
+import { NotFoundError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('replies');
 
@@ -34,6 +36,12 @@ export class RepliesController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
+      const viewerSub = (req as any).auth?.payload?.sub ?? null;
+      // A thread is exactly as private as the post it hangs off. Without this
+      // the replies route served content the post route would have refused.
+      if (!(await canViewPost(postId, viewerSub))) {
+        throw new NotFoundError('Post not found');
+      }
       const replies = await service.listReplies(postId);
       res.json({ replies });
     } catch (err) {

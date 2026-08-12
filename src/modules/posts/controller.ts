@@ -19,22 +19,6 @@ function param(val: string | string[]): string {
   return Array.isArray(val) ? val[0] : val;
 }
 
-/**
- * Whether `viewerSub` may see content authored by `authorSub`.
- *
- * Public profiles are visible to anyone, a private one only to its owner and to
- * accepted followers. Mirrors the checks getPostsByUser already performs.
- */
-async function canView(authorSub: string, viewerSub: string | null): Promise<boolean> {
-  if (viewerSub === authorSub) return true;
-
-  const profile = await repo.getProfileVisibilityBySub(authorSub);
-  if (!profile) return false;
-  if (profile.is_public) return true;
-  if (!viewerSub) return false;
-
-  return repo.isAcceptedFollower(viewerSub, authorSub);
-}
 
 // ── Multer ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +40,7 @@ function runMulter(req: Request, res: Response): Promise<void> {
 // ── Zod schema for createPost ──────────────────────────────────────────────
 
 import { z } from 'zod';
+import { canViewAuthor } from './visibility.js';
 
 const createPostSchema = z.discriminatedUnion('type', [
   z.object({
@@ -249,7 +234,7 @@ export class PostsController {
       // Every other read path gates on this; fetching by id skipped it, so a
       // post URL resolved for anyone who had it. 404 rather than 403 so the
       // response doesn't confirm the post exists.
-      if (!(await canView(postRow.sub, viewerSub))) {
+      if (!(await canViewAuthor(postRow.sub, viewerSub))) {
         throw new NotFoundError('Post not found');
       }
 
