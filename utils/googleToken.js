@@ -1,4 +1,5 @@
 const db = require("./db");
+const { decryptToken } = require("./tokenCrypto");
 
 /**
  * Returns a valid access token and the user-level Google Calendar ID stored in
@@ -23,14 +24,14 @@ async function getTokenAndCalId(userId) {
 
   // still good for at least 5 minutes, use it as-is
   if (expiresAt > fiveMinFromNow) {
-    return { token: auth.access_token, calId: auth.google_cal_id };
+    return { token: decryptToken(auth.access_token), calId: auth.google_cal_id };
   }
 
   // access token is stale, use the refresh token to get a new one
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
-    refresh_token: auth.refresh_token,
+    refresh_token: decryptToken(auth.refresh_token),
     grant_type: "refresh_token",
   });
 
