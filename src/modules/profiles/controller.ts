@@ -278,12 +278,28 @@ export class ProfilesController {
         throw new NotFoundError('Profile not found');
 
       const isOwn = viewerSub && viewerSub === profile.user_sub;
+      const followStatus =
+        isOwn || !viewerSub ? null : (profile.follow_status ?? 'none');
 
-      res.json({
-        ...profile,
-        follow_status:
-          isOwn || !viewerSub ? null : (profile.follow_status ?? 'none'),
-      });
+      // A private profile still has to render something -- a stranger needs to
+      // find the account to request a follow -- but only the card, not the
+      // contents. user_sub never goes out either way: it is the identity key
+      // this whole API authorizes on, and nothing in the UI needs it.
+      const { user_sub: _sub, ...rest } = profile;
+      const visible = isOwn || profile.is_public || followStatus === 'accepted';
+
+      if (!visible) {
+        res.json({
+          username: profile.username,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url,
+          is_public: false,
+          follow_status: followStatus,
+        });
+        return;
+      }
+
+      res.json({ ...rest, follow_status: followStatus });
     } catch (err: any) {
       next(err);
     }

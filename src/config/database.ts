@@ -1,6 +1,7 @@
 import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { env } from './env.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
+import { dbSslConfig, verifiesServer } from '../../utils/dbSsl.js';
 
 const log = createModuleLogger('database');
 
@@ -8,9 +9,21 @@ const connectionString =
   env.DATABASE_URL ||
   `postgresql://${env.DB_USER}:${env.DB_PASSWORD}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
 
+const ssl = dbSslConfig({
+  nodeEnv: env.NODE_ENV,
+  caCert: env.DB_CA_CERT,
+  rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED,
+});
+
+if (env.NODE_ENV === 'production' && !verifiesServer(ssl)) {
+  log.warn(
+    'database TLS is not verifying the server certificate; set DB_CA_CERT to the provider root cert to enable verification',
+  );
+}
+
 export const pool = new Pool({
   connectionString,
-  ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,

@@ -15,6 +15,11 @@ vi.mock('../../config/auth.js', () => ({
 vi.mock('../../middleware/upsertUser.js', () => ({
   upsertUser: (_req: any, _res: any, next: any) => next(),
 }));
+// A thread is now gated on the parent post's visibility; that rule has its own
+// tests, so here it just has to resolve.
+vi.mock('../posts/visibility.js', () => ({
+  canViewPost: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('./repository.js', () => ({
   insertReply: vi.fn(),
   getReplyById: vi.fn(),

@@ -42,6 +42,13 @@ export async function getCalendarByGoogleCalId(googleCalId: string, userId: stri
   return db.getCalendarByGoogleCalId(googleCalId, userId);
 }
 
+/** Resolve who a push channel belongs to. See db.findChannelOwner for why. */
+export async function findChannelOwner(
+  channelId: string,
+): Promise<{ userId: string; googleCalId: string } | null> {
+  return db.findChannelOwner(channelId);
+}
+
 export async function updateCalendar(calendarId: string, data: { syncToken: string }, userId: string) {
   return db.updateCalendar(calendarId, data, userId);
 }

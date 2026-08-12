@@ -27,7 +27,14 @@ vi.mock('../../config/auth.js', () => ({
       return;
     }
     (req as unknown as { auth: unknown }).auth = {
-      payload: { sub: 'auth0|test', email: 'tester@example.com' },
+      // These tests exercise write behaviour, not authorization, so the stubbed
+      // user carries the admin permission. Tier enforcement is covered in
+      // write-tier.test.ts.
+      payload: {
+        sub: 'auth0|test',
+        email: 'tester@example.com',
+        permissions: ['write:flags'],
+      },
     };
     next();
   },

@@ -17,20 +17,13 @@
 // operator-dashboard notes rather than hidden here.
 // ---------------------------------------------------------------------------
 
-import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
+
+import { constantTimeEqual } from '../../shared/secrets/constantTimeEqual.js';
 
 import { UnauthorizedError } from '../../shared/errors/AppError.js';
 
 export const OPERATOR_TOKEN_HEADER = 'x-operator-token';
-
-/** Constant-time compare, length-checked first so it cannot throw. */
-function matches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 /**
  * Guards a write route with the shared BFF secret.
@@ -43,6 +36,17 @@ function matches(provided: string, expected: string): boolean {
 export function requireServiceToken(expected: string | undefined) {
   const secret = expected?.trim();
 
+  // A missing secret is fine locally, but in production it means every operator
+  // write is unguarded with nothing in the logs to say so. Fail at boot, where
+  // it is obvious, rather than serving unprotected writes. This lives here
+  // rather than in the env schema because the cron service boots with DB vars
+  // only and never builds this guard.
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'OPERATOR_SERVICE_TOKEN is required in production; without it the operator write guard is skipped',
+    );
+  }
+
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!secret) {
       next();
@@ -50,7 +54,7 @@ export function requireServiceToken(expected: string | undefined) {
     }
 
     const provided = req.get(OPERATOR_TOKEN_HEADER);
-    if (!provided || !matches(provided, secret)) {
+    if (!provided || !constantTimeEqual(provided, secret)) {
       next(new UnauthorizedError('operator service token required'));
       return;
     }

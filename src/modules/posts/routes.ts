@@ -27,8 +27,9 @@ router.get('/discover', optionalCheckJwt, (req, res, next) =>
   ctrl.discover(req, res, next),
 );
 
-// GET /api/posts/:id — single post
-router.get('/:id', (req, res, next) => ctrl.getById(req, res, next));
+// GET /api/posts/:id — single post. optionalCheckJwt so a signed-in follower
+// can still read a private account's post, while anonymous callers cannot.
+router.get('/:id', optionalCheckJwt, (req, res, next) => ctrl.getById(req, res, next));
 
 // DELETE /api/posts/:id — delete own post
 router.delete('/:id', checkJwt, (req, res, next) =>
