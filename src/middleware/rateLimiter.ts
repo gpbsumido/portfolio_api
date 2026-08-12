@@ -1,4 +1,11 @@
 import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
+import { lazyRateLimitStore } from './rateLimitStore.js';
+
+/**
+ * One store across every limiter. Each keeps its own key space via the prefix
+ * express-rate-limit adds, so sharing the backend does not merge their counts.
+ */
+const sharedStore = lazyRateLimitStore();
 import type { Request } from 'express';
 
 /**
@@ -14,6 +21,7 @@ export function createIpLimiter(opts: {
     limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
+    store: sharedStore,
     message: {
       error: opts.message ?? 'Too many requests, please try again later.',
     },
@@ -34,6 +42,7 @@ export function createUserLimiter(opts: {
     limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
+    store: sharedStore,
     keyGenerator: (req: Request) =>
       (req as any).auth?.payload?.sub ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
     message: {
@@ -66,6 +75,7 @@ export function createKeyedLimiter(opts: {
     limit: opts.max,
     standardHeaders: true,
     legacyHeaders: false,
+    store: sharedStore,
     keyGenerator: opts.keyGenerator,
     message: {
       error: opts.message ?? 'Too many requests, please try again later.',
