@@ -20,6 +20,7 @@
 
 import 'dotenv/config';
 import type { Knex } from 'knex';
+import { dbSslConfig } from './utils/dbSsl.js';
 
 const connectionString =
   process.env.DATABASE_URL ||
@@ -29,10 +30,11 @@ const config: Knex.Config = {
   client: 'pg',
   connection: {
     connectionString,
-    ssl:
-      process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
+    ssl: dbSslConfig({
+      nodeEnv: process.env.NODE_ENV,
+      caCert: process.env.DB_CA_CERT,
+      rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED,
+    }),
   },
   migrations: {
     directory: './src/migrations',
