@@ -52,6 +52,11 @@ export const envSchema = z.object({
   // Admin
   PLAYOFFS_ADMIN_SECRET: z.string().optional(),
 
+  // Database TLS. DB_CA_CERT is the provider's root certificate in PEM form;
+  // supplying it turns on real server verification.
+  DB_CA_CERT: z.string().optional(),
+  DB_SSL_REJECT_UNAUTHORIZED: z.string().optional(),
+
   // Railway
   RAILWAY_ENVIRONMENT: z.string().optional(),
 });
