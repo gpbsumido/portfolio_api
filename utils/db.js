@@ -1,5 +1,6 @@
 const { pool } = require("../config/database");
 const { v4: uuidv4 } = require("uuid");
+const { encryptIfConfigured } = require("./tokenCrypto");
 
 // Function to add a gallery item
 async function addGalleryItem({ text, description, imageUrl, date, user_sub }) {
@@ -503,8 +504,8 @@ async function getGoogleAuth(userId) {
  */
 async function upsertGoogleAuth(userId, fields) {
   const {
-    accessToken,
-    refreshToken,
+    accessToken: rawAccessToken,
+    refreshToken: rawRefreshToken,
     tokenExpiry,
     googleCalId,
     channelId,
@@ -512,6 +513,14 @@ async function upsertGoogleAuth(userId, fields) {
     channelExpiry,
     syncToken,
   } = fields;
+
+  // Encrypted at rest when TOKEN_ENCRYPTION_KEY is set. The refresh token is a
+  // long-lived, offline-scope credential for the user's whole calendar, so a
+  // leaked backup or replica would otherwise be permanent access.
+  const accessToken =
+    rawAccessToken == null ? rawAccessToken : encryptIfConfigured(rawAccessToken);
+  const refreshToken =
+    rawRefreshToken == null ? rawRefreshToken : encryptIfConfigured(rawRefreshToken);
 
   await pool.query(
     `INSERT INTO google_auth
