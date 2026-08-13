@@ -4,7 +4,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+ / Express
+- **Runtime**: Node.js 22+ / Express
 - **Database**: PostgreSQL (via `pg`)
 - **Rate limiting**: `express-rate-limit`, backed by Redis when `REDIS_URL` is set
 - **Auth**: Auth0 JWT (`express-oauth2-jwt-bearer`)
@@ -25,7 +25,11 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | Calendar        | Personal calendar events, countdowns, and calendar sharing with editor/viewer roles (Auth0-gated) |
 | Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
-| Forum / Markers | Post forum and geolocation markers stored in PostgreSQL                         |
+| Forum / Markers | Post forum and geolocation markers stored in PostgreSQL. Markers are create-and-read; there is no delete |
+| Operator        | Unattended-retail dashboard — auditable restocking, promotions, per-store sales, planogram, all resolved in the store's own timezone |
+| Feature Flags   | Flag definitions, deterministic evaluation, targeting rules, and an audit log   |
+| To-do           | Admin-only outstanding-work list behind an email allowlist                       |
+| Gallery Walls   | Saved frame layouts with S3-backed photos                                       |
 
 ## API Endpoints
 
@@ -36,17 +40,38 @@ The Features table above is the quick tour. For the full, always-current referen
 
 Route groups at a glance:
 
+Every router mounted in `src/app.ts`, in source order:
+
 | Base | Area |
 | ---- | ---- |
+| `/api` | Health and version (`/api/health`) |
+| `/api/docs` | Swagger UI and the OpenAPI spec |
 | `/api/nba`, `/api/nba/playoffs` | NBA standings, rosters, stats, shot charts, bracket picks |
-| `/api/f1`, `/api/fantasy` | F1 schedules, results, telemetry, standings, fantasy scoring |
 | `/api/youtube` | Recent videos from a channel |
-| `/api/gallery` | S3 image upload / delete |
-| `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |
-| `/api/calendar` | Events, countdowns, and shared calendars (auth) |
+| `/api/f1`, `/api/fantasy` | F1 schedules, results, telemetry, standings, fantasy scoring |
 | `/api/vitals` | Core Web Vitals ingest + P75 aggregation |
-| `/api/likes`, `/api/replies`, `/api/reposts`, `/api/search`, `/api/notifications` | Ketsup social features — likes, replies, reposts, search, notifications |
-| `/api` | Forum posts, map markers, DB table inspection |
+| `/api/geo` | Geolocation lookup |
+| `/api/referrals` | Referral links and counts |
+| `/api/operator` | Unattended-retail operator dashboard — stores, inventory, restock sessions, promotions, sales, planogram |
+| `/api/feature-flags` | Flag definitions, evaluation, and the audit log |
+| `/api/todos` | Admin to-do list behind an email allowlist |
+| `/api/calendar` | Events, countdowns, and shared calendars (auth) |
+| `/api/gallery` | S3 image upload / delete |
+| `/api/walls` | Saved gallery-wall layouts |
+| `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |
+| `/api/profiles` | Ketsup profiles |
+| `/api/posts`, `/api/likes`, `/api/replies`, `/api/reposts` | Ketsup posts and interactions |
+| `/api/search`, `/api/notifications`, `/api/follows`, `/api/timeline` | Ketsup search, notifications, follows, timeline |
+| `/api/google` | Google Calendar OAuth and webhook |
+| `/api` | Forum posts (`/api/postforum`) and map markers (`/api/markers`) |
+
+Two routers mount at bare `/api` — health first, forum last — which is why the
+forum paths look like they belong to no group.
+
+**Gone, and deliberately:** the table-inspection routes (`/tables`,
+`/table/:tableName`) read `information_schema` and handed every table and column
+name to any caller with an account. `DELETE /api/markers/:id` is absent too, so
+markers are create-and-read.
 
 ## Deprecations
 
@@ -78,7 +103,7 @@ not invalidate it.
 
 ### Prerequisites
 
-- Node.js >= 18
+- Node.js >= 22 (`engines` requires it, and CI runs 22)
 - Python 3.10+
 - PostgreSQL (or Docker)
 - Docker + Docker Compose (optional)
@@ -90,8 +115,8 @@ not invalidate it.
 git clone <repository-url>
 cd portfolio_api
 
-# Install Node dependencies
-npm install
+# Install Node dependencies (pnpm, per the packageManager field)
+pnpm install
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -102,49 +127,64 @@ cp .env.example .env
 
 ### Environment Variables
 
-See `.env.example` for the full list. Required values:
+`.env.example` is the complete annotated list and the source of truth — every
+key there carries a comment explaining what breaks without it. This section does
+not repeat all of them, because two lists is how one of them ends up wrong.
+
+The minimum to boot:
 
 ```env
 PORT=3001
 NODE_ENV=development
-
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/portfolio
-
-# Auth0
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/portfolio
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://your-api-identifier
 NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
-
-# AWS S3
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=us-east-1
-AWS_S3_BUCKET_NAME=
-
-
-# Google Calendar sync (optional, only needed if using the calendar sync feature)
-# Create an OAuth 2.0 client in Google Cloud Console (Web application type)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-# the callback URL you registered in Google Cloud Console
-GOOGLE_REDIRECT_URI=https://api.paulsumido.com/api/google/auth/callback
-# any random secret, used to sign the OAuth state param (openssl rand -hex 32)
-GOOGLE_STATE_SECRET=
-# publicly reachable URL for the webhook endpoint -- must be https, won't work on localhost
-# use ngrok or similar for local testing: ngrok http 3001, then set this to the tunnel URL
-GOOGLE_WEBHOOK_URL=https://api.paulsumido.com/api/google/webhook
-# the frontend URL the OAuth callback redirects back to after connect/disconnect
-FRONTEND_URL=https://paulsumido.com
-
-# Operator dashboard writes (required in any deployed environment)
-# Must match OPERATOR_SERVICE_TOKEN in paul-explore. Generate with:
-#   openssl rand -hex 32
-# Leave it unset locally and the check is a deliberate no-op, so a fresh clone
-# works with no setup. Set it on one side only and reads keep working while
-# every write 401s, which presents as a baffling partial outage -- so set both
-# or neither.
-OPERATOR_SERVICE_TOKEN=
 ```
+
+Everything else turns a feature off rather than stopping the server:
+
+| Unset | What stops working |
+| ----- | ------------------ |
+| `AWS_*` | Gallery uploads and saved wall photos |
+| `GOOGLE_*`, `FRONTEND_URL` | Google Calendar sync and its webhook |
+| `OPERATOR_SERVICE_TOKEN` | Operator reads still work; every write 401s. Must match paul-explore's |
+| `FLAGS_SERVICE_TOKEN` | Open-tier flag writes reach only the in-memory store |
+| `ADMIN_ALLOWED_EMAILS` | Nobody can read or tick `/api/todos` |
+| `TOKEN_ENCRYPTION_KEY` | Migration `020` refuses to run, and Google tokens are stored unencrypted |
+| `REDIS_URL` | Rate limits fall back to in-memory: per-process, so they reset on every cold start and multiply by the instance count |
+| `CDN_BASE_URL` | Falls back to the bucket URL. Must match paul-explore's `NEXT_PUBLIC_MEDIA_ORIGIN` or saved walls render blank |
+| `PLAYOFFS_ADMIN_SECRET` | Bracket admin routes refuse |
+| `SITE_URL`, `LOG_LEVEL` | Fall back to the production domain and `info` |
+
+**The admin allowlist has two different names.** It is `ADMIN_ALLOWED_EMAILS`
+here and `FLAG_ADMIN_ALLOWED_EMAILS` in `paul-explore`, and both need the same
+addresses. Set one and not the other and `/to-do` renders in the browser while
+every tick 403s at the API, which reads like a bug in the page rather than a
+missing variable.
+
+### Database TLS
+
+`DB_CA_CERT` and `DB_SSL_REJECT_UNAUTHORIZED` exist, and the honest position is
+that neither is usable today.
+
+Tested against the live database: Railway's proxy presents a certificate with
+`CN=localhost` signed by a private CA named `root-ca`. So the system trust store
+rejects it as self-signed, supplying their CA *with* hostname checking still
+fails because `localhost` does not match `switchyard.proxy.rlwy.net`, and the
+only combination that connects is their CA with hostname verification disabled.
+Railway does not publish that CA — it has to be scraped out of the handshake.
+
+**The decision is not to pin.** Pinning a scraped certificate trades a real
+security control for a future outage: Railway can rotate it without notice and
+the pin breaks the connection with no warning. It also buys less than it looks
+like, since the connection would still be crossing the public internet.
+
+The actual fix is private networking, which removes the internet path entirely
+and makes verification moot rather than impossible. Until that lands, the
+connection negotiates TLS without verifying who is on the other end — that stops
+a passive eavesdropper and nothing else. `DB_SSL_REJECT_UNAUTHORIZED` is the
+switch that admits this, and boot logs a warning in production when the
+connection is unverified.
 
 ### Operator dashboard auth
 
@@ -326,7 +366,7 @@ later.
 ### Run (without Docker)
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 The server starts on `http://localhost:3001`.
@@ -396,47 +436,56 @@ docker run --rm -p 3001:3001 --env-file .env portfolio-api
 
 > The app waits for Postgres to be ready before starting (via `wait-for-it.sh`).
 
-### Database Migrations
-
-Migrations are one-time scripts in `scripts/`. Run them manually after setup:
-
-```bash
-# Create calendar_events table
-node scripts/calendar/migrate.js
-
-# Create event_cards junction table (TCG card ↔ event)
-node scripts/calendar/migrate_tcg.js
-
-# Create web_vitals table
-node scripts/vitals/migrate.js
-
-# Create countdowns table
-node scripts/calendar/migrate_countdowns.js
-
-# Create users + calendar_members tables (required for calendar sharing)
-node scripts/calendar/migrate_sharing.js
-
-# Create nba_playoff_brackets table
-node scripts/run-migration.js migrations/006_nba_playoffs.sql
-```
-
-> **Auth0 setup for sharing**: add a post-login Action that sets `api.accessToken.setCustomClaim("email", event.user.email)` so the backend `upsertUser` middleware can populate the users table from the JWT email claim.
+> **Auth0 setup for calendar sharing**: add a post-login Action that sets
+> `api.accessToken.setCustomClaim("email", event.user.email)` so the backend
+> `upsertUser` middleware can populate the users table from the JWT email claim.
 
 ### Tests
 
 ```bash
-npm test
+pnpm test
 ```
 
-Covers the fantasy scoring engine (`calculateQualifyingPoints`, `calculateRacePoints`) — DNF variants, disqualification, fastest lap, driver of the day, positions gained/lost, overtakes, and combined scenarios.
+53 test files under `src/`, run by vitest (`include: ['src/**/*.test.ts']`).
+
+The coverage is deliberately lopsided. The operator module has 14 files —
+aggregations, promotions, restock sessions, rate limiting, service-token auth,
+timezone resolution, SQL smoke tests against a real database — because it is the
+only module with real write traffic and non-trivial money-shaped arithmetic.
+Most of the rest sit on authorization boundaries: `write-auth`, `write-tier`,
+`feedback-ownership`, `journal-ownership`, `post-visibility`,
+`profile-visibility`, `webhook-auth`. That is where a mistake is quiet and
+expensive, so that is where the tests are.
+
+Nothing covers `calendar`, `gallery`, `geo`, `nba`, `youtube`, `forum`,
+`follows`, `timeline`, `fantasy` or `docs`. Mostly thin proxies over external
+APIs, but it is a gap rather than a decision.
+
+`tests/fantasy.test.js` is **not run** — it is a `.js` file and the vitest
+include pattern only picks up `src/**/*.test.ts`. It has been dead weight for a
+while; the README used to describe it as the whole suite.
 
 ## Deployment
 
 Deployed on [Railway](https://railway.app) using the included `Dockerfile`. Environment variables are configured in the Railway dashboard. FastF1 cache is persisted at `./cache/fastf1` via a Railway volume.
 
-Deploys are automatic on merge to `main` via GitHub Actions. `develop` is not
-deployed for the API, so the frontend's staging environment
-(`develop.paulsumido.com`) talks to this same production deployment.
+Deploys are automatic on merge to `main`, but **not via GitHub Actions** —
+Railway watches the branch through its own GitHub integration and builds from
+the `Dockerfile`. The workflows in `.github/workflows/` are `ci.yml` (lint,
+typecheck, test, migrations, build) and `tag-release.yml` (tags minor and major
+releases). Neither deploys anything.
+
+The distinction matters when a deploy does not appear: a green CI run says the
+code is sound, not that anything shipped. Railway's own dashboard is the only
+place that knows.
+
+`develop` is not deployed for the API, so the frontend's staging environment
+(`develop.paulsumido.com`) talks to this same production deployment. There is no
+staging API, which is fine for reads and worth remembering before testing
+anything destructive.
+
+Migrations run as part of the deploy — see the migrations section above. There
+is no separate step and nothing to remember.
 
 For `REDIS_URL`, prefer Railway's reference syntax — `${{Redis.REDIS_URL}}` —
 over pasting the value. It tracks the variable if the service is recreated, and
