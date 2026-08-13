@@ -16,6 +16,8 @@ vi.mock('../../config/auth.js', () => ({
 vi.mock('./repository.js', () => ({
   listTodos: vi.fn(),
   setDone: vi.fn(),
+  createTodo: vi.fn(),
+  softDeleteTodo: vi.fn(),
 }));
 
 import todosRouter from './routes.js';
@@ -116,5 +118,97 @@ describe('todos updates', () => {
 
     expect(res.status).toBe(400);
     expect(repo.setDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('adding an item', () => {
+  const newItem = { title: 'Rotate the database password', project: 'portfolio_api' };
+
+  test('a non-admin cannot add one', async () => {
+    claims = { ...adminClaims, [`${EMAIL_CLAIM_NS}email`]: 'someone@else.com' };
+
+    const res = await request(makeApp()).post('/api/todos').send(newItem);
+
+    expect(res.status).toBe(403);
+    expect(repo.createTodo).not.toHaveBeenCalled();
+  });
+
+  test('a title and a project are both required', async () => {
+    const noProject = await request(makeApp()).post('/api/todos').send({ title: 'Just a title' });
+    const noTitle = await request(makeApp()).post('/api/todos').send({ project: 'all' });
+
+    expect(noProject.status).toBe(400);
+    expect(noTitle.status).toBe(400);
+    expect(repo.createTodo).not.toHaveBeenCalled();
+  });
+
+  test('a blank title is not a title', async () => {
+    const res = await request(makeApp()).post('/api/todos').send({ title: '   ', project: 'all' });
+
+    expect(res.status).toBe(400);
+    expect(repo.createTodo).not.toHaveBeenCalled();
+  });
+
+  test('fields the caller has no business setting are rejected', async () => {
+    const res = await request(makeApp())
+      .post('/api/todos')
+      .send({ ...newItem, position: 0, done: true, blocking: true });
+
+    // Strict, not stripped. Silently dropping position would let a caller
+    // believe it chose the slot.
+    expect(res.status).toBe(400);
+    expect(repo.createTodo).not.toHaveBeenCalled();
+  });
+
+  test('a new item defaults to the backlog phase', async () => {
+    vi.mocked(repo.createTodo).mockResolvedValue({ id: ID } as never);
+
+    await request(makeApp()).post('/api/todos').send(newItem);
+
+    expect(repo.createTodo).toHaveBeenCalledWith(expect.objectContaining({ phase: 4 }));
+  });
+
+  test('a created item comes back with its server-assigned id', async () => {
+    vi.mocked(repo.createTodo).mockResolvedValue({ id: ID, phase: 4, position: 7 } as never);
+
+    const res = await request(makeApp()).post('/api/todos').send(newItem);
+
+    expect(res.status).toBe(201);
+    expect(res.body.todo.id).toBe(ID);
+  });
+});
+
+describe('removing an item', () => {
+  test('a non-admin cannot remove one', async () => {
+    claims = { ...adminClaims, [`${EMAIL_CLAIM_NS}email`]: 'someone@else.com' };
+
+    const res = await request(makeApp()).delete(`/api/todos/${ID}`);
+
+    expect(res.status).toBe(403);
+    expect(repo.softDeleteTodo).not.toHaveBeenCalled();
+  });
+
+  test('removing an item soft deletes it', async () => {
+    vi.mocked(repo.softDeleteTodo).mockResolvedValue({ id: ID } as never);
+
+    const res = await request(makeApp()).delete(`/api/todos/${ID}`);
+
+    expect(res.status).toBe(200);
+    expect(repo.softDeleteTodo).toHaveBeenCalledWith(ID);
+  });
+
+  test('removing something already removed answers 404, not a silent success', async () => {
+    vi.mocked(repo.softDeleteTodo).mockResolvedValue(null);
+
+    const res = await request(makeApp()).delete(`/api/todos/${ID}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  test('a non-uuid id is rejected before it reaches the database', async () => {
+    const res = await request(makeApp()).delete('/api/todos/not-a-uuid');
+
+    expect(res.status).toBe(400);
+    expect(repo.softDeleteTodo).not.toHaveBeenCalled();
   });
 });
