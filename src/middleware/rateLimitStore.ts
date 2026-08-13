@@ -83,7 +83,19 @@ export async function createRateLimitStore(): Promise<Store | undefined> {
   } catch (err) {
     // Falling back is deliberate. A limiter that is weaker than intended is bad;
     // an API that refuses to boot because Redis is briefly unreachable is worse.
-    log.error({ err }, 'redis store unavailable, falling back to in-memory limits');
+    //
+    // Outside production this is usually not a fault at all: REDIS_URL points at
+    // redis.railway.internal, a private name that only resolves inside Railway,
+    // so every local boot fails to reach it. Logging that at error trains you to
+    // ignore the level that should mean something.
+    const unreachable = (err as { code?: string })?.code === 'ENOTFOUND';
+    const expectedLocally = unreachable && process.env.NODE_ENV !== 'production';
+
+    if (expectedLocally) {
+      log.info('redis not reachable from here, using in-memory limits');
+    } else {
+      log.error({ err }, 'redis store unavailable, falling back to in-memory limits');
+    }
     return undefined;
   }
 }
@@ -104,9 +116,19 @@ export function resetRateLimitStoreForTests(): void {
  * an in-process MemoryStore otherwise. Requests arriving during the first few
  * milliseconds are counted by the fallback and then counting moves; for a
  * per-minute window that is immaterial.
+ *
+ * CALL THIS ONCE PER LIMITER, never once for all of them. express-rate-limit
+ * rejects a shared Store instance outright (ERR_ERL_STORE_REUSE), and it is
+ * right to: keys are derived from the caller, not the route, so two limiters
+ * sharing a backend count the same key into the same bucket. Hitting one
+ * endpoint would silently consume another's budget, making every limit
+ * stricter than configured and impossible to reason about.
+ *
+ * @param prefix - Namespaces this limiter's keys within the shared backend.
  */
-export function lazyRateLimitStore(): Store {
+export function lazyRateLimitStore(prefix: string): Store {
   const fallback = new MemoryStore();
+  const namespaced = (key: string) => `${prefix}:${key}`;
   let resolved: Store | undefined;
 
   const backend = createRateLimitStore()
@@ -128,15 +150,15 @@ export function lazyRateLimitStore(): Store {
     },
     async increment(key) {
       const store = await current();
-      return store.increment(key);
+      return store.increment(namespaced(key));
     },
     async decrement(key) {
       const store = await current();
-      return store.decrement(key);
+      return store.decrement(namespaced(key));
     },
     async resetKey(key) {
       const store = await current();
-      return store.resetKey(key);
+      return store.resetKey(namespaced(key));
     },
     async resetAll() {
       const store = await current();

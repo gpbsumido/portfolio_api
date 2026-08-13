@@ -6,6 +6,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 
 - **Runtime**: Node.js 18+ / Express
 - **Database**: PostgreSQL (via `pg`)
+- **Rate limiting**: `express-rate-limit`, backed by Redis when `REDIS_URL` is set
 - **Auth**: Auth0 JWT (`express-oauth2-jwt-bearer`)
 - **Storage**: AWS S3 (image uploads via `multer` + `sharp`)
 - **Data**: Python + FastF1 (F1 telemetry), NBA Stats API proxy
@@ -256,6 +257,30 @@ The server starts on `http://localhost:3001`.
 docker compose up --build
 ```
 
+### Rate limiting and Redis
+
+Rate-limit counters live in memory unless `REDIS_URL` is set. In memory is
+correct for a fresh clone and for CI, but it is per-process: on Fly, with
+`min_machines_running = 0`, every cold start wipes every counter, and scaling to
+N instances multiplies each limit by N. A shared Redis store fixes both.
+
+To exercise the Redis path locally:
+
+```bash
+docker compose up -d redis
+# then in .env:
+# REDIS_URL=redis://localhost:6379
+```
+
+**Do not put the Railway value in a local `.env`.** It is
+`redis.railway.internal`, a private hostname that only resolves inside
+Railway's network, so locally it can never connect — every boot falls back to
+in-memory and logs about it.
+
+Boot never blocks on Redis. An unreachable instance degrades to in-memory
+rather than failing to start, so a Redis outage costs you shared counters, not
+the API.
+
 **Option B — App container only, using your local Postgres:**
 
 ```bash
@@ -305,5 +330,14 @@ Covers the fantasy scoring engine (`calculateQualifyingPoints`, `calculateRacePo
 ## Deployment
 
 Deployed on [Railway](https://railway.app) using the included `Dockerfile`. Environment variables are configured in the Railway dashboard. FastF1 cache is persisted at `./cache/fastf1` via a Railway volume.
+
+Deploys are automatic on merge to `main` via GitHub Actions. `develop` is not
+deployed for the API, so the frontend's staging environment
+(`develop.paulsumido.com`) talks to this same production deployment.
+
+For `REDIS_URL`, prefer Railway's reference syntax — `${{Redis.REDIS_URL}}` —
+over pasting the value. It tracks the variable if the service is recreated, and
+it resolves to the private `.railway.internal` host, so the connection never
+crosses the public internet.
 
 There's also a `fly.toml` in the repo. I might move hosting over to [Fly.io](https://fly.io) at some point to sit on the free tier, but Railway is working fine so it's not a priority. If I do switch it's roughly `fly launch` then `fly deploy` with the secrets set.
