@@ -43,4 +43,4 @@ RUN chmod +x /wait-for-it.sh
 EXPOSE ${PORT:-3001}
 
 # Start command that waits for database
-CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- pnpm start"]
+CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- bash scripts/start.sh"]
