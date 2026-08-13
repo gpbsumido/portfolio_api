@@ -1,0 +1,24 @@
+{
+  "$comment": [
+    "The environment the migrations need in order to run, declared once and consumed by both repos.",
+    "",
+    "This file exists because migration 020 was mergeable and green here while breaking every branch",
+    "in paul-explore. Nothing in this repo ran migrations, so the requirement it added was only",
+    "discovered by the frontend workflow, which is the one place nobody looks when reviewing an API",
+    "migration.",
+    "",
+    "Values are throwaway and deliberately obvious. They protect nothing: the database they run",
+    "against is created empty and thrown away, and a fake-looking value cannot be mistaken for a real",
+    "secret. Never put a real credential in here.",
+    "",
+    "Adding a migration that needs a new variable? The migrations CI job fails until it is declared",
+    "here. Once it is, paul-explore picks it up automatically, because it runs the same script against",
+    "this same file."
+  ],
+  "vars": {
+    "TOKEN_ENCRYPTION_KEY": {
+      "why": "Migration 020 encrypts the stored Google OAuth tokens through utils/tokenCrypto, which refuses to run without a key. Must be a valid 32-byte hex string.",
+      "ciValue": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    }
+  }
+}

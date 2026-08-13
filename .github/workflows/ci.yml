@@ -48,6 +48,51 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test
 
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    # Migration 020 was mergeable and green here while breaking every branch in
+    # paul-explore, because nothing in this repo ran migrations and the frontend
+    # workflow was the only thing that did. This job is the check that was
+    # missing: it runs them with exactly the environment declared in
+    # ci/migration-env.json and nothing else, so a migration that quietly gains
+    # a requirement fails in the repo that added it.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: portfolio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run migrations with only the declared environment
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio
+          NODE_ENV: development
+        run: bash scripts/ci-migrate.sh
+      - name: Roll the last batch back
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio
+          NODE_ENV: development
+          # The contract again, because a down() can need a key just as much as
+          # an up() can. Reusing the script keeps that honest.
+          MIGRATE_CMD: pnpm migrate:rollback
+        run: bash scripts/ci-migrate.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest
