@@ -3,6 +3,6 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "node start.js"
+    "startCommand": "bash scripts/start.sh"
   }
 }

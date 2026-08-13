@@ -238,6 +238,24 @@ Notes:
 - On a database that already has the pre-migrations schema, mark the baseline as
   applied once so knex skips it: `INSERT INTO knex_migrations (name, batch, migration_time) VALUES ('000_baseline.ts', 1, NOW());`
 
+### Migrations run themselves on deploy
+
+`scripts/start.sh` is the container entrypoint. It runs `pnpm migrate` and then
+starts the app, so a deploy brings its own schema with it and there is no window
+where the new code is serving against the old database.
+
+Two things follow from that:
+
+- **A failed migration stops the server coming up.** That is deliberate. Railway
+  keeps the previous deploy serving, which is recoverable; a live process
+  talking to a half-migrated schema is not.
+- **Cron containers skip it.** They share the image and set `RUN_CRON=true`. Two
+  containers racing for the knex migration lock means one of them dies, and a
+  cron job that failed to run is worse than a migration landing a moment later.
+
+Running `pnpm migrate` by hand still works and is still the right move for a
+one-off against an environment mid-flight.
+
 ### Run (without Docker)
 
 ```bash
