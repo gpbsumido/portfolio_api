@@ -18,6 +18,17 @@ process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'silent';
 
 process.env.OPERATOR_SERVICE_TOKEN = '';
 
+/**
+ * Same reasoning as the token above. A developer with the Railway REDIS_URL in
+ * their .env would watch the suite try to reach redis.railway.internal — a
+ * private name that only resolves inside Railway — wait out the connect
+ * timeout, and fail the rate-limit tests on timing, while CI stayed green
+ * because CI has no .env. The suite must not depend on whose laptop it runs on.
+ *
+ * A test that genuinely wants the Redis path sets this itself.
+ */
+process.env.REDIS_URL = '';
+
 // Mock the database pool so tests don't need a real DB connection
 vi.mock('../../config/database.js', () => ({
   pool: {
