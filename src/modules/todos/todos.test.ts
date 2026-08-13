@@ -13,6 +13,14 @@ vi.mock('../../config/auth.js', () => ({
   },
   optionalCheckJwt: (req: any, _res: any, next: any) => next(),
 }));
+vi.mock('./history.js', () => ({
+  listRevisions: vi.fn(),
+  revertTo: vi.fn(),
+  listComments: vi.fn(),
+  addComment: vi.fn(),
+  editComment: vi.fn(),
+  removeComment: vi.fn(),
+}));
 vi.mock('./repository.js', () => ({
   listTodos: vi.fn(),
   setDone: vi.fn(),
@@ -22,6 +30,7 @@ vi.mock('./repository.js', () => ({
 
 import todosRouter from './routes.js';
 import * as repo from './repository.js';
+import * as history from './history.js';
 import { errorHandler } from '../../middleware/errorHandler.js';
 
 const ID = '11111111-1111-1111-1111-111111111111';
@@ -93,7 +102,7 @@ describe('todos updates', () => {
     const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({ done: true });
 
     expect(res.status).toBe(200);
-    expect(repo.setDone).toHaveBeenCalledWith(ID, true);
+    expect(repo.setDone).toHaveBeenCalledWith(ID, true, OWNER);
   });
 
   test('a missing item answers 404 rather than pretending to succeed', async () => {
@@ -165,7 +174,7 @@ describe('adding an item', () => {
 
     await request(makeApp()).post('/api/todos').send(newItem);
 
-    expect(repo.createTodo).toHaveBeenCalledWith(expect.objectContaining({ phase: 4 }));
+    expect(repo.createTodo).toHaveBeenCalledWith(expect.objectContaining({ phase: 4 }), OWNER);
   });
 
   test('a created item comes back with its server-assigned id', async () => {
@@ -194,7 +203,7 @@ describe('removing an item', () => {
     const res = await request(makeApp()).delete(`/api/todos/${ID}`);
 
     expect(res.status).toBe(200);
-    expect(repo.softDeleteTodo).toHaveBeenCalledWith(ID);
+    expect(repo.softDeleteTodo).toHaveBeenCalledWith(ID, OWNER);
   });
 
   test('removing something already removed answers 404, not a silent success', async () => {
@@ -210,5 +219,91 @@ describe('removing an item', () => {
 
     expect(res.status).toBe(400);
     expect(repo.softDeleteTodo).not.toHaveBeenCalled();
+  });
+});
+
+describe('history', () => {
+  const COMMENT = '22222222-2222-2222-2222-222222222222';
+
+  test('a non-admin cannot read revisions or comments', async () => {
+    claims = { ...adminClaims, [`${EMAIL_CLAIM_NS}email`]: 'someone@else.com' };
+
+    expect((await request(makeApp()).get(`/api/todos/${ID}/revisions`)).status).toBe(403);
+    expect((await request(makeApp()).get(`/api/todos/${ID}/comments`)).status).toBe(403);
+    expect(history.listRevisions).not.toHaveBeenCalled();
+    expect(history.listComments).not.toHaveBeenCalled();
+  });
+
+  test('a non-admin cannot revert', async () => {
+    claims = { ...adminClaims, [`${EMAIL_CLAIM_NS}email`]: 'someone@else.com' };
+
+    const res = await request(makeApp()).post(`/api/todos/${ID}/revert`).send({ revision: 3 });
+
+    expect(res.status).toBe(403);
+    expect(history.revertTo).not.toHaveBeenCalled();
+  });
+
+  test('reverting names the revision and the person doing it', async () => {
+    vi.mocked(history.revertTo).mockResolvedValue({ todo: { id: ID }, revision: {} } as never);
+
+    const res = await request(makeApp()).post(`/api/todos/${ID}/revert`).send({ revision: 3 });
+
+    expect(res.status).toBe(200);
+    expect(history.revertTo).toHaveBeenCalledWith(ID, 3, OWNER);
+  });
+
+  test('reverting to a revision that does not exist answers 404, not a silent no-op', async () => {
+    vi.mocked(history.revertTo).mockResolvedValue(null);
+
+    const res = await request(makeApp()).post(`/api/todos/${ID}/revert`).send({ revision: 99 });
+
+    expect(res.status).toBe(404);
+  });
+
+  test('a revision must be a positive integer', async () => {
+    for (const revision of [0, -1, 1.5, 'three']) {
+      const res = await request(makeApp()).post(`/api/todos/${ID}/revert`).send({ revision });
+      expect(res.status).toBe(400);
+    }
+    expect(history.revertTo).not.toHaveBeenCalled();
+  });
+
+  test('an empty comment is rejected', async () => {
+    const res = await request(makeApp()).post(`/api/todos/${ID}/comments`).send({ body: '   ' });
+
+    expect(res.status).toBe(400);
+    expect(history.addComment).not.toHaveBeenCalled();
+  });
+
+  test('a comment on a todo that is not there answers 404', async () => {
+    vi.mocked(history.addComment).mockResolvedValue(null);
+
+    const res = await request(makeApp()).post(`/api/todos/${ID}/comments`).send({ body: 'note' });
+
+    expect(res.status).toBe(404);
+  });
+
+  test('unknown fields on a comment are rejected rather than dropped', async () => {
+    const res = await request(makeApp())
+      .post(`/api/todos/${ID}/comments`)
+      .send({ body: 'note', actor: 'someone@else.com' });
+
+    expect(res.status).toBe(400);
+    expect(history.addComment).not.toHaveBeenCalled();
+  });
+
+  test('deleting a comment that is already gone answers 404', async () => {
+    vi.mocked(history.removeComment).mockResolvedValue(null);
+
+    const res = await request(makeApp()).delete(`/api/todos/comments/${COMMENT}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  test('a comment id must be a uuid before it reaches the database', async () => {
+    const res = await request(makeApp()).delete('/api/todos/comments/not-a-uuid');
+
+    expect(res.status).toBe(400);
+    expect(history.removeComment).not.toHaveBeenCalled();
   });
 });
