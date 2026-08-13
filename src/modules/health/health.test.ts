@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -62,5 +64,20 @@ describe('Health endpoints', () => {
     const res = await request(app).get('/api/ready');
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ status: 'shutting_down' });
+  });
+});
+
+describe('health version', () => {
+  test('reports the version from package.json, not a literal', async () => {
+    // It was hardcoded and drifted five releases behind, so the field said a
+    // deploy had failed on every deploy that succeeded.
+    const { version } = JSON.parse(
+      readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { version: string };
+
+    const res = await request(createApp()).get('/api/health');
+
+    expect(res.body.version).toBe(version);
+    expect(res.body.version).not.toBe('2.3.2');
   });
 });
