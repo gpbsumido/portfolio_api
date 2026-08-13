@@ -3,9 +3,14 @@
  *
  * `rejectUnauthorized: false` negotiates TLS and then never checks who it is
  * talking to, which stops a passive eavesdropper and does nothing at all
- * against an active one. That matters here because DATABASE_URL points at a
- * publicly reachable proxy host rather than a private network, so the path is
- * the open internet.
+ * against an active one.
+ *
+ * That used to matter a great deal, because DATABASE_URL pointed at a publicly
+ * reachable proxy and the path was the open internet. It now points inside
+ * Railway's private network, which is a WireGuard tunnel between services in
+ * one project, so there is no public path to sit on. Verification there is not
+ * unavailable, it is beside the point — see isPrivateConnection below, which is
+ * what stops the warning firing about a risk that no longer exists.
  *
  * The blocker on fixing it properly is that verification needs the provider's
  * root certificate, which isn't in the repo. So: verify whenever a CA is
@@ -45,3 +50,25 @@ function verifiesServer(config) {
 }
 
 module.exports = { dbSslConfig, verifiesServer };
+
+/**
+ * Is this connection string pointing inside the private network?
+ *
+ * Railway's private network is a WireGuard tunnel between services in the same
+ * project, so traffic on it is already encrypted and there is no public path to
+ * eavesdrop on. Certificate verification is not "unavailable" there, it is
+ * beside the point — which matters because the warning below was written when
+ * DATABASE_URL pointed at a public proxy, and its premise stopped being true
+ * the moment that changed.
+ *
+ * Localhost counts for the same reason: a compose database on the same machine
+ * has no network to intercept.
+ */
+function isPrivateConnection(connectionString) {
+  if (!connectionString) return false;
+  return /@([^/:]*\.railway\.internal|localhost|127\.0\.0\.1|\[::1\]|db)(:|\/|$)/.test(
+    connectionString,
+  );
+}
+
+module.exports.isPrivateConnection = isPrivateConnection;
