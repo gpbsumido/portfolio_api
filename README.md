@@ -257,6 +257,24 @@ The server starts on `http://localhost:3001`.
 docker compose up --build
 ```
 
+**Option B — Postgres in Docker, app on the host:**
+
+```bash
+docker compose up -d db
+# then in .env:
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/portfolio
+```
+
+This is the one to use day to day. The container publishes 5432, so migrations
+and `dev` run against a throwaway local database.
+
+**Do not put the Railway value in a local `.env`.** It points at a public proxy
+host, which means local `dev` reads and writes live data and `migrate` migrates
+production — with the credentials crossing the open internet to get there. The
+same applies to `DATABASE_PUBLIC_URL`. If port 5432 is already taken by a
+Postgres you installed directly, publish `"5433:5432"` instead and match the
+port in the URL.
+
 ### Rate limiting and Redis
 
 Rate-limit counters live in memory unless `REDIS_URL` is set. In memory is

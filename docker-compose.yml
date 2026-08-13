@@ -7,6 +7,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: portfolio
+    # Published so a host-run `pnpm dev` has a local database to point at.
+    # Without this the only way to reach Postgres was from inside the compose
+    # network, which left production as the path of least resistance.
+    ports:
+      - "5432:5432"
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql/data
