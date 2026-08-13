@@ -37,6 +37,20 @@ export function isAdminRequest(req: Request): boolean {
   return allowed.includes(email.trim().toLowerCase());
 }
 
+/**
+ * The verified email on the request, or null.
+ *
+ * Recorded as the actor on to-do revisions and comments. There is one admin
+ * today, so it carries no information now — but back-filling who did something
+ * is impossible later, and it costs nothing to write it down while it is known.
+ */
+export function actorEmail(req: Request): string | null {
+  const payload = (req as { auth?: { payload?: Record<string, unknown> } }).auth?.payload;
+  const email = payload?.[`${EMAIL_CLAIM_NS}email`];
+  const verified = payload?.[`${EMAIL_CLAIM_NS}email_verified`];
+  return typeof email === 'string' && verified === true ? email : null;
+}
+
 /** Route guard. Place after checkJwt, which populates req.auth. */
 export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
   if (!isAdminRequest(req)) {
