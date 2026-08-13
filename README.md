@@ -28,7 +28,7 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Forum / Markers | Post forum and geolocation markers stored in PostgreSQL. Markers are create-and-read; there is no delete |
 | Operator        | Unattended-retail dashboard — auditable restocking, promotions, per-store sales, planogram, all resolved in the store's own timezone |
 | Feature Flags   | Flag definitions, deterministic evaluation, targeting rules, and an audit log   |
-| To-do           | Admin-only outstanding-work list behind an email allowlist                       |
+| To-do           | Admin-only outstanding-work list behind an email allowlist. Every change is recorded as a revision and can be reverted; reverting writes a new revision rather than discarding later ones |
 | Gallery Walls   | Saved frame layouts with S3-backed photos                                       |
 
 ## API Endpoints
@@ -54,7 +54,7 @@ Every router mounted in `src/app.ts`, in source order:
 | `/api/referrals` | Referral links and counts |
 | `/api/operator` | Unattended-retail operator dashboard — stores, inventory, restock sessions, promotions, sales, planogram |
 | `/api/feature-flags` | Flag definitions, evaluation, and the audit log |
-| `/api/todos` | Admin to-do list behind an email allowlist |
+| `/api/todos` | Admin to-do list behind an email allowlist, with per-item revision history, revert, and comments |
 | `/api/calendar` | Events, countdowns, and shared calendars (auth) |
 | `/api/gallery` | S3 image upload / delete |
 | `/api/walls` | Saved gallery-wall layouts |
@@ -135,7 +135,7 @@ The minimum to boot:
 
 ```env
 PORT=3001
-NODE_ENV=development
+NODE_ENV=development   # production in any deployed environment — see Database networking
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/portfolio
 NEXT_PUBLIC_AUTH0_AUDIENCE=https://your-api-identifier
 NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
@@ -162,29 +162,41 @@ addresses. Set one and not the other and `/to-do` renders in the browser while
 every tick 403s at the API, which reads like a bug in the page rather than a
 missing variable.
 
-### Database TLS
+### Database networking and TLS
 
-`DB_CA_CERT` and `DB_SSL_REJECT_UNAUTHORIZED` exist, and the honest position is
-that neither is usable today.
+**The database is not reachable from the internet.** `DATABASE_URL` points at
+`postgres.railway.internal` over Railway's private network, and public access on
+the Postgres service is switched off. There is no proxy host to connect to and
+no password to guess from outside.
 
-Tested against the live database: Railway's proxy presents a certificate with
-`CN=localhost` signed by a private CA named `root-ca`. So the system trust store
-rejects it as self-signed, supplying their CA *with* hostname checking still
-fails because `localhost` does not match `switchyard.proxy.rlwy.net`, and the
-only combination that connects is their CA with hostname verification disabled.
-Railway does not publish that CA — it has to be scraped out of the handshake.
+That resolves a question this section used to spend a lot of words on. The old
+setup pointed at a public proxy whose certificate presents `CN=localhost` signed
+by a CA Railway does not publish, so verification could only be made to work by
+scraping their CA out of the handshake and disabling hostname checking. The
+decision was not to pin, on the grounds that a scraped certificate trades a real
+control for a future outage — but the better answer turned out to be removing
+the path rather than securing it. Verification is not unavailable now, it is
+beside the point.
 
-**The decision is not to pin.** Pinning a scraped certificate trades a real
-security control for a future outage: Railway can rotate it without notice and
-the pin breaks the connection with no warning. It also buys less than it looks
-like, since the connection would still be crossing the public internet.
+Traffic on the private network is encrypted by the tunnel itself, so
+`DB_CA_CERT` and `DB_SSL_REJECT_UNAUTHORIZED` are effectively vestigial. They
+still work if this ever needs to reach a database somewhere else, and the boot
+warning about an unverified connection now fires only when the connection is
+genuinely public *and* unverified — warning about a private one trains you to
+ignore the warning.
 
-The actual fix is private networking, which removes the internet path entirely
-and makes verification moot rather than impossible. Until that lands, the
-connection negotiates TLS without verifying who is on the other end — that stops
-a passive eavesdropper and nothing else. `DB_SSL_REJECT_UNAUTHORIZED` is the
-switch that admits this, and boot logs a warning in production when the
-connection is unverified.
+Two consequences worth knowing:
+
+- **`NODE_ENV` must be set to `production` in production.** The config defaults
+  to `development` when it is unset, and the TLS helper disables SSL entirely
+  outside production. That was true here for longer than it should have been,
+  and it meant the connection had no TLS at all rather than merely unverified
+  TLS — which is worse than what the documentation claimed.
+- **Nothing outside Railway can reach this database**, including your laptop.
+  That is the point. Local development uses the compose Postgres below.
+
+The full account is written up at
+[/thoughts/database-networking](https://paulsumido.com/thoughts/database-networking).
 
 ### Operator dashboard auth
 
@@ -393,12 +405,18 @@ docker compose up -d db
 This is the one to use day to day. The container publishes 5432, so migrations
 and `dev` run against a throwaway local database.
 
-**Do not put the Railway value in a local `.env`.** It points at a public proxy
-host, which means local `dev` reads and writes live data and `migrate` migrates
-production — with the credentials crossing the open internet to get there. The
-same applies to `DATABASE_PUBLIC_URL`. If port 5432 is already taken by a
-Postgres you installed directly, publish `"5433:5432"` instead and match the
-port in the URL.
+**The production value will not work locally, and that is deliberate.** It is a
+`postgres.railway.internal` host on Railway's private network, which does not
+resolve from anywhere else. There is no longer a public proxy to fall back on
+either — public access is switched off on the Postgres service.
+
+This used to be the other way round: the production string worked fine from a
+laptop, so `dev` read and wrote live data and `migrate` migrated production
+without anyone deciding it should. The local database below is now the only
+thing that works, which is a better guarantee than a warning in a README.
+
+If port 5432 is already taken by a Postgres you installed directly, publish
+`"5433:5432"` instead and match the port in the URL.
 
 ### Rate limiting and Redis
 
