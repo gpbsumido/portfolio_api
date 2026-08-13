@@ -32,8 +32,19 @@ export const createTodoSchema = z
     project: z.string().trim().min(1, 'A project is required').max(60),
     phase: z.number().int().min(1).max(4).default(4),
     detail: z.string().trim().max(2000).nullish(),
+    // Why the item exists, as opposed to detail, which is what to do about it.
+    reason: z.string().trim().max(2000).nullish(),
   })
   .strict();
+
+/** Which revision to restore. Strict, so a typo'd field is a 400 not a no-op. */
+export const revertTodoSchema = z.object({ revision: z.number().int().positive() }).strict();
+
+export const commentBodySchema = z
+  .object({ body: z.string().trim().min(1, 'A comment cannot be empty').max(4000) })
+  .strict();
+
+export const commentIdParamSchema = z.object({ commentId: z.string().uuid() });
 
 export type UpdateTodoInput = z.infer<typeof updateTodoSchema>;
 export type CreateTodoInput = z.infer<typeof createTodoSchema>;

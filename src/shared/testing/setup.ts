@@ -35,6 +35,10 @@ vi.mock('../../config/database.js', () => ({
     query: vi.fn(),
     end: vi.fn(),
     on: vi.fn(),
+    // Transactional writes check out a client. Without this, any module that
+    // opens a transaction fails here for a reason that has nothing to do with
+    // what is being tested.
+    connect: vi.fn(async () => ({ query: vi.fn(), release: vi.fn() })),
   },
   checkDatabaseHealth: vi.fn().mockResolvedValue(true),
 }));
