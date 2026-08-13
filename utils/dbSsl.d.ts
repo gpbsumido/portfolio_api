@@ -14,3 +14,9 @@ export declare function dbSslConfig(opts: {
 }): DbSslConfig;
 
 export declare function verifiesServer(config: DbSslConfig): boolean;
+
+/**
+ * True when the connection string points inside a private network, where
+ * certificate verification is beside the point rather than unavailable.
+ */
+export declare function isPrivateConnection(connectionString: string | undefined): boolean;

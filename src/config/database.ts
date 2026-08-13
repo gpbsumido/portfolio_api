@@ -1,33 +1,28 @@
-import { Pool, type QueryResult, type QueryResultRow } from 'pg';
+import { type QueryResult, type QueryResultRow } from 'pg';
 import { env } from './env.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
-import { dbSslConfig, verifiesServer } from '../../utils/dbSsl.js';
+import { verifiesServer, isPrivateConnection } from '../../utils/dbSsl.js';
+import { pool, connectionString, ssl } from '../../config/pool.js';
 
 const log = createModuleLogger('database');
 
-const connectionString =
-  env.DATABASE_URL ||
-  `postgresql://${env.DB_USER}:${env.DB_PASSWORD}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
+// The pool is built in config/pool.js so the CommonJS layer and this one share
+// a single object. Re-exported here because everything in src/ imports it from
+// this path, and moving that would touch fifty files to no benefit.
+export { pool };
 
-const ssl = dbSslConfig({
-  nodeEnv: env.NODE_ENV,
-  caCert: env.DB_CA_CERT,
-  rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED,
-});
-
-if (env.NODE_ENV === 'production' && !verifiesServer(ssl)) {
+// Only worth saying when it is actually true. Over a private network there is
+// no public path to intercept, so an unverified certificate is beside the point
+// rather than a gap — warning anyway trains you to ignore the warning.
+if (
+  env.NODE_ENV === 'production' &&
+  !verifiesServer(ssl) &&
+  !isPrivateConnection(connectionString)
+) {
   log.warn(
-    'database TLS is not verifying the server certificate; set DB_CA_CERT to the provider root cert to enable verification',
+    'database TLS is not verifying the server certificate, and the connection is not private; set DB_CA_CERT to the provider root cert to enable verification',
   );
 }
-
-export const pool = new Pool({
-  connectionString,
-  ssl,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
 
 pool.on('error', (err) => {
   log.error({ err }, 'unexpected idle client error');
