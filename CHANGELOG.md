@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-11 - version 4.3.1
+
+- **The flag reset now puts the live gates back if they go missing.** 4.3.0 excluded the admin-tier flags from the 6-hourly reset, which stops the job deleting them — but nothing guaranteed they exist. The migration that first inserted `pocket-tcg` and `world-live-presence` runs once, so a row lost to a restore, a hand-run `DELETE`, or an older build of the job would never come back: the migration is already recorded as applied, and the new reset deliberately skips protected keys, so neither path recreates it. The console's site-owner group would quietly empty out and the gates would fall back to the values compiled into paul-explore. The reset now inserts them on conflict-do-nothing, so a gate that is already there keeps whatever state it is in — including deliberately off — and a missing one comes back. Existence is guaranteed, state is never touched. A test pins the invariant: every canonical flag is in exactly one of the resettable or protected sets, so none can fall out of both and become unrecoverable.
+
+## 2026-08-11 - version 4.3.0
+
+- **Feature flags now carry an access tier.** New `access` column and response field: `open`, `authed`, or `admin`. paul-explore's console groups flags by who may change them, and until now it worked that out from a map it kept locally — which disagreed with the server the moment the two flag sets diverged, so the console inferred every API-served flag as open while the BFF enforced from its own seed. The API is the authority for it now. Additive, so an older client that ignores the field is unaffected.
+
+- **The two live gates exist as rows for the first time.** `pocket-tcg` and `world-live-presence` existed only as constants compiled into paul-explore. They worked — the gate falls back to a local seed — but could not be managed from the console at all, so its site-owner group rendered empty. Seeded fully on, matching the values already committed there, so creating them changes nothing for visitors. The migration uses `onConflict().ignore()` so a re-run never resets a kill switch someone deliberately flipped.
+
+- **The 6-hourly reset no longer touches them.** That job wipes both tables and re-seeds, which is right for demo data and dangerous for a kill switch: had these simply been added to the canonical list, turning `/tcg/pocket` off after a regression would have reverted on its own within six hours, at whatever hour the cron runs. The delete is scoped and the protected rows keep whatever state they were found in.
+
+- **Flag writes are guarded by tier rather than a blanket JWT.** The open tier has no signed-in user to borrow a token from, so those writes 401'd and the toggle sprang back in the console. They accept the BFF's shared secret (`FLAGS_SERVICE_TOKEN`, header `x-flags-token`) instead, the way the operator demo already writes without a user. The secret stops there: above that tier a write must carry a real identity, or the allowlist is pointless and the audit log is a fiction. Unknown flag keys fail closed onto the JWT path, and an unset secret disables the service path entirely — which is the current behaviour, so deploying without setting it changes nothing.
+
 ## 2026-08-05 - version 4.2.1
 
 - **Documented the operator demo re-seed cron.** The job has existed since the operator work landed, but nothing wrote down how to run it, and it needs its own Railway cron service — a service carries one schedule and one `CRON_JOB`, so it can't share the feature-flags reset's. The README now covers the source and start command, the `0 4 * * *` schedule, the four variables, and the two things that bite: setting those vars project-wide boots the *web* service into cron mode, and `NODE_ENV=production` is required for SSL against the Railway Postgres. Also spells out that the job wipes and re-inserts the `operator_*` tables, so anything a visitor changed is reset — paul-explore says as much on the dashboard.
