@@ -27,23 +27,110 @@ export async function setDone(
   done: boolean,
   actor: string | null = null,
 ): Promise<TodoRow | null> {
+  return updateTodo(id, { done }, actor);
+}
+
+/** Columns a patch may write, in the order the SET clause builds them. */
+type TodoPatch = Partial<
+  Pick<
+    TodoRow,
+    | 'title'
+    | 'project'
+    | 'phase'
+    | 'detail'
+    | 'reason'
+    | 'blocking'
+    | 'command'
+    | 'pr_repo'
+    | 'pr_number'
+    | 'done'
+  >
+>;
+
+/**
+ * Edits an item, recording what it became.
+ *
+ * One function rather than one per field, so there is a single place that
+ * writes a todo and a single place that records it. Every mutation on this
+ * table funnels through here or through the create and remove paths, which is
+ * the invariant the history depends on.
+ *
+ * The change kind distinguishes a tick from an edit, because a timeline where
+ * everything says "updated" is a list of timestamps rather than a story.
+ */
+export async function updateTodo(
+  id: string,
+  patch: TodoPatch,
+  actor: string | null = null,
+): Promise<TodoRow | null> {
   return inTransaction(async (client) => {
+    // Locked for the length of the transaction: the phase move below reads the
+    // current phase to decide whether to renumber, and a concurrent edit
+    // between the read and the write would renumber against a stale answer.
+    const { rows: existing } = await client.query<TodoRow>(
+      `SELECT * FROM todos WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+      [id],
+    );
+    const before = existing[0];
+    if (!before) return null;
+
+    const values: unknown[] = [id];
+    const sets: string[] = [];
+    const set = (column: string, value: unknown) => {
+      values.push(value);
+      sets.push(`${column} = $${values.length}`);
+    };
+
+    for (const column of [
+      'title',
+      'project',
+      'detail',
+      'reason',
+      'blocking',
+      'command',
+      'pr_repo',
+      'pr_number',
+    ] as const) {
+      if (patch[column] !== undefined) set(column, patch[column]);
+    }
+
+    if (patch.done !== undefined) {
+      set('done', patch.done);
+      // Derived here rather than accepted from the caller, so the flag and its
+      // timestamp cannot disagree.
+      sets.push(`done_at = CASE WHEN $${values.length} THEN NOW() ELSE NULL END`);
+    }
+
+    if (patch.phase !== undefined) {
+      set('phase', patch.phase);
+      if (patch.phase !== before.phase) {
+        // Positions are only ordered within a phase, so carrying one across
+        // would land the item on a number another row already holds and make
+        // the order of the two arbitrary. Moving phase means joining the end of
+        // the new one.
+        values.push(patch.phase);
+        sets.push(
+          `position = (SELECT COALESCE(MAX(position), 0) + 1 FROM todos WHERE phase = $${values.length})`,
+        );
+      }
+    }
+
     const { rows } = await client.query<TodoRow>(
-      `UPDATE todos
-          SET done = $2,
-              done_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
-              updated_at = NOW()
-        WHERE id = $1
-          AND deleted_at IS NULL
+      `UPDATE todos SET ${sets.join(', ')}, updated_at = NOW()
+        WHERE id = $1 AND deleted_at IS NULL
         RETURNING *`,
-      [id, done],
+      values,
     );
     const todo = rows[0];
     if (!todo) return null;
 
+    const keys = Object.keys(patch);
+    const changeKind =
+      keys.length === 1 && keys[0] === 'done' ? (patch.done ? 'ticked' : 'unticked') : 'updated';
+
     await recordRevision(client, {
       todoId: todo.id,
-      changeKind: done ? 'ticked' : 'unticked',
+      changeKind,
       snapshot: todo,
       actor,
     });

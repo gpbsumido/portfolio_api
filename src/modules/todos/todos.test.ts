@@ -24,6 +24,7 @@ vi.mock('./history.js', () => ({
 vi.mock('./repository.js', () => ({
   listTodos: vi.fn(),
   setDone: vi.fn(),
+  updateTodo: vi.fn(),
   createTodo: vi.fn(),
   softDeleteTodo: vi.fn(),
 }));
@@ -78,7 +79,7 @@ describe('todos access', () => {
     const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({ done: true });
 
     expect(res.status).toBe(403);
-    expect(repo.setDone).not.toHaveBeenCalled();
+    expect(repo.updateTodo).not.toHaveBeenCalled();
   });
 
   test('an unset allowlist locks everyone out', async () => {
@@ -97,36 +98,74 @@ describe('todos access', () => {
 
 describe('todos updates', () => {
   test('ticking an item marks it done', async () => {
-    vi.mocked(repo.setDone).mockResolvedValue({ id: ID, done: true } as never);
+    vi.mocked(repo.updateTodo).mockResolvedValue({ id: ID, done: true } as never);
 
     const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({ done: true });
 
     expect(res.status).toBe(200);
-    expect(repo.setDone).toHaveBeenCalledWith(ID, true, OWNER);
+    expect(repo.updateTodo).toHaveBeenCalledWith(ID, { done: true }, OWNER);
   });
 
   test('a missing item answers 404 rather than pretending to succeed', async () => {
-    vi.mocked(repo.setDone).mockResolvedValue(null);
+    vi.mocked(repo.updateTodo).mockResolvedValue(null);
 
     const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({ done: true });
 
     expect(res.status).toBe(404);
   });
 
-  test('fields other than done are rejected, not silently applied', async () => {
+  test('editable fields are accepted now that editing exists', async () => {
+    vi.mocked(repo.updateTodo).mockResolvedValue({ id: ID } as never);
+
     const res = await request(makeApp())
       .patch(`/api/todos/${ID}`)
-      .send({ done: true, title: 'rewritten', phase: 9 });
+      .send({ title: 'A better title', reason: 'why it exists', phase: 2 });
+
+    expect(res.status).toBe(200);
+    expect(repo.updateTodo).toHaveBeenCalledWith(
+      ID,
+      { title: 'A better title', reason: 'why it exists', phase: 2 },
+      OWNER,
+    );
+  });
+
+  test('the fields the server owns are still refused', async () => {
+    // position is assigned by the server and the ordering is the point of the
+    // page; done_at is derived from done; removal has its own route. Accepting
+    // any of them would let a client argue with the server about state it does
+    // not own.
+    for (const patch of [
+      { position: 1 },
+      { done_at: '2026-01-01T00:00:00Z' },
+      { deleted_at: null },
+      { id: ID },
+      { created_at: '2026-01-01T00:00:00Z' },
+    ]) {
+      const res = await request(makeApp()).patch(`/api/todos/${ID}`).send(patch);
+      expect(res.status).toBe(400);
+    }
+    expect(repo.updateTodo).not.toHaveBeenCalled();
+  });
+
+  test('an empty patch is refused rather than recording that nothing happened', async () => {
+    const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({});
 
     expect(res.status).toBe(400);
-    expect(repo.setDone).not.toHaveBeenCalled();
+    expect(repo.updateTodo).not.toHaveBeenCalled();
+  });
+
+  test('a phase outside the four is refused', async () => {
+    const res = await request(makeApp()).patch(`/api/todos/${ID}`).send({ phase: 9 });
+
+    expect(res.status).toBe(400);
+    expect(repo.updateTodo).not.toHaveBeenCalled();
   });
 
   test('a non-uuid id is rejected before it reaches the database', async () => {
     const res = await request(makeApp()).patch('/api/todos/not-a-uuid').send({ done: true });
 
     expect(res.status).toBe(400);
-    expect(repo.setDone).not.toHaveBeenCalled();
+    expect(repo.updateTodo).not.toHaveBeenCalled();
   });
 });
 

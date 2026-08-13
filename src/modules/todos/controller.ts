@@ -19,8 +19,8 @@ export class TodosController {
   async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const { done } = req.body as { done: boolean };
-      const todo = await repo.setDone(id, done, actorEmail(req));
+      const patch = req.body as Parameters<typeof repo.updateTodo>[1];
+      const todo = await repo.updateTodo(id, patch, actorEmail(req));
       if (!todo) {
         throw new NotFoundError('Todo not found');
       }
