@@ -54,21 +54,24 @@ describe('every mutation leaves a trace', () => {
 
     const statements = calls.map((_, i) => sqlOf(calls, i));
     expect(statements[0]).toBe('begin');
-    expect(statements[1]).toContain('update todos');
-    expect(statements[2]).toContain('insert into todo_revisions');
-    expect(statements[3]).toBe('commit');
+    // The row is read and locked first: a phase move renumbers against the
+    // current phase, and a concurrent edit in between would use a stale answer.
+    expect(statements[1]).toContain('for update');
+    expect(statements[2]).toContain('update todos');
+    expect(statements[3]).toContain('insert into todo_revisions');
+    expect(statements[4]).toBe('commit');
   });
 
   test('the revision records which way the tick went', async () => {
     const ticked = fakeClient();
     vi.mocked(pool.connect).mockResolvedValue(ticked.client as never);
     await setDone(ID, true);
-    expect(ticked.calls[2]?.[1]).toContain('ticked');
+    expect(ticked.calls[3]?.[1]).toContain('ticked');
 
     const unticked = fakeClient();
     vi.mocked(pool.connect).mockResolvedValue(unticked.client as never);
     await setDone(ID, false);
-    expect(unticked.calls[2]?.[1]).toContain('unticked');
+    expect(unticked.calls[3]?.[1]).toContain('unticked');
   });
 
   test('creating records a revision too', async () => {
@@ -109,7 +112,7 @@ describe('every mutation leaves a trace', () => {
 
     // Computed inside the insert, so two concurrent writes cannot land on the
     // same number. The unique constraint catches whatever this does not.
-    expect(sqlOf(calls, 2)).toContain('max(revision)');
+    expect(sqlOf(calls, 3)).toContain('max(revision)');
   });
 
   test('nothing is committed when the revision fails', async () => {
