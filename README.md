@@ -282,6 +282,47 @@ database it spins up for e2e. So:
 The job also rolls the batch back, because a `down()` can need a key just as
 much as an `up()` can.
 
+### What automating them did not fix
+
+Running migrations on deploy removed the step that kept getting forgotten. It
+said nothing about what is in them, or what happens when one fails partway.
+
+**Failing partway is handled, and it is worth knowing why.** Postgres has
+transactional DDL and knex wraps the whole batch in one transaction, so a
+migration that dies after its third statement leaves nothing behind — not the
+statements before it, and not the migrations earlier in the same batch.
+Verified rather than assumed: a migration that creates a table and then throws
+leaves no table, no row in `knex_migrations`, and every previously applied
+migration untouched. Combined with `set -e` in the entrypoint, a bad migration
+means a failed deploy and the previous release still serving.
+
+The one way to lose that is to opt out of the transaction, which is what
+`CREATE INDEX CONCURRENTLY` requires. A test fails if any migration mentions it
+or sets `disableTransactions`. If a table ever gets big enough to genuinely
+need a concurrent index, that is a deliberate decision to make then, not
+something to acquire by accident.
+
+**Dropping things is not handled, and cannot be.** Nothing about automation
+stops a destructive migration going out unread. So a test scans the `up()` of
+every migration for drops, renames, truncations and column tightening, and
+fails unless the file carries a written reason:
+
+```ts
+// DESTRUCTIVE: drops todos.detail, unused since 4.9.0 and confirmed empty in
+// production before this shipped.
+```
+
+`down()` is not scanned, because a `down()` that drops the column its `up()`
+added is exactly correct.
+
+It is an acknowledgement rather than a ban on purpose. Dropping a column is
+sometimes right; doing it without having thought about the code currently
+running against that schema is not. The reason has to appear as a line in the
+diff, which is the only place it is any use. Usually the correct response to
+this test failing is not to write the comment — it is to expand first: add the
+new thing, ship the code that stops using the old thing, drop it a release
+later.
+
 ### Run (without Docker)
 
 ```bash
