@@ -19,4 +19,21 @@ export const todoIdParamSchema = z.object({
   id: z.string().uuid(),
 });
 
+/**
+ * Quick add: a title and a project, everything else optional.
+ *
+ * position is absent on purpose — the server assigns it. done and blocking are
+ * absent for the same reason the update schema is one field: adding an item
+ * should not be a way to declare it urgent or already finished.
+ */
+export const createTodoSchema = z
+  .object({
+    title: z.string().trim().min(1, 'A title is required').max(200),
+    project: z.string().trim().min(1, 'A project is required').max(60),
+    phase: z.number().int().min(1).max(4).default(4),
+    detail: z.string().trim().max(2000).nullish(),
+  })
+  .strict();
+
 export type UpdateTodoInput = z.infer<typeof updateTodoSchema>;
+export type CreateTodoInput = z.infer<typeof createTodoSchema>;
