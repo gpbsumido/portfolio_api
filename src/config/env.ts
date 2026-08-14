@@ -19,6 +19,17 @@ export const envSchema = z.object({
   // Auth0 — required by the web service (see config/auth.ts), but optional here
   // so DB-only workloads (the reset-feature-flags cron, migrations, scripts) can
   // boot without them. auth.ts validates their presence at the point of use.
+  // The correct names. NEXT_PUBLIC_ is a Next.js build-time convention meaning
+  // "inline this into the browser bundle", and it means nothing to Express — so
+  // wearing it here was always just wrong rather than dangerous. The danger is
+  // the copy: the moment one of these names is pasted into the frontend's
+  // environment, anything under that prefix ships to every visitor. Naming them
+  // correctly on this side removes the tempting thing to copy.
+  AUTH0_AUDIENCE: z.string().min(1).optional(),
+  AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
+  // The old names, still read so a deploy can rename its variables without a
+  // window where the API cannot validate a token. Remove once both sides carry
+  // the new ones.
   NEXT_PUBLIC_AUTH0_AUDIENCE: z.string().min(1).optional(),
   NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
 

@@ -2,14 +2,14 @@ import { auth } from 'express-oauth2-jwt-bearer';
 import type { Request, Response, NextFunction } from 'express';
 import { env } from './env.js';
 
-const audience = env.NEXT_PUBLIC_AUTH0_AUDIENCE;
-const issuerBaseURL = env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL;
+const audience = env.AUTH0_AUDIENCE ?? env.NEXT_PUBLIC_AUTH0_AUDIENCE;
+const issuerBaseURL = env.AUTH0_ISSUER_BASE_URL ?? env.NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL;
 
 // These are optional in the env schema so DB-only crons/scripts can boot without
 // them; the web service genuinely needs them, so fail fast with a clear message.
 if (!audience || !issuerBaseURL) {
   throw new Error(
-    'Auth0 config missing: set NEXT_PUBLIC_AUTH0_AUDIENCE and NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL',
+    'Auth0 config missing: set AUTH0_AUDIENCE and AUTH0_ISSUER_BASE_URL',
   );
 }
 
