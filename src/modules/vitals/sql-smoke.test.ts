@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 
 /**
  * The vitals version filters, executed by a real Postgres.
@@ -28,11 +28,11 @@ beforeAll(() => {
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
-afterAll(async () => {
-  if (!DATABASE_URL) return;
-  const { pool } = await import('../../config/database.js');
-  await pool.end();
-});
+// No teardown here on purpose. This file borrows the app's own pool rather than
+// building a second one, so it picks up whatever TLS the connection needs
+// instead of restating it - and the shared setup already ends that pool once
+// the file is done. Ending it here too is how you get "Called end on pool more
+// than once", which fails the suite after every test in it has passed.
 
 // Good versions mixed with the shapes that actually break the cast.
 const SAMPLE = ['4.11.1', '4.9.0', '3.2.0', 'dev', 'v5.0.0', '', '4.x.1'];
@@ -53,9 +53,12 @@ describe.skipIf(!DATABASE_URL)('vitals version SQL against a real database', () 
     const { buildVersionConditions } = await import('./repository.js');
     const { conditions, params } = buildVersionConditions('4', 'major', SAMPLE.length + 1);
 
+    // '4.x.1' belongs here: its major segment is 4, and major mode has no
+    // business reading the segments after it.
     await expect(selectSampleVersions(`TRUE ${conditions}`, params)).resolves.toEqual([
       '4.11.1',
       '4.9.0',
+      '4.x.1',
     ]);
   });
 
@@ -66,7 +69,15 @@ describe.skipIf(!DATABASE_URL)('vitals version SQL against a real database', () 
     await expect(selectSampleVersions(`TRUE ${conditions}`, params)).resolves.toEqual(['4.11.1']);
   });
 
-  test.each(['dev', 'v5.0.0', ''])(
+  test('an empty ?v filters nothing, the same as leaving it off', async () => {
+    const { buildVersionConditions } = await import('./repository.js');
+    const { conditions, params } = buildVersionConditions('', 'major', SAMPLE.length + 1);
+
+    expect(conditions).toBe('');
+    await expect(selectSampleVersions(`TRUE ${conditions}`, params)).resolves.toEqual(SAMPLE);
+  });
+
+  test.each(['dev', 'v5.0.0', 'nightly'])(
     'a filter built from %j returns nothing instead of raising',
     async (v) => {
       const { buildVersionConditions } = await import('./repository.js');

@@ -13,6 +13,42 @@ const MIN_PAGE_SAMPLES = 5;
 
 export { VALID_METRICS, VALID_RATINGS };
 
+/**
+ * Versions whose every segment is a number, so string_to_array(...)::int[] can
+ * sort them. Anything else raises out of the cast and fails the statement, and
+ * because that cast sits in an ORDER BY it does so with no version filter in
+ * play at all. Whatever is written into app_version, one row of it must not be
+ * able to take an endpoint down.
+ */
+export const SORTABLE_VERSION = "app_version ~ '^[0-9]+([.][0-9]+)*$'";
+
+/**
+ * The same check for one segment of a version, for the filters that cast a
+ * segment rather than the whole string.
+ *
+ * @param index 1-based segment position, matching split_part
+ */
+function segmentIsNumeric(index: number): string {
+  return `split_part(app_version, '.', ${index}) ~ '^[0-9]+$'`;
+}
+
+// A bad version matches nothing rather than raising, and rather than dropping
+// the filter and quietly returning every version instead of none.
+const MATCHES_NOTHING = 'AND FALSE';
+
+/**
+ * SQL to narrow web_vitals to one version, exact or by major/minor prefix.
+ *
+ * A version that isn't a number can arrive from either side: stored in the
+ * column, or passed as ?v. Both used to reach the ::int cast, which raises for
+ * the whole statement. So the SQL checks a segment before casting it, and a ?v
+ * that isn't a number matches nothing - which is what a malformed query param
+ * already does on these endpoints.
+ *
+ * @param v version to filter on, or undefined for no filter
+ * @param mode 'major', 'minor', or anything else for an exact match
+ * @param startParam 1-based placeholder number to start from
+ */
 export function buildVersionConditions(
   v: string | undefined,
   mode: string | undefined,
@@ -21,21 +57,33 @@ export function buildVersionConditions(
   if (!v) return { conditions: '', params: [], nextParam: startParam };
 
   if (mode === 'major') {
+    const major = Number.parseInt(v, 10);
+    if (Number.isNaN(major)) {
+      return { conditions: MATCHES_NOTHING, params: [], nextParam: startParam };
+    }
     return {
       conditions: `AND app_version != 'unknown'
+         AND ${segmentIsNumeric(1)}
          AND split_part(app_version, '.', 1)::int = $${startParam}`,
-      params: [parseInt(v, 10)],
+      params: [major],
       nextParam: startParam + 1,
     };
   }
 
   if (mode === 'minor') {
     const parts = v.split('.');
+    const major = Number.parseInt(parts[0], 10);
+    const minor = Number.parseInt(parts[1], 10);
+    if (Number.isNaN(major) || Number.isNaN(minor)) {
+      return { conditions: MATCHES_NOTHING, params: [], nextParam: startParam };
+    }
     return {
       conditions: `AND app_version != 'unknown'
+         AND ${segmentIsNumeric(1)}
+         AND ${segmentIsNumeric(2)}
          AND split_part(app_version, '.', 1)::int = $${startParam}
          AND split_part(app_version, '.', 2)::int = $${startParam + 1}`,
-      params: [parseInt(parts[0], 10), parseInt(parts[1], 10)],
+      params: [major, minor],
       nextParam: startParam + 2,
     };
   }
@@ -164,7 +212,7 @@ export class VitalsRepository {
       `
       SELECT app_version
       FROM web_vitals
-      WHERE app_version != 'unknown' ${conditions}
+      WHERE app_version != 'unknown' AND ${SORTABLE_VERSION} ${conditions}
       GROUP BY app_version
       ORDER BY string_to_array(app_version, '.')::int[] DESC
       LIMIT ${limit}
@@ -209,7 +257,7 @@ export class VitalsRepository {
     const result = await pool.query(`
       SELECT app_version
       FROM web_vitals
-      WHERE app_version != 'unknown'
+      WHERE app_version != 'unknown' AND ${SORTABLE_VERSION}
       GROUP BY app_version
       ORDER BY string_to_array(app_version, '.')::int[] DESC
     `);
