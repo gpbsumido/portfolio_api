@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-15 - version 4.11.2
+
+- **One junk `app_version` row can no longer 500 the vitals dashboard.** The major and minor filters cast `split_part(app_version, '.', 1)` to int guarded only by `!= 'unknown'`, and the version sorts cast the whole string to `int[]` with no guard at all — so a single `"dev"` row turned `/versions` and `/by-version` into 500s for every caller, and any major/minor query with it. Both paths now share a `SORTABLE_VERSION` regex gate, and a non-numeric `?v` matches nothing and returns 200 empty, which is what this module already did for a junk `?v` without a mode.
+- **The changelog is a gate again.** This file sat at 4.2.1 while the service shipped 4.11.1 — nine releases recorded only as version bumps in diffs. A test now fails any bump that lands without a matching entry here, the same guard paul-explore carries for the same reason. The gap between 4.2.1 and this entry stays a gap on purpose: back-filling nine releases from git archaeology would present reconstruction as record.
+
 ## 2026-08-05 - version 4.2.1
 
 - **Documented the operator demo re-seed cron.** The job has existed since the operator work landed, but nothing wrote down how to run it, and it needs its own Railway cron service — a service carries one schedule and one `CRON_JOB`, so it can't share the feature-flags reset's. The README now covers the source and start command, the `0 4 * * *` schedule, the four variables, and the two things that bite: setting those vars project-wide boots the *web* service into cron mode, and `NODE_ENV=production` is required for SSL against the Railway Postgres. Also spells out that the job wipes and re-inserts the `operator_*` tables, so anything a visitor changed is reset — paul-explore says as much on the dashboard.
