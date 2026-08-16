@@ -18,7 +18,8 @@
     "migrate:rollback": "tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile knexfile.ts",
     "migrate:make": "tsx node_modules/knex/bin/cli.js migrate:make --knexfile knexfile.ts -x ts",
     "prepare": "husky",
-    "seed:operator": "tsx scripts/operator/seed.ts"
+    "seed:operator": "tsx scripts/operator/seed.ts",
+    "deps:weight": "tsx scripts/dependency-weight.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
