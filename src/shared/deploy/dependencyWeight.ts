@@ -19,9 +19,13 @@
  * actually waits on; this one measures a correlate of the time a container
  * actually waits on. The honest version of that difference is worth more than
  * a number that looks equivalent and isn't — so the guard gates the two
- * figures that are deterministic (install bytes, package count) and leaves
- * boot time itself to be measured by hand, because a wall clock on a shared
- * runner is noise wearing a metric's clothes.
+ * figures that are reproducible (install bytes, package count) and leaves boot
+ * time itself to be measured by hand, because a wall clock on a shared runner
+ * is noise wearing a metric's clothes.
+ *
+ * Reproducible means byte-identical run to run on a given host, not identical
+ * everywhere: a Mac reads about 20 MiB heavier than CI does. The budget file
+ * has the detail and the reason that gap is safe.
  */
 
 /** What a budget is measured in. Bytes render as MiB, counts render bare. */

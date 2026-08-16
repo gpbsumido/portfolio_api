@@ -42,9 +42,12 @@ import {
 /**
  * The machine that actually cold starts.
  *
- * Pinning this is what makes the figure comparable between a laptop and CI:
- * sharp resolves a different prebuilt libvips per platform, an 18 MiB swing
- * that has nothing to do with any change under review.
+ * Pinning narrows the gap between a laptop and CI without closing it. sharp
+ * resolves a different prebuilt libvips per platform, and pnpm can only filter
+ * by libc when it is running on that libc — off linux it keeps both the glibc
+ * and musl builds, so a Mac reads about 20 MiB and two packages heavier than
+ * CI does. The local reading being the higher one is what makes that safe: a
+ * laptop run that passes cannot be a CI run that fails.
  */
 const DEPLOY_TARGET = {
   os: ['linux'],

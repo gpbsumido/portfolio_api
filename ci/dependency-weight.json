@@ -21,11 +21,17 @@
     "directory, with supportedArchitectures pinned to linux/x64/glibc, then a walk of the resulting tree",
     "deduplicating by inode so pnpm's hardlinks and symlinks are each counted once.",
     "",
-    "The architecture pin is what makes this comparable at all. sharp ships a different prebuilt libvips",
-    "per platform, so the same lockfile unpinned resolves 423.59 MiB across 331 packages on an arm64 Mac",
-    "against 441.98 MiB across 333 for the linux/x64 target — an 18 MiB swing with nothing to do with any",
-    "change under review. Pinning means the figure is identical wherever it runs and describes the machine",
-    "that actually cold starts.",
+    "The architecture pin exists because sharp ships a different prebuilt libvips per platform, so an",
+    "unpinned run resolves whatever the host happens to be. It narrows that; it does not close it, and I",
+    "would rather write down what it actually does than what I first assumed it did. CI, on real linux,",
+    "reads 443,101,142 bytes across 331 packages. The same command on an arm64 Mac reads 463,447,543",
+    "across 333, because pnpm can only filter by libc when it is running on the libc in question — off",
+    "linux it keeps both the glibc and the musl sharp builds, and the extra pair is the 20 MiB gap.",
+    "",
+    "So: byte-identical run to run on one machine, about 20 MiB apart between a Mac and CI. That is",
+    "tolerable in the direction it happens to fall. The local reading is the higher one, so a laptop run",
+    "that passes cannot be a CI run that fails, and CI is the authoritative figure because it is the",
+    "platform that actually cold starts. The budgets below have room for both.",
     "",
     "`--ignore-scripts` is a known understatement, not an oversight. ffmpeg-static downloads its binary",
     "from the network in a postinstall hook, so the real deployed image is larger than the number here by",
@@ -46,12 +52,12 @@
     "installBytes": {
       "limit": 500000000,
       "unit": "bytes",
-      "why": "Total bytes of a production-only install, the proxy for install time and image size on a scale-to-zero boot. Measured 463,447,543 (441.98 MiB) at 4.11.3, byte-identical across repeated runs, so this leaves about 8% headroom. Note that 335 MiB of that is ffprobe-static alone, which ships prebuilt binaries for every platform in its tarball — three quarters of this budget is one dependency, and replacing it is the single change that would move this number."
+      "why": "Total bytes of a production-only install, the proxy for install time and image size on a scale-to-zero boot. At 4.11.3 CI measures 443,101,142 (422.57 MiB) and an arm64 Mac measures 463,447,543 (441.98 MiB), each byte-identical across repeated runs on that host. This leaves about 13% headroom against CI and about 8% against the higher local reading. Note that 335 MiB of it is ffprobe-static alone, which ships prebuilt binaries for every platform in its tarball — three quarters of this budget is one dependency, and replacing it is the single change that would move this number."
     },
     "packageCount": {
       "limit": 360,
       "unit": "count",
-      "why": "Number of resolved production packages including transitives, the proxy for module-resolution work at import time. Measured 333 at 4.11.3, so this leaves about 8% headroom. Counted as entries in the virtual store, so a package resolved twice at different versions counts twice — which is right, because Node pays for both."
+      "why": "Number of resolved production packages including transitives, the proxy for module-resolution work at import time. At 4.11.3 CI measures 331 and an arm64 Mac measures 333, the two extra being the musl sharp builds a non-linux host cannot filter out. About 9% headroom against CI. Counted as entries in the virtual store, so a package resolved twice at different versions counts twice — which is right, because Node pays for both."
     }
   }
 }
