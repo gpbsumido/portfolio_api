@@ -5,7 +5,7 @@
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
+import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -13,7 +13,7 @@ import crypto from 'crypto';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 
 ffmpeg.setFfmpegPath(ffmpegPath as unknown as string);
-ffmpeg.setFfprobePath(ffprobeStatic.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 const ALLOWED_IMAGE_MIME = new Set([
   'image/jpeg',
