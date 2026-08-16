@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from 'express';
-import sharp from 'sharp';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 
 /** The three formats the resize branches below can actually emit. */
@@ -55,6 +54,10 @@ export class GalleryController {
       let outputFormat: string;
       let contentType: string;
 
+      // sharp is loaded on demand rather than at module scope. It is a native
+      // binding worth about 40ms to import, this service scales to zero, and the
+      // overwhelming majority of cold starts never resize an image.
+      const { default: sharp } = await import('sharp');
       const transformer = sharp(file.buffer)
         .rotate()
         .resize({ width: 1024, withoutEnlargement: true });

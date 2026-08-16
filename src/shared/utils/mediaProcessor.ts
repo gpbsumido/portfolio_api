@@ -11,40 +11,25 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
+import {
+  ALLOWED_IMAGE_MIME,
+  ALLOWED_VIDEO_MIME,
+  type ProcessedImage,
+  type ProcessedVideo,
+} from './mediaTypes.js';
 
 ffmpeg.setFfmpegPath(ffmpegPath as unknown as string);
 ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
-const ALLOWED_IMAGE_MIME = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-]);
-
-const ALLOWED_VIDEO_MIME = new Set([
-  'video/mp4',
-  'video/quicktime',
-  'video/webm',
-  'video/x-matroska',
-]);
-
-export { ALLOWED_IMAGE_MIME, ALLOWED_VIDEO_MIME };
-
-export interface ProcessedImage {
-  fullBuffer: Buffer;
-  thumbBuffer: Buffer;
-  blurDataUrl: string;
-  width: number | undefined;
-  height: number | undefined;
-}
-
-export interface ProcessedVideo {
-  thumbBuffer: Buffer;
-  width: number;
-  height: number;
-  duration: number;
-}
+// Re-exported so existing importers of this module keep working. The
+// definitions live in mediaTypes.ts, which callers can import without loading
+// sharp and ffmpeg with them.
+export {
+  ALLOWED_IMAGE_MIME,
+  ALLOWED_VIDEO_MIME,
+  type ProcessedImage,
+  type ProcessedVideo,
+} from './mediaTypes.js';
 
 export async function processImage(buffer: Buffer): Promise<ProcessedImage> {
   // 1. Validate MIME from magic bytes (not the header)
