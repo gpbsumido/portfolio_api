@@ -1,0 +1,63 @@
+{
+  "$comment": [
+    "Budgets for the weight of this service's production dependency tree, checked by `pnpm deps:weight`.",
+    "",
+    "paul-explore gained a gzipped first-load-JS budget (gpbsumido/paul-explore#396). That metric is",
+    "meaningless here — this service ships no browser bundle, so the same check would produce a number",
+    "that can go red without anything being wrong, which is worse than no check at all.",
+    "",
+    "What costs a user on this service is cold start. It scales to zero — fly.toml sets",
+    "`auto_stop_machines = \"stop\"` and `min_machines_running = 0` — so a full boot sits on the critical",
+    "path of someone's first request. The two things that drive that boot are how much has to be",
+    "installed and paged in, and how much work happens at import time. These budgets guard the first of",
+    "those.",
+    "",
+    "Say the quiet part: dependency weight is a PROXY for cold start, not cold start. paul-explore's",
+    "budget measures the bytes a browser genuinely waits on; this one measures a correlate. It is gated",
+    "anyway because it is deterministic and the thing it correlates with is not — see 'what is not",
+    "budgeted' below.",
+    "",
+    "How the numbers are taken: a `pnpm install --prod --frozen-lockfile --ignore-scripts` into a throwaway",
+    "directory, with supportedArchitectures pinned to linux/x64/glibc, then a walk of the resulting tree",
+    "deduplicating by inode so pnpm's hardlinks and symlinks are each counted once.",
+    "",
+    "The architecture pin exists because sharp ships a different prebuilt libvips per platform, so an",
+    "unpinned run resolves whatever the host happens to be. It narrows that; it does not close it, and I",
+    "would rather write down what it actually does than what I first assumed it did. CI, on real linux,",
+    "reads 443,101,142 bytes across 331 packages. The same command on an arm64 Mac reads 463,447,543",
+    "across 333, because pnpm can only filter by libc when it is running on the libc in question — off",
+    "linux it keeps both the glibc and the musl sharp builds, and the extra pair is the 20 MiB gap.",
+    "",
+    "So: byte-identical run to run on one machine, about 20 MiB apart between a Mac and CI. That is",
+    "tolerable in the direction it happens to fall. The local reading is the higher one, so a laptop run",
+    "that passes cannot be a CI run that fails, and CI is the authoritative figure because it is the",
+    "platform that actually cold starts. The budgets below have room for both.",
+    "",
+    "`--ignore-scripts` is a known understatement, not an oversight. ffmpeg-static downloads its binary",
+    "from the network in a postinstall hook, so the real deployed image is larger than the number here by",
+    "roughly that binary. That download is not pinned by the lockfile and not reproducible offline, so",
+    "including it would trade a deterministic gate for a flaky one. This measures what the lockfile can",
+    "account for.",
+    "",
+    "What is not budgeted, and why:",
+    "- Boot wall-clock. Importing the built app takes 268-294 ms on an idle laptop; on a shared CI runner",
+    "  that spread is far wider. Gating on it would produce failures that re-run green, and a guard that",
+    "  flakes gets ignored or deleted. Measure it by hand when it matters.",
+    "- Bundle size. There is no bundle. See above.",
+    "",
+    "Raising a budget is a fine thing to do when the weight bought something. Do it in the same commit as",
+    "the dependency, so the diff shows the trade rather than just the fix."
+  ],
+  "budgets": {
+    "installBytes": {
+      "limit": 500000000,
+      "unit": "bytes",
+      "why": "Total bytes of a production-only install, the proxy for install time and image size on a scale-to-zero boot. At 4.11.3 CI measures 443,101,142 (422.57 MiB) and an arm64 Mac measures 463,447,543 (441.98 MiB), each byte-identical across repeated runs on that host. This leaves about 13% headroom against CI and about 8% against the higher local reading. Note that 335 MiB of it is ffprobe-static alone, which ships prebuilt binaries for every platform in its tarball — three quarters of this budget is one dependency, and replacing it is the single change that would move this number."
+    },
+    "packageCount": {
+      "limit": 360,
+      "unit": "count",
+      "why": "Number of resolved production packages including transitives, the proxy for module-resolution work at import time. At 4.11.3 CI measures 331 and an arm64 Mac measures 333, the two extra being the musl sharp builds a non-linux host cannot filter out. About 9% headroom against CI. Counted as entries in the virtual store, so a package resolved twice at different versions counts twice — which is right, because Node pays for both."
+    }
+  }
+}
