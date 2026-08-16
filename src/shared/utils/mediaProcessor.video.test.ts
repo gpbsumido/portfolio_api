@@ -1,7 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { processVideo } from './mediaProcessor.js';
 
@@ -20,9 +19,12 @@ import { processVideo } from './mediaProcessor.js';
  * clip and asserts on values that only a working probe can produce.
  */
 
+// Resolved from the repo root rather than this file, because tsc emits
+// CommonJS here and import.meta is off the table. Vitest always runs with the
+// project root as cwd, which is the only place this is ever read from.
 const fixturePath = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../testing/fixtures/tiny-video.mp4',
+  process.cwd(),
+  'src/shared/testing/fixtures/tiny-video.mp4',
 );
 
 /**

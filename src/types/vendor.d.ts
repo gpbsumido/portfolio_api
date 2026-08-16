@@ -23,11 +23,6 @@ declare module 'fluent-ffmpeg' {
   export = ffmpeg;
 }
 
-declare module 'ffprobe-static' {
-  const ffprobe: { path: string };
-  export = ffprobe;
-}
-
 declare module 'ffmpeg-static' {
   const ffmpegPath: string;
   export = ffmpegPath;
