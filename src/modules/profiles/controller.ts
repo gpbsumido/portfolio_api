@@ -4,7 +4,6 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
-import sharp from 'sharp';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { NotFoundError, ValidationError, ConflictError } from '../../shared/errors/AppError.js';
 
@@ -126,6 +125,10 @@ export class ProfilesController {
 
     let avatarBuffer: Buffer;
     try {
+      // sharp is loaded on demand rather than at module scope. It is a native
+      // binding worth about 40ms to import, this service scales to zero, and the
+      // overwhelming majority of cold starts never resize an image.
+      const { default: sharp } = await import('sharp');
       avatarBuffer = await sharp(file.buffer)
         .rotate()
         .resize({ width: 200, height: 200, fit: 'cover' })
