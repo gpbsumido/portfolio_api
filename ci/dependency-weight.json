@@ -24,11 +24,16 @@
     "The architecture pin exists because sharp ships a different prebuilt libvips per platform, so an",
     "unpinned run resolves whatever the host happens to be. It narrows that; it does not close it, and I",
     "would rather write down what it actually does than what I first assumed it did. CI, on real linux,",
-    "reads 170,541,682 bytes across 332 packages. The same command on an arm64 Mac reads 190,888,101",
+    "reads 170,541,700 bytes across 332 packages. The same command on an arm64 Mac reads 190,888,101",
     "across 334, because pnpm can only filter by libc when it is running on the libc in question — off",
     "linux it keeps both the glibc and the musl sharp builds, and the extra pair is the 20 MiB gap.",
     "",
-    "That gap is worth more attention now than it was at 4.11.3. It is the same 20,346,419 bytes it",
+    "One correction to 'byte-identical', which is true per host and not across hosts. I measured this in",
+    "a local linux/amd64 container before CI ran and got 170,541,682, eighteen bytes under the runner.",
+    "Both are stable on repeat. Eighteen bytes on 170 MB changes no decision, but the honest form of the",
+    "claim is that the figure is reproducible on a given machine, and CI's is the one that counts.",
+    "",
+    "That gap is worth more attention now than it was at 4.11.3. It is the same 20,346,401 bytes it",
     "always was, but the tree it sits in is 61% smaller, so it went from 4.6% of the total to 12%. The",
     "local reading is still the higher one, so a laptop run that passes cannot be a CI run that fails,",
     "and CI is still the authoritative figure because it is the platform that actually cold starts. What",
@@ -63,7 +68,7 @@
     "installBytes": {
       "limit": 210000000,
       "unit": "bytes",
-      "why": "Total bytes of a production-only install, the proxy for install time and image size on a scale-to-zero boot. At 4.11.4 CI measures 170,541,682 (162.64 MiB) and an arm64 Mac measures 190,888,101 (182.05 MiB), each byte-identical across repeated runs on that host. This leaves about 23% headroom against CI and about 10% against the higher local reading, which is the one that binds. Down from 500,000,000 at 4.11.3, when the tree was 443,101,142 on CI: replacing ffprobe-static with @ffprobe-installer/ffprobe took 272,559,460 bytes out, because the old package shipped a prebuilt ffprobe for six platforms in one tarball and this service runs one of them. Leaving the budget at its old ceiling after a win that size would have left a number that could not fail."
+      "why": "Total bytes of a production-only install, the proxy for install time and image size on a scale-to-zero boot. At 4.11.4 CI measures 170,541,700 (162.64 MiB) and an arm64 Mac measures 190,888,101 (182.05 MiB), each stable across repeated runs on that host. This leaves about 23% headroom against CI and about 10% against the higher local reading, which is the one that binds. Down from 500,000,000 at 4.11.3, when the tree was 443,101,142 on CI: replacing ffprobe-static with @ffprobe-installer/ffprobe took 272,559,442 bytes out on both platforms, because the old package shipped a prebuilt ffprobe for six platforms in one tarball and this service runs one of them. Leaving the budget at its old ceiling after a win that size would have left a number that could not fail."
     },
     "packageCount": {
       "limit": 360,
