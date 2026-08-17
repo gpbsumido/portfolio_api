@@ -106,3 +106,31 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: test -f dist/index.js
+
+  weight:
+    name: Dependency Weight
+    runs-on: ubuntu-latest
+    # Cold start is the thing a user waits on here, because this service scales
+    # to zero. This job guards the deterministic proxies for it — production
+    # install bytes and package count — against ci/dependency-weight.json.
+    #
+    # Its own job rather than a step on build, for one reason: it shares nothing
+    # with the build. It reads package.json and the lockfile, not dist/, so a
+    # broken tsc has no bearing on whether the dependency tree got heavier and
+    # shouldn't hide that it did. paul-explore's equivalent has to run on
+    # `always()` with a flag for "nothing to measure", because there the
+    # measurement is of build output and a failed build leaves it nothing to
+    # read. Independence gets the same result here without the special case.
+    #
+    # Cost is one runner: checkout, a store-cached install, then a link-only
+    # `pnpm install --prod` into a temp dir (~2s warm) and a walk of ~14.5k
+    # files (~0.7s). Well under a minute, and it runs in parallel with the rest.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run deps:weight

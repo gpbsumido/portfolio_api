@@ -20,6 +20,20 @@ import {
 } from '../../config/drizzle/schema.js';
 import { buildOperatorSeed } from './seed-data.js';
 
+// Postgres caps a statement at 65535 bind parameters. A sale carries 8 columns,
+// and a realistic fleet seeds tens of thousands of them, so the sales insert is
+// batched. 1000 rows is 8000 parameters, a comfortable margin.
+const SALES_INSERT_CHUNK = 1000;
+
+/** Splits an array into fixed-size chunks, preserving order. */
+function chunk<T>(rows: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) {
+    out.push(rows.slice(i, i + size));
+  }
+  return out;
+}
+
 export type SeedCounts = {
   stores: number;
   inventory: number;
@@ -57,7 +71,9 @@ export async function seedOperator(now: Date = new Date()): Promise<SeedCounts> 
     if (data.alerts.length) await tx.insert(operatorAlerts).values(data.alerts);
     if (data.activity.length)
       await tx.insert(operatorActivity).values(data.activity);
-    if (data.sales.length) await tx.insert(operatorSales).values(data.sales);
+    for (const batch of chunk(data.sales, SALES_INSERT_CHUNK)) {
+      await tx.insert(operatorSales).values(batch);
+    }
     if (data.planograms.length)
       await tx.insert(operatorPlanograms).values(data.planograms);
   });

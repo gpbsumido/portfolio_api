@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "4.11.1",
+  "version": "4.11.6",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -18,7 +18,8 @@
     "migrate:rollback": "tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile knexfile.ts",
     "migrate:make": "tsx node_modules/knex/bin/cli.js migrate:make --knexfile knexfile.ts -x ts",
     "prepare": "husky",
-    "seed:operator": "tsx scripts/operator/seed.ts"
+    "seed:operator": "tsx scripts/operator/seed.ts",
+    "deps:weight": "tsx scripts/dependency-weight.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
@@ -29,6 +30,7 @@
     "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/lib-storage": "^3.995.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
@@ -37,7 +39,6 @@
     "express-oauth2-jwt-bearer": "^1.6.1",
     "express-rate-limit": "^8.6.2",
     "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0",
     "file-type": "^16.5.4",
     "fluent-ffmpeg": "^2.1.3",
     "helmet": "^7.0.0",
@@ -81,6 +82,13 @@
     "vitest": "^4.1.10"
   },
   "packageManager": "pnpm@10.34.5",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@ffprobe-installer/darwin-arm64",
+      "@ffprobe-installer/linux-x64",
+      "ffmpeg-static"
+    ]
+  },
   "engines": {
     "node": ">=22.0.0"
   }

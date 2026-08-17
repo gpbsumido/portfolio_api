@@ -8,13 +8,20 @@ import type { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import { WallsRepository } from './repository.js';
 import { WallsService, type WallUpload } from './service.js';
-import { processImage } from '../../shared/utils/mediaProcessor.js';
 import { UnauthorizedError, ValidationError } from '../../shared/errors/AppError.js';
 import type { WallState } from './types.js';
 
 const service = new WallsService({
   repo: new WallsRepository(),
-  processImage,
+  // A thin wrapper rather than the function itself: passing the real one here
+  // would import sharp and ffmpeg while this module is still being evaluated,
+  // which is the boot cost this indirection exists to avoid.
+  processImage: async (buffer: Buffer) => {
+    const { processImage } = await import(
+      '../../shared/utils/mediaProcessor.js'
+    );
+    return processImage(buffer);
+  },
   now: () => new Date().toISOString(),
   idGen: () => randomUUID(),
 });

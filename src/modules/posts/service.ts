@@ -10,10 +10,8 @@ import { s3, S3_BUCKET, CDN_BASE } from '../../config/s3.js';
 import {
   type ProcessedImage,
   type ProcessedVideo,
-  processImage,
-  processVideo,
   ALLOWED_VIDEO_MIME,
-} from '../../shared/utils/mediaProcessor.js';
+} from '../../shared/utils/mediaTypes.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
 import { ValidationError } from '../../shared/errors/AppError.js';
 import * as repo from './repository.js';
@@ -65,6 +63,12 @@ export async function createPhotoPost(
       if (detected && ALLOWED_VIDEO_MIME.has(detected.mime)) {
         let vidProcessed: ProcessedVideo;
         try {
+          // Loaded here rather than at module scope: sharp and ffmpeg cost
+          // about 50ms to import and this service boots on every cold start,
+          // almost always to serve a request that never touches media.
+          const { processVideo } = await import(
+            '../../shared/utils/mediaProcessor.js'
+          );
           vidProcessed = await processVideo(fileBuffer);
         } catch (vidErr: any) {
           await client.query('ROLLBACK');
@@ -96,6 +100,9 @@ export async function createPhotoPost(
       } else {
         let processed: ProcessedImage;
         try {
+          const { processImage } = await import(
+            '../../shared/utils/mediaProcessor.js'
+          );
           processed = await processImage(fileBuffer);
         } catch (imgErr: any) {
           await client.query('ROLLBACK');
