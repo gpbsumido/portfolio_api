@@ -24,7 +24,10 @@ describe('buildOperatorSeed', () => {
       seed.stores.length * (PRODUCTS_PER_STORE + 2),
     );
     expect(seed.activity).toHaveLength(36); // 6 x 6
-    expect(seed.sales).toHaveLength(360); // 6 x 60
+    // Sales are modelled per machine per day (~12 x busyness over 540 days), so
+    // the fleet total lands in a realistic band rather than a fixed count.
+    expect(seed.sales.length).toBeGreaterThan(30_000);
+    expect(seed.sales.length).toBeLessThan(60_000);
     expect(seed.planograms).toHaveLength(6);
   });
 

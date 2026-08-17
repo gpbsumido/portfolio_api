@@ -157,8 +157,22 @@ function rand(seed: number): number {
   return x - Math.floor(x);
 }
 
-const SALES_PER_STORE = 60;
+// Sales volume is modelled as transactions per machine per day, not a flat
+// total, because the finance model charges a platform fee per machine per week
+// regardless of sales. A sparse seed makes that fee swamp revenue and every
+// payout reads negative; a realistic vending throughput keeps the fee a small
+// cut of a healthy gross, the way a real operator's numbers look. Each machine's
+// rate is scaled by how busy its location is (a lobby fridge and a cafeteria
+// outsell a parking-garage kiosk), and jittered per day so no two weeks match.
+const SALES_PER_MACHINE_PER_DAY = 12;
 const SALES_SPAN_DAYS = 540;
+
+/**
+ * Per-location busyness, one weight per STORE_DEFS entry. Roughly: a main-lobby
+ * fridge and a cafeteria unit are busy, a gym and a parking-garage kiosk are
+ * quiet. Averages near 1 so the base rate reads as the fleet average.
+ */
+const STORE_BUSYNESS = [1.5, 1.0, 1.7, 0.8, 0.5, 1.1] as const;
 
 /**
  * Builds the full demo dataset. `uuid` supplies ids (inject a counter in tests
@@ -274,21 +288,33 @@ export function buildOperatorSeed(
       });
     });
 
-    // Sales spread across ~18 months so every analytics range has data.
-    for (let s = 0; s < SALES_PER_STORE; s++) {
-      const product = PRODUCTS[s % PRODUCTS.length];
-      const quantity = 1 + Math.floor(rand(storeIndex * 100 + s) * 3);
-      const daysAgo = SALES_SPAN_DAYS * ((s + rand(s)) / SALES_PER_STORE);
-      seed.sales.push({
-        id: uuid(),
-        storeId,
-        productName: product.name,
-        category: product.category,
-        unitPrice: product.price,
-        quantity,
-        total: Number((product.price * quantity).toFixed(2)),
-        occurredAt: new Date(nowMs - daysAgo * MS_PER_DAY),
-      });
+    // Sales at a realistic daily throughput across ~18 months, so both the
+    // finance window and every analytics range have real volume to reconcile.
+    const dailyRate = SALES_PER_MACHINE_PER_DAY * STORE_BUSYNESS[storeIndex];
+    for (let day = 0; day < SALES_SPAN_DAYS; day++) {
+      // Jitter each day's count by +/-30% so weekly buckets differ naturally.
+      const dayFactor = 0.7 + rand(storeIndex * 1000 + day) * 0.6;
+      const count = Math.round(dailyRate * dayFactor);
+      for (let k = 0; k < count; k++) {
+        const salt = storeIndex * 100_000 + day * 37 + k;
+        const product = PRODUCTS[(storeIndex + day + k) % PRODUCTS.length];
+        const quantity = 1 + Math.floor(rand(salt) * 3);
+        // A random moment within that calendar day, so timestamps are lifelike
+        // and stay strictly in the past (day 0 lands somewhere in the last 24h).
+        const secondsIntoDay = Math.floor(rand(salt + 7) * 86_400);
+        seed.sales.push({
+          id: uuid(),
+          storeId,
+          productName: product.name,
+          category: product.category,
+          unitPrice: product.price,
+          quantity,
+          total: Number((product.price * quantity).toFixed(2)),
+          occurredAt: new Date(
+            nowMs - day * MS_PER_DAY - secondsIntoDay * 1000,
+          ),
+        });
+      }
     }
 
     // Planogram: items in order, padded to full shelves plus one spare shelf.
