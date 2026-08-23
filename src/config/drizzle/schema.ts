@@ -397,3 +397,40 @@ export const operatorSales = pgTable("operator_sales", {
 
 export type OperatorSale = InferSelectModel<typeof operatorSales>;
 export type NewOperatorSale = InferInsertModel<typeof operatorSales>;
+
+// ── card_wallets ─────────────────────────────────────────────────────────────
+// Fantasy TCG coin wallet, one row per user (scoped by Auth0 sub, no FK).
+export const cardWallets = pgTable("card_wallets", {
+  userSub: text("user_sub").primaryKey(),
+  balance: integer("balance").notNull().default(0),
+  lastClaimDate: text("last_claim_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type CardWallet = InferSelectModel<typeof cardWallets>;
+export type NewCardWallet = InferInsertModel<typeof cardWallets>;
+
+// ── card_pulls ───────────────────────────────────────────────────────────────
+// A card a user pulled from a pack. Contents are denormalised so the collection
+// renders without regenerating from ESPN.
+export const cardPulls = pgTable("card_pulls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub").notNull(),
+  cardId: text("card_id").notNull(),
+  sport: text("sport").notNull(),
+  playerId: integer("player_id").notNull(),
+  playerName: text("player_name").notNull(),
+  points: integer("points").notNull(),
+  rarity: text("rarity").notNull(),
+  periodId: text("period_id").notNull(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle").notNull(),
+  imageUrl: text("image_url").notNull(),
+  opponent: text("opponent"),
+  home: boolean("home"),
+  pulledAt: timestamp("pulled_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type CardPull = InferSelectModel<typeof cardPulls>;
+export type NewCardPull = InferInsertModel<typeof cardPulls>;
