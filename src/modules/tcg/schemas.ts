@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /** Card rarities, matching the paul-explore generator. */
 export const raritySchema = z.enum(['common', 'uncommon', 'rare', 'sir']);
-export const sportSchema = z.enum(['nba', 'wnba']);
+export const sportSchema = z.enum(['nba', 'wnba', 'nfl']);
 
 /**
  * A card in a pack. The BFF generates these from real ESPN data and draws the

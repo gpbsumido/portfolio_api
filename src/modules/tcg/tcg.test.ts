@@ -93,6 +93,17 @@ describe('opening a pack', () => {
     expect(repo.openPack).toHaveBeenCalledWith('auth0|me', 100, expect.any(Array));
   });
 
+  test('accepts NFL cards (sport enum includes nfl)', async () => {
+    vi.mocked(repo.openPack).mockResolvedValue({ ok: true, balance: 400, added: 1 });
+
+    const res = await request(makeApp())
+      .post('/api/tcg/packs/open')
+      .send({ cards: [card({ sport: 'nfl', id: 'nfl-1-2025-wk5', periodId: '2025-wk5' })] });
+
+    expect(res.status).toBe(200);
+    expect(repo.openPack).toHaveBeenCalled();
+  });
+
   test('answers 402 when the wallet is short', async () => {
     vi.mocked(repo.openPack).mockResolvedValue({ ok: false, balance: 50, added: 0 });
 
