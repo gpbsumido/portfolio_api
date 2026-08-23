@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-23 - version 4.12.1
+
+- **Card packs accept NFL cards.** The `tcg` pack-open validator only allowed `nba` and `wnba`, so ripping an NFL pack failed with a 400 ("Invalid enum value … received 'nfl'"). The sport enum now includes `nfl`, matching the three leagues the Card Lab generates. Added a regression test that an NFL card is accepted.
+
 ## 2026-08-22 - version 4.12.0
 
 - **Backend for the Fantasy TCG economy.** New `tcg` module at `/api/tcg`, so the Card Lab in paul-explore can finally keep what people own: a coin wallet and the cards they've pulled, both scoped by Auth0 `sub`. Four endpoints, all behind `checkJwt`: `GET /wallet` (balance), `POST /wallet/claim` (a daily coin grant, idempotent per UTC day so a double-tap can't double-grant), `POST /packs/open` (spend coins to record a drawn pack — cost is server-authoritative, and it answers 402 rather than record a pack nobody paid for), and `GET /collection`.
