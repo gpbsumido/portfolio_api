@@ -55,6 +55,7 @@ Every router mounted in `src/app.ts`, in source order:
 | `/api/operator` | Unattended-retail operator dashboard — stores, inventory, restock sessions, promotions, sales, planogram |
 | `/api/feature-flags` | Flag definitions, evaluation, and the audit log |
 | `/api/todos` | Admin to-do list behind an email allowlist, with per-item revision history, revert, and comments |
+| `/api/tcg` | Fantasy TCG economy — per-user coin wallet, daily claim, pack opening, and card collection |
 | `/api/calendar` | Events, countdowns, and shared calendars (auth) |
 | `/api/gallery` | S3 image upload / delete |
 | `/api/walls` | Saved gallery-wall layouts |
