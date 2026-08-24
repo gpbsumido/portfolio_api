@@ -121,6 +121,52 @@ describe('Vitals endpoints', () => {
       expect(res.status).toBe(400);
     });
 
+    test('rejects a physically-impossible timing value', async () => {
+      // A background-tab load can report an LCP of many minutes; it is not a
+      // real user experience and must not enter the percentile.
+      const app = createApp();
+      const res = await request(app)
+        .post('/api/vitals')
+        .send({ metric: 'LCP', value: 999999, rating: 'poor', page: '/home' });
+
+      expect(res.status).toBe(400);
+    });
+
+    test('rejects an impossible CLS score', async () => {
+      const app = createApp();
+      const res = await request(app)
+        .post('/api/vitals')
+        .send({ metric: 'CLS', value: 50, rating: 'poor', page: '/home' });
+
+      expect(res.status).toBe(400);
+    });
+
+    test('accepts a large-but-plausible timing at the ceiling', async () => {
+      const mockRow = {
+        id: 9,
+        metric: 'LCP',
+        value: 60000,
+        rating: 'poor',
+        page: '/home',
+        nav_type: null,
+        app_version: '1.0.0',
+      };
+      vi.mocked(pool.query).mockResolvedValueOnce({
+        rows: [mockRow],
+        rowCount: 1,
+        command: 'INSERT',
+        oid: 0,
+        fields: [],
+      } as any);
+
+      const app = createApp();
+      const res = await request(app)
+        .post('/api/vitals')
+        .send({ metric: 'LCP', value: 60000, rating: 'poor', page: '/home', app_version: '1.0.0' });
+
+      expect(res.status).toBe(201);
+    });
+
     test('defaults app_version to unknown', async () => {
       const mockRow = {
         id: 2,
