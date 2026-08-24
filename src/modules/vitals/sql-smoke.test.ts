@@ -117,3 +117,44 @@ describe.skipIf(!DATABASE_URL)('vitals version SQL against a real database', () 
     await expect(repo.getVersions()).resolves.toBeDefined();
   });
 });
+
+describe.skipIf(!DATABASE_URL)('vitals value and window SQL against a real database', () => {
+  test('the value bound keeps plausible samples and drops impossible ones', async () => {
+    const { plausibleValueCondition } = await import('./repository.js');
+    const { pool } = await import('../../config/database.js');
+
+    // A real load timing, an impossible one, a real CLS, an impossible CLS, and
+    // a negative. Only the two real ones survive - and the per-metric ceiling is
+    // exercised, since a value of 50 is fine for a timing but garbage for CLS.
+    const rows = `(VALUES
+      ('LCP'::varchar, 1200::float8),
+      ('LCP', 999999),
+      ('CLS', 0.1),
+      ('CLS', 50),
+      ('FCP', -5)
+    ) AS t(metric, value)`;
+    const result = await pool.query(
+      `SELECT metric, value FROM ${rows} WHERE TRUE ${plausibleValueCondition()} ORDER BY metric, value`,
+    );
+
+    expect(result.rows.map((r) => [r.metric, Number(r.value)])).toEqual([
+      ['CLS', 0.1],
+      ['LCP', 1200],
+    ]);
+  });
+
+  test('the recent window keeps rows inside it and drops older ones', async () => {
+    const { recentWindowCondition } = await import('./repository.js');
+    const { pool } = await import('../../config/database.js');
+
+    const rows = `(VALUES
+      ('recent'::varchar, NOW() - INTERVAL '1 day'),
+      ('old', NOW() - INTERVAL '400 days')
+    ) AS t(label, created_at)`;
+    const result = await pool.query(
+      `SELECT label FROM ${rows} WHERE TRUE ${recentWindowCondition()} ORDER BY label`,
+    );
+
+    expect(result.rows.map((r) => r.label)).toEqual(['recent']);
+  });
+});
