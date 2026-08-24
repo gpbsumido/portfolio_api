@@ -1,6 +1,14 @@
 # Changelog
 
-## 2026-08-17 - version 4.11.6
+## 2026-08-23 - version 4.12.1
+
+- **Card packs accept NFL cards.** The `tcg` pack-open validator only allowed `nba` and `wnba`, so ripping an NFL pack failed with a 400 ("Invalid enum value … received 'nfl'"). The sport enum now includes `nfl`, matching the three leagues the Card Lab generates. Added a regression test that an NFL card is accepted.
+
+## 2026-08-22 - version 4.12.0
+
+- **Backend for the Fantasy TCG economy.** New `tcg` module at `/api/tcg`, so the Card Lab in paul-explore can finally keep what people own: a coin wallet and the cards they've pulled, both scoped by Auth0 `sub`. Four endpoints, all behind `checkJwt`: `GET /wallet` (balance), `POST /wallet/claim` (a daily coin grant, idempotent per UTC day so a double-tap can't double-grant), `POST /packs/open` (spend coins to record a drawn pack — cost is server-authoritative, and it answers 402 rather than record a pack nobody paid for), and `GET /collection`.
+- **Two tables via migration `024_card_economy`.** `card_wallets` (one row per user: balance + last claim date) and `card_pulls` (each pulled card, contents denormalised so the collection renders without regenerating from ESPN). Both keyed by `user_sub` with no FK to `users`, matching the `nba_playoff_brackets` pattern, plus a `(user_sub, pulled_at)` index for the newest-first read. The claim and pack-open both run in a transaction so the balance can't drift.
+- The weighted pull odds live in paul-explore's card engine (`RARITY_META.pullWeight`); this side owns the wallet and the collection. Tested with supertest against a mocked repo — auth-scoping, the 402, and body validation.
 
 - **Operator finance read negative on every week, and it was the seed, not the math.** The payout model charges a platform fee per machine per week whether or not the machine sold anything, which is how a real vending contract works. The demo seed did not sell enough to cover it: a flat 60 sales per store spread across 18 months put roughly six transactions a week in front of the whole fleet, against $672 of platform fees over the eight-week window. Every week netted below zero and the headline card sat red. Reproduced it exactly by bucketing the seed the way `weeklyGrossBuckets` does and running `buildFinance` over it: gross $253, fees $686, net -$432. Nothing in the arithmetic was wrong.
 - **Sales are modelled per machine per day now, because that is the number a fee per machine per week has to be weighed against.** A flat lifetime count hides the thing that matters, which is how busy a machine is on a given day. The seed runs at ~12 transactions per machine per day, scaled by how busy the location is — a main-lobby fridge and a cafeteria unit outsell a gym or a parking-garage kiosk — and jittered per day so no two weeks come out identical. Over the same eight weeks the fleet now grosses about $32k against the same $672 of platform fees, nets ~$29.7k, and the platform cut lands at ~2% of gross, which is what that line should look like. The 540-day history stays, so the day/week/month/year analytics still have depth behind them.
