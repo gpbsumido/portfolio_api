@@ -1,4 +1,5 @@
 import { pool } from '../../config/database.js';
+import { PLAUSIBLE_MAX } from './types.js';
 import type {
   VitalRow,
   MetricSummary,
@@ -95,6 +96,35 @@ export function buildVersionConditions(
   };
 }
 
+/**
+ * WHERE fragment keeping only physically-plausible samples. CLS is a unitless
+ * score, the other four are milliseconds, so the ceiling is chosen per row by
+ * metric. Static SQL with no parameters, so it drops into any read query
+ * without disturbing the caller's $n numbering. This is what stops one
+ * impossible value (a background-tab load reported as a multi-minute LCP) from
+ * living in a percentile forever, given the table is aggregated with no bound.
+ */
+export function plausibleValueCondition(): string {
+  return `AND value >= 0
+     AND value <= CASE WHEN metric = 'CLS' THEN ${PLAUSIBLE_MAX.cls} ELSE ${PLAUSIBLE_MAX.timing} END`;
+}
+
+/** Days of history the current-health views (summary, by-page) aggregate. */
+export const WINDOW_DAYS = 28;
+
+/**
+ * WHERE fragment restricting to the recent window. The summary and by-page
+ * views answer "how is the site doing now", so they read the last WINDOW_DAYS
+ * rather than the whole table - otherwise a P75 computed over years of rows can
+ * never reflect a fix that shipped last week. by-version keeps full history on
+ * purpose, to compare releases. `days` is an internal constant but is
+ * interpolated into SQL, so it is floored to a whole number as a guard.
+ */
+export function recentWindowCondition(days: number = WINDOW_DAYS): string {
+  const whole = Math.max(0, Math.trunc(days));
+  return `AND created_at >= NOW() - INTERVAL '${whole} days'`;
+}
+
 export class VitalsRepository {
   async insert(input: {
     metric: string;
@@ -128,7 +158,7 @@ export class VitalsRepository {
         COUNT(*) FILTER (WHERE rating = 'poor')              AS poor,
         COUNT(*)                                             AS total
       FROM web_vitals
-      WHERE TRUE ${conditions}
+      WHERE TRUE ${conditions} ${plausibleValueCondition()} ${recentWindowCondition()}
       GROUP BY metric`,
       params,
     );
@@ -163,7 +193,7 @@ export class VitalsRepository {
       WITH page_totals AS (
         SELECT page, COUNT(*) AS total
         FROM web_vitals
-        WHERE TRUE ${conditions}
+        WHERE TRUE ${conditions} ${plausibleValueCondition()} ${recentWindowCondition()}
         GROUP BY page
         HAVING COUNT(*) >= ${minSamplesParam}
       )
@@ -175,7 +205,7 @@ export class VitalsRepository {
         pt.total                                               AS page_total
       FROM web_vitals w
       JOIN page_totals pt ON pt.page = w.page
-      WHERE TRUE ${conditions}
+      WHERE TRUE ${conditions} ${plausibleValueCondition()} ${recentWindowCondition()}
       GROUP BY w.page, w.metric, pt.total
       ORDER BY pt.total DESC, w.page, w.metric
       `,
@@ -229,7 +259,7 @@ export class VitalsRepository {
         PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY value) AS p75,
         COUNT(*) AS total
       FROM web_vitals
-      WHERE app_version = ANY($1)
+      WHERE app_version = ANY($1) ${plausibleValueCondition()}
       GROUP BY app_version, metric`,
       [versions],
     );

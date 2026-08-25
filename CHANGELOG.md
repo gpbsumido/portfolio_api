@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24 - version 4.12.2
+
+- **The Web Vitals dashboard kept flagging Poor-band LCP/FCP that no real user sees, and the cause was here, not on the pages.** The P75 was computed over the whole `web_vitals` table, all-time, with no value bound — so one impossible sample (a background-tab load reported as a multi-minute LCP) was a permanent member of the percentile and could never age out. Two fixes: the summary and by-page views (the "current health" the dashboard and the alert read) now aggregate a rolling 28-day window, while by-version keeps full history to compare releases; and every value is bounded to a per-metric plausible range (timings ≤ 60s, CLS ≤ 10) both at ingest (a 400, so garbage never enters) and inside every aggregate (so existing garbage stops dragging the percentile). The window and value fragments are pure, unit-tested builders, with the SQL exercised against real Postgres in CI.
+
 ## 2026-08-23 - version 4.12.1
 
 - **Card packs accept NFL cards.** The `tcg` pack-open validator only allowed `nba` and `wnba`, so ripping an NFL pack failed with a 400 ("Invalid enum value … received 'nfl'"). The sport enum now includes `nfl`, matching the three leagues the Card Lab generates. Added a regression test that an NFL card is accepted.
