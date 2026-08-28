@@ -55,6 +55,21 @@ const ALLOWED_ORIGINS = [
   'https://develop.paulsumido.com',
   ...(env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
 ];
+// The Draft Lab extension calls /api/fantasy/adjustments from a moz-extension://
+// page whose per-install origin the allowlist can't enumerate. This resource is
+// non-credentialed (public reads, a custom-header token for writes, no cookie),
+// so it gets a permissive CORS policy. It MUST run before the global cors below:
+// otherwise the global policy answers the write preflight itself for a
+// non-allowlisted origin — a 204 with no Access-Control-Allow-Origin, which the
+// browser rejects — before this handler ever sees it.
+app.use(
+  '/api/fantasy/adjustments',
+  cors({
+    origin: '*',
+    methods: ['GET', 'PATCH', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'x-draft-adj-token'],
+  }),
+);
 app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(compression());
 app.use(express.json({ limit: '100kb' }));

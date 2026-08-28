@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-28 - version 4.13.2
+
+- **Adjustments write preflight now passes CORS.** 4.13.1 added CORS at the router level, but the global allowlist policy runs first and answers the `OPTIONS` preflight itself for a non-allowlisted origin — a 204 with no `Access-Control-Allow-Origin` — so the extension's PATCH/POST (approve/reject/push) were still blocked while GET worked. The permissive policy for `/api/fantasy/adjustments` now runs in `app.ts` *before* the global cors, so it owns the preflight. Regression test reproduces the ordering bug.
+
 ## 2026-08-28 - version 4.13.1
 
 - **Draft adjustments API sends CORS for the extension.** The Draft Lab board calls `/api/fantasy/adjustments` from its own `moz-extension://` page, whose per-install UUID origin the global allowlist can't enumerate, so reads were blocked (200, but no `Access-Control-Allow-Origin`). These requests are non-credentialed — public reads, custom-header token for writes, no cookie — so the resource now sends a permissive origin scoped to just these routes, and answers the preflight the token header triggers.
