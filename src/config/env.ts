@@ -43,6 +43,11 @@ export const envSchema = z.object({
   // path entirely and every write falls back to requiring a user.
   FLAGS_SERVICE_TOKEN: z.string().optional(),
 
+  // Shared secret the Draft Lab extension and its daily research job carry to
+  // approve/push valuation adjustments. Unset disables adjustment writes (503)
+  // — there is no user-auth fallback for this resource.
+  DRAFT_ADJ_SERVICE_TOKEN: z.string().optional(),
+
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),
