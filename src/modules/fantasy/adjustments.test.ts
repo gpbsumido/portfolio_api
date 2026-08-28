@@ -1,3 +1,4 @@
+import cors from 'cors';
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
@@ -50,17 +51,32 @@ describe('draft adjustments API', () => {
     expect(repo.listAdjustments).toHaveBeenCalledWith('pending');
   });
 
-  test('adjustments routes send permissive CORS and answer the preflight', async () => {
+  test('adjustments CORS survives the global allowlist policy in front of it', async () => {
     (repo.listAdjustments as any).mockResolvedValue([]);
-    const app = makeApp();
+    // Mirror app.ts ordering: the scoped permissive CORS runs BEFORE the global
+    // allowlist. Without that ordering the global policy answers the write
+    // preflight itself for a non-allowlisted origin — a 204 with no
+    // Access-Control-Allow-Origin, which the browser rejects.
+    const app = express();
+    app.use(express.json());
+    app.use('/api/fantasy/adjustments', cors({
+      origin: '*', methods: ['GET', 'PATCH', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'x-draft-adj-token'],
+    }));
+    app.use(cors({ origin: ['https://paulsumido.com'] })); // global; extension origin NOT allowed
+    app.use('/api/fantasy', router);
+    app.use(errorHandler);
+
     const get = await request(app).get('/api/fantasy/adjustments').set('Origin', 'moz-extension://abc');
     expect(get.headers['access-control-allow-origin']).toBe('*');
+
     const pre = await request(app)
       .options('/api/fantasy/adjustments/11111111-1111-1111-1111-111111111111')
       .set('Origin', 'moz-extension://abc')
       .set('Access-Control-Request-Method', 'PATCH')
       .set('Access-Control-Request-Headers', 'x-draft-adj-token');
     expect(pre.status).toBeLessThan(300);
+    expect(pre.headers['access-control-allow-origin']).toBe('*'); // the header that was missing
     expect((pre.headers['access-control-allow-headers'] || '').toLowerCase()).toContain('x-draft-adj-token');
   });
 
