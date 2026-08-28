@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-28 - version 4.13.1
+
+- **Draft adjustments API sends CORS for the extension.** The Draft Lab board calls `/api/fantasy/adjustments` from its own `moz-extension://` page, whose per-install UUID origin the global allowlist can't enumerate, so reads were blocked (200, but no `Access-Control-Allow-Origin`). These requests are non-credentialed — public reads, custom-header token for writes, no cookie — so the resource now sends a permissive origin scoped to just these routes, and answers the preflight the token header triggers.
+
 ## 2026-08-28 - version 4.13.0
 
 - **Draft Lab valuation adjustments.** New `/api/fantasy/adjustments` resource backing the extension's sourced injury/depth-chart/coaching layer: `GET` (public, status-filtered) for the approval UI, `PATCH :id` and `POST` batch guarded by a shared secret (`DRAFT_ADJ_SERVICE_TOKEN`) with no user-auth fallback. Migration `025_draft_adjustments` adds the table with a `(player_name, category, batch_date)` dedup unique index, so a daily research re-run upserts the fact and never reverts an approval — verified end to end against a throwaway Postgres, including that a conflicting re-insert leaves an `approved` status untouched. A seed script pushes the first batch and is the template the daily refresh reuses. 8 route/controller/write-auth tests.

@@ -50,6 +50,20 @@ describe('draft adjustments API', () => {
     expect(repo.listAdjustments).toHaveBeenCalledWith('pending');
   });
 
+  test('adjustments routes send permissive CORS and answer the preflight', async () => {
+    (repo.listAdjustments as any).mockResolvedValue([]);
+    const app = makeApp();
+    const get = await request(app).get('/api/fantasy/adjustments').set('Origin', 'moz-extension://abc');
+    expect(get.headers['access-control-allow-origin']).toBe('*');
+    const pre = await request(app)
+      .options('/api/fantasy/adjustments/11111111-1111-1111-1111-111111111111')
+      .set('Origin', 'moz-extension://abc')
+      .set('Access-Control-Request-Method', 'PATCH')
+      .set('Access-Control-Request-Headers', 'x-draft-adj-token');
+    expect(pre.status).toBeLessThan(300);
+    expect((pre.headers['access-control-allow-headers'] || '').toLowerCase()).toContain('x-draft-adj-token');
+  });
+
   test('GET defaults status to "all" when omitted', async () => {
     (repo.listAdjustments as any).mockResolvedValue([]);
     await request(makeApp()).get('/api/fantasy/adjustments');
