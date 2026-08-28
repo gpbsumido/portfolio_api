@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-28 - version 4.13.0
+
+- **Draft Lab valuation adjustments.** New `/api/fantasy/adjustments` resource backing the extension's sourced injury/depth-chart/coaching layer: `GET` (public, status-filtered) for the approval UI, `PATCH :id` and `POST` batch guarded by a shared secret (`DRAFT_ADJ_SERVICE_TOKEN`) with no user-auth fallback. Migration `025_draft_adjustments` adds the table with a `(player_name, category, batch_date)` dedup unique index, so a daily research re-run upserts the fact and never reverts an approval — verified end to end against a throwaway Postgres, including that a conflicting re-insert leaves an `approved` status untouched. A seed script pushes the first batch and is the template the daily refresh reuses. 8 route/controller/write-auth tests.
+
 ## 2026-08-24 - version 4.12.2
 
 - **The Web Vitals dashboard kept flagging Poor-band LCP/FCP that no real user sees, and the cause was here, not on the pages.** The P75 was computed over the whole `web_vitals` table, all-time, with no value bound — so one impossible sample (a background-tab load reported as a multi-minute LCP) was a permanent member of the percentile and could never age out. Two fixes: the summary and by-page views (the "current health" the dashboard and the alert read) now aggregate a rolling 28-day window, while by-version keeps full history to compare releases; and every value is bounded to a per-metric plausible range (timings ≤ 60s, CLS ≤ 10) both at ingest (a 400, so garbage never enters) and inside every aggregate (so existing garbage stops dragging the percentile). The window and value fragments are pure, unit-tested builders, with the SQL exercised against real Postgres in CI.
