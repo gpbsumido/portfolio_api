@@ -248,6 +248,33 @@ web service into cron mode. `NODE_ENV=production` is required so the DB pool use
 SSL against the Railway Postgres (`src/config/database.ts`). Run manually with
 `node dist/jobs/resetFeatureFlags.js`.
 
+### TCG catalog ingest cron
+
+The Pokémon set lists used to render straight from TCGdex: one page listed every
+series and then fetched each one, and the cost of that fan-out is a multiple of
+however slow that API is that minute. It timed out `next build` in paul-explore
+(60s per page, three attempts, then the export dies) and, at request time,
+rendered an empty list that ISR cached for a day — which reads as data nobody
+updated rather than as an outage. This job does the fan-out on a schedule, where
+being slow costs nothing, and the pages read `GET /api/tcg/catalog` instead.
+
+Run it as its **own** Railway cron service (a service has only one schedule and one
+`CRON_JOB`):
+
+- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Schedule**: `0 5 * * *` (daily at 5am UTC)
+- **Variables**: `RUN_CRON=true`, `CRON_JOB=ingest-tcg-catalog`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
+
+Same caveats as the other two: set these vars **only on the cron service**
+(project-wide would boot the web service into cron mode), and `NODE_ENV=production`
+is required for SSL against the Railway Postgres. Run manually with
+`node dist/jobs/ingestTcgCatalog.js`.
+
+The job writes the whole catalog in one transaction and upserts rather than
+deletes, so a bad run leaves the previous catalog serving instead of emptying it.
+It refuses an empty series list outright for the same reason — an empty response
+is a response worth distrusting, not a catalog with nothing in it.
+
 ### Operator demo re-seed cron
 
 The operator dashboard is a public demo whose views are time-relative (the 24-hour

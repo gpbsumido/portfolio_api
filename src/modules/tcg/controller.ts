@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { CardPull } from '../../config/drizzle/schema.js';
 import { UnauthorizedError } from '../../shared/errors/AppError.js';
 import * as service from './service.js';
+import { readCatalog } from './catalog.js';
 import { PACK_COST } from './service.js';
 import type { OpenPackInput } from './schemas.js';
 import type { CollectionCard } from './types.js';
@@ -80,4 +81,23 @@ export class TcgController {
       next(err);
     }
   }
+
+  /**
+   * GET /api/tcg/catalog — the mirrored TCGdex series and sets.
+   *
+   * Public, because the pages that read it are. `updatedAt` rides along so the
+   * UI can say how fresh this is rather than implying it is live, and an empty
+   * catalog is a 200 with no series rather than an error -- "never ingested"
+   * and "upstream is down" have to read differently at the other end.
+   */
+  async catalog(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const catalog = await readCatalog();
+      res.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      res.json(catalog);
+    } catch (err) {
+      next(err);
+    }
+  }
+
 }
