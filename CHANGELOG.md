@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-30 - version 4.15.1
+
+- **The cron setup docs named the wrong start command.** All three cron sections said `node start.js` "from `railway.json`", but `railway.json` runs `bash scripts/start.sh` — which is the file that skips migrations when `RUN_CRON=true` so a cron container cannot race the web container for the knex lock. Following the README literally would have overridden that and had every cron try to migrate. Corrected in all three.
+
 ## 2026-08-30 - version 4.15.0
 
 - **A local mirror of the TCGdex catalog, so the lists stop rendering from a slow third party.** New `tcg_series` / `tcg_sets` tables (migration `028_tcg_catalog.ts`), an `ingest-tcg-catalog` cron job, and a public `GET /api/tcg/catalog`. paul-explore's set lists were fetching every series and then each one individually at render time; that fan-out timed out `next build` (60s per page, three attempts, then the export dies) and at request time produced an empty list that ISR cached for a day — which reads as data nobody has updated rather than as an outage. Doing the fan-out on a schedule moves it somewhere slowness is free.
