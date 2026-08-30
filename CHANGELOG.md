@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-30 - version 4.14.2
+
+- **Wrote down why renaming a migration broke staging.** The duplicate-number guard added in 4.14.1 explains the collision but not the expensive half: knex validates that every recorded migration still exists on disk, so renaming one that has already run makes it refuse to run anything — "the migration directory is corrupt, the following files are missing" — and recovering needs a hand-written `UPDATE knex_migrations SET name = ...`. The 025 → 027 rename was checked against production, where it had not run, and still broke staging on the next deploy, because staging tracks develop and had already run it. The comment now says that the question is not whether a migration has been released but whether any environment has run it.
+
 ## 2026-08-30 - version 4.14.1
 
 - **Two migrations were both numbered 025.** `025_check_in` and `025_draft_adjustments` landed from branches cut at the same time and nothing checked, so the order between them was decided by alphabetical chance rather than by the number that is supposed to mean it. The check-in one is renumbered to `027_check_in` — safe only because it has not been released, since knex keys its migrations table on the filename and renaming one that has already run in production makes it run again. A new guard in `migrationSafety.test.ts` fails on any repeated sequence number, which is the part that stops this recurring.
