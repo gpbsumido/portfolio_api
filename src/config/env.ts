@@ -4,9 +4,7 @@ import 'dotenv/config';
 export const envSchema = z.object({
   // Server
   PORT: z.coerce.number().default(3001),
-  NODE_ENV: z
-    .enum(['development', 'production', 'test'])
-    .default('development'),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   // Database
   DATABASE_URL: z.string().optional(),
@@ -43,6 +41,12 @@ export const envSchema = z.object({
   // path entirely and every write falls back to requiring a user.
   FLAGS_SERVICE_TOKEN: z.string().optional(),
 
+  // Key the rotating volunteer arrival codes are derived from, combined with
+  // each site's salt. Unset means /api/check-in cannot derive or verify a code
+  // and every attempt fails closed, which is the safe direction: an empty key
+  // would still produce a plausible six digits while proving nothing.
+  CHECKIN_CODE_SECRET: z.string().optional(),
+
   // Shared secret the Draft Lab extension and its daily research job carry to
   // approve/push valuation adjustments. Unset disables adjustment writes (503)
   // — there is no user-auth fallback for this resource.
@@ -53,7 +57,6 @@ export const envSchema = z.object({
   AWS_REGION: z.string().default('us-east-1'),
   AWS_S3_BUCKET_NAME: z.string().optional(),
   CDN_BASE_URL: z.string().optional(),
-
 
   // Google
   GOOGLE_CLIENT_ID: z.string().optional(),
