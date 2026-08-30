@@ -13,6 +13,10 @@ if (process.env.RUN_CRON === "true") {
     // Re-seed the operator demo so its time-relative views stay fresh (daily, 0 4 * * *).
     "reseed-operator": () =>
       require("./dist/jobs/reseedOperator").reseedOperator(),
+    // Mirror the TCGdex series/sets catalog so the lists stop rendering from a
+    // slow third party (daily, 0 5 * * *).
+    "ingest-tcg-catalog": () =>
+      require("./dist/jobs/ingestTcgCatalog").ingestTcgCatalog(),
   };
 
   const run = jobs[job];
