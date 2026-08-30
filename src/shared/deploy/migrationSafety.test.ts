@@ -145,9 +145,20 @@ describe('the migrations on disk', () => {
     // branches cut at the same time, and nothing here noticed. Knex keys the
     // migrations table on the filename, so both still ran -- but their order
     // relative to each other was decided by alphabetical chance rather than by
-    // the number that is supposed to mean it. Renaming one after it has run in
-    // production makes knex run it again, so the only safe moment to catch a
-    // collision is before release, which is what this does.
+    // the number that is supposed to mean it.
+    //
+    // Catching a collision here, before anything runs, is the cheap fix. The
+    // expensive one is renaming afterwards: knex validates that every recorded
+    // migration still exists on disk, so a rename makes it refuse to run
+    // anything at all -- "the migration directory is corrupt, the following
+    // files are missing". Fixing that needs a hand-written
+    // `UPDATE knex_migrations SET name = ...` against the affected database.
+    //
+    // That is not hypothetical. Renaming 025_check_in to 027_check_in was
+    // checked against production, where it had not run, and shipped -- and it
+    // broke staging on the next deploy, because staging tracks develop and had
+    // already run it. "It has not been released" is the wrong question. The
+    // right one is whether ANY environment has run it, staging included.
     const numbers = readdirSync(MIGRATIONS)
       .filter((f) => /^\d{3}_/.test(f))
       .map((f) => f.slice(0, 3));

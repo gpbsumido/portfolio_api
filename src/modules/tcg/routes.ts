@@ -4,12 +4,19 @@
 
 import { Router } from 'express';
 import { checkJwt } from '../../config/auth.js';
+import { createIpLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody } from '../../middleware/validate.js';
 import { TcgController } from './controller.js';
 import { openPackSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new TcgController();
+
+/** The catalog is public, so it gets a ceiling the token-gated routes don't need. */
+const catalogLimiter = createIpLimiter({ windowMs: 60_000, max: 120 });
+
+// GET /api/tcg/catalog — mirrored TCGdex series and sets (public)
+router.get('/catalog', catalogLimiter, (req, res, next) => ctrl.catalog(req, res, next));
 
 // GET /api/tcg/wallet — coin balance
 router.get('/wallet', checkJwt, (req, res, next) => ctrl.wallet(req, res, next));
