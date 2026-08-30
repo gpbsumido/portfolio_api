@@ -26,9 +26,10 @@ export async function setStatus(id: string, status: 'approved' | 'rejected'): Pr
 }
 
 /**
- * Upsert a daily batch. Re-running the same day updates the fact (note, delta,
- * source) in place on the dedup key but LEAVES status untouched, so an approval
- * Paul already made is never silently reverted by a refresh.
+ * Upsert a daily batch. The dedup key is (player_name, category), so a refresh
+ * that re-reports the same player UPDATEs the one row — its fact and batch_date
+ * roll forward — instead of adding a new row per day. Status is LEFT untouched,
+ * so an approval Paul already made survives the refresh.
  */
 export async function upsertBatch(batchDate: string, items: AdjustmentInput[]): Promise<number> {
   let n = 0;
@@ -37,11 +38,11 @@ export async function upsertBatch(batchDate: string, items: AdjustmentInput[]): 
       `INSERT INTO draft_adjustments
          (player_name, team, position, category, note, source_url, delta_pct, beneficiary_of, confidence, batch_date)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT (player_name, category, batch_date) DO UPDATE SET
+       ON CONFLICT (player_name, category) DO UPDATE SET
          team = EXCLUDED.team, position = EXCLUDED.position, note = EXCLUDED.note,
          source_url = EXCLUDED.source_url, delta_pct = EXCLUDED.delta_pct,
          beneficiary_of = EXCLUDED.beneficiary_of, confidence = EXCLUDED.confidence,
-         updated_at = NOW()`,
+         batch_date = EXCLUDED.batch_date, updated_at = NOW()`,
       [it.player, it.team ?? null, it.position ?? null, it.category, it.note,
         it.sourceUrl ?? null, it.deltaPct, it.beneficiaryOf ?? null, it.confidence, batchDate],
     );
