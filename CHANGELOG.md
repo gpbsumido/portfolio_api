@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-30 - version 4.13.3
+
+- **Daily adjustment refreshes no longer duplicate a player.** The dedup key was `(player, category, batch_date)`, so re-reporting the same injury under a new date added a row per day — a player piled up duplicates in the approval list. Migration `026` narrows the key to `(player, category)`, collapsing existing duplicates first (keeps the most recently touched row, preserving any approve/reject), and the upsert now updates that one row's fact and date in place while leaving status untouched. Verified against real Postgres, including that an approved/rejected status survives a refresh.
+
 ## 2026-08-28 - version 4.13.2
 
 - **Adjustments write preflight now passes CORS.** 4.13.1 added CORS at the router level, but the global allowlist policy runs first and answers the `OPTIONS` preflight itself for a non-allowlisted origin — a 204 with no `Access-Control-Allow-Origin` — so the extension's PATCH/POST (approve/reject/push) were still blocked while GET worked. The permissive policy for `/api/fantasy/adjustments` now runs in `app.ts` *before* the global cors, so it owns the preflight. Regression test reproduces the ordering bug.
