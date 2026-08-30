@@ -140,6 +140,21 @@ describe('the migrations on disk', () => {
     expect(files.length).toBeGreaterThan(10);
   });
 
+  test('no two migrations share a sequence number', () => {
+    // 025_check_in and 025_draft_adjustments both landed on develop from
+    // branches cut at the same time, and nothing here noticed. Knex keys the
+    // migrations table on the filename, so both still ran -- but their order
+    // relative to each other was decided by alphabetical chance rather than by
+    // the number that is supposed to mean it. Renaming one after it has run in
+    // production makes knex run it again, so the only safe moment to catch a
+    // collision is before release, which is what this does.
+    const numbers = readdirSync(MIGRATIONS)
+      .filter((f) => /^\d{3}_/.test(f))
+      .map((f) => f.slice(0, 3));
+    const duplicated = numbers.filter((n, i) => numbers.indexOf(n) !== i);
+    expect([...new Set(duplicated)]).toEqual([]);
+  });
+
   test('the directory holds migrations and nothing else', () => {
     // Knex requires every file in here as a migration. This test started life
     // inside src/migrations, and knex duly tried to load it, importing vitest
