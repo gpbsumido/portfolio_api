@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-30 - version 4.14.1
+
+- **Two migrations were both numbered 025.** `025_check_in` and `025_draft_adjustments` landed from branches cut at the same time and nothing checked, so the order between them was decided by alphabetical chance rather than by the number that is supposed to mean it. The check-in one is renumbered to `027_check_in` — safe only because it has not been released, since knex keys its migrations table on the filename and renaming one that has already run in production makes it run again. A new guard in `migrationSafety.test.ts` fails on any repeated sequence number, which is the part that stops this recurring.
+
+## 2026-08-30 - version 4.14.0
+
+- **Volunteer arrival check-in.** New `check-in` module behind `/api/check-in`: sites owned by an organizer, a rotating six-digit code per site, and the arrivals volunteers record by typing it. The code is derived rather than stored — HMAC over `CHECKIN_CODE_SECRET` and the site's salt for the current 120-second window, truncated the way TOTP does it — so no database dump yields a working code, and an unset secret fails closed instead of deriving one from an empty key. Verification accepts the current and previous window (typing takes time) and nothing older. Three things make the code worth trusting: a unique `(site, volunteer, window)` means a repeat submit returns the first arrival rather than a second, five wrong guesses per volunteer per window is the ceiling and it is checked *before* the code is compared so a throttled caller learns nothing, and ownership lives in the WHERE clause so someone else's site reads as missing rather than forbidden. Migration `025_check_in.ts`; 27 tests covering the window arithmetic, replay, cross-site codes, the ceiling, and ownership.
+  - Known limit, stated rather than implied: a code photographed and passed to someone off-site works until it rolls over. The 120-second window narrows that to a live accomplice; closing it properly needs NFC or hardware attestation, not a longer code.
+
+## 2026-08-30 - version 4.13.3
+
+- **Daily adjustment refreshes no longer duplicate a player.** The dedup key was `(player, category, batch_date)`, so re-reporting the same injury under a new date added a row per day — a player piled up duplicates in the approval list. Migration `026` narrows the key to `(player, category)`, collapsing existing duplicates first (keeps the most recently touched row, preserving any approve/reject), and the upsert now updates that one row's fact and date in place while leaving status untouched. Verified against real Postgres, including that an approved/rejected status survives a refresh.
+
 ## 2026-08-28 - version 4.13.2
 
 - **Adjustments write preflight now passes CORS.** 4.13.1 added CORS at the router level, but the global allowlist policy runs first and answers the `OPTIONS` preflight itself for a non-allowlisted origin — a 204 with no `Access-Control-Allow-Origin` — so the extension's PATCH/POST (approve/reject/push) were still blocked while GET worked. The permissive policy for `/api/fantasy/adjustments` now runs in `app.ts` *before* the global cors, so it owns the preflight. Regression test reproduces the ordering bug.

@@ -6,11 +6,11 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
+import checkInRoutes from './modules/check-in/routes.js';
 import docsRoutes from './modules/docs/routes.js';
 import f1Routes from './modules/f1/routes.js';
 import fantasyRoutes from './modules/fantasy/routes.js';
 import featureFlagsRoutes from './modules/feature-flags/routes.js';
-import todosRoutes from './modules/todos/routes.js';
 import feedbackRoutes from './modules/feedback/routes.js';
 import followsRoutes from './modules/follows/routes.js';
 import forumRoutes from './modules/forum/routes.js';
@@ -19,19 +19,20 @@ import geoRoutes from './modules/geo/routes.js';
 import googleAuthRoutes from './modules/google-auth/routes.js';
 import healthRoutes from './modules/health/routes.js';
 import likesRoutes from './modules/likes/routes.js';
-import notificationsRoutes from './modules/notifications/routes.js';
 import medJournalRoutes from './modules/medical-journal/routes.js';
 // Module routers
 import nbaRoutes from './modules/nba/routes.js';
+import notificationsRoutes from './modules/notifications/routes.js';
+import operatorRoutes from './modules/operator/routes.js';
 import postsRoutes from './modules/posts/routes.js';
 import profilesRoutes from './modules/profiles/routes.js';
+import referralsRoutes from './modules/referrals/routes.js';
 import repliesRoutes from './modules/replies/routes.js';
 import repostsRoutes from './modules/reposts/routes.js';
 import searchRoutes from './modules/search/routes.js';
-import operatorRoutes from './modules/operator/routes.js';
 import tcgRoutes from './modules/tcg/routes.js';
-import referralsRoutes from './modules/referrals/routes.js';
 import timelineRoutes from './modules/timeline/routes.js';
+import todosRoutes from './modules/todos/routes.js';
 import vitalsRoutes from './modules/vitals/routes.js';
 import wallsRoutes from './modules/walls/routes.js';
 import youtubeRoutes from './modules/youtube/routes.js';
@@ -94,6 +95,9 @@ app.use('/api/tcg', tcgRoutes);
 // Reads public; the PATCH write applies checkJwt internally per-route.
 app.use('/api/feature-flags', featureFlagsRoutes);
 app.use('/api/todos', todosRoutes);
+
+// Signed-in routes (the module applies checkJwt to its whole router)
+app.use('/api/check-in', checkInRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);
