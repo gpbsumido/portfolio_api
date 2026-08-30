@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-30 - version 4.14.1
+
+- **Two migrations were both numbered 025.** `025_check_in` and `025_draft_adjustments` landed from branches cut at the same time and nothing checked, so the order between them was decided by alphabetical chance rather than by the number that is supposed to mean it. The check-in one is renumbered to `027_check_in` — safe only because it has not been released, since knex keys its migrations table on the filename and renaming one that has already run in production makes it run again. A new guard in `migrationSafety.test.ts` fails on any repeated sequence number, which is the part that stops this recurring.
+
 ## 2026-08-30 - version 4.14.0
 
 - **Volunteer arrival check-in.** New `check-in` module behind `/api/check-in`: sites owned by an organizer, a rotating six-digit code per site, and the arrivals volunteers record by typing it. The code is derived rather than stored — HMAC over `CHECKIN_CODE_SECRET` and the site's salt for the current 120-second window, truncated the way TOTP does it — so no database dump yields a working code, and an unset secret fails closed instead of deriving one from an empty key. Verification accepts the current and previous window (typing takes time) and nothing older. Three things make the code worth trusting: a unique `(site, volunteer, window)` means a repeat submit returns the first arrival rather than a second, five wrong guesses per volunteer per window is the ceiling and it is checked *before* the code is compared so a throttled caller learns nothing, and ownership lives in the WHERE clause so someone else's site reads as missing rather than forbidden. Migration `025_check_in.ts`; 27 tests covering the window arithmetic, replay, cross-site codes, the ceiling, and ownership.
