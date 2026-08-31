@@ -65,6 +65,30 @@ function fallbackIps(): string[] {
 }
 
 /**
+ * The fallback node that worked, remembered for the rest of the run.
+ *
+ * Without this every request repeats the doomed path first — three attempts
+ * and two backoffs against an address already known not to answer. The first
+ * real run cost 2m34s for 22 requests, almost all of it waiting to fail the
+ * same way twenty-two times.
+ *
+ * Deliberately per-run rather than persisted: the point is to stop repeating a
+ * failure we have already seen this run, not to stop checking whether TCGdex
+ * has fixed its DNS. Every run starts by trying the published address again.
+ */
+let preferredIp: string | null = null;
+
+/** For tests, and for the start of each run. */
+export function resetPreferredNode(): void {
+  preferredIp = null;
+}
+
+/** Which node the run has settled on, if any. */
+export function preferredNode(): string | null {
+  return preferredIp;
+}
+
+/**
  * Fetches over HTTPS with the hostname resolved to a fixed address.
  *
  * The URL's hostname still drives SNI and certificate validation -- this is
@@ -90,10 +114,9 @@ export function fixedLookup(ip: string) {
     cb: (err: NodeJS.ErrnoException | null, ...args: never[]) => void,
   ): void => {
     if (typeof options === 'object' && options?.all) {
-      (cb as unknown as (e: null, a: { address: string; family: number }[]) => void)(
-        null,
-        [{ address: ip, family }],
-      );
+      (cb as unknown as (e: null, a: { address: string; family: number }[]) => void)(null, [
+        { address: ip, family },
+      ]);
       return;
     }
     (cb as unknown as (e: null, a: string, f: number) => void)(null, ip, family);
@@ -179,6 +202,21 @@ interface SerieDetail {
  */
 async function getJson<T>(url: string): Promise<T> {
   let last = '';
+
+  // A node already proved itself this run, so go straight there rather than
+  // spending three attempts and two backoffs on an address we watched fail.
+  if (preferredIp !== null) {
+    try {
+      return await getJsonVia<T>(preferredIp, url);
+    } catch (err) {
+      log.warn(
+        { url, ip: preferredIp, error: describe(err) },
+        'preferred node stopped answering; starting over',
+      );
+      preferredIp = null;
+    }
+  }
+
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     try {
       const res = await fetch(url, {
@@ -203,9 +241,14 @@ async function getJson<T>(url: string): Promise<T> {
   for (const ip of fallbackIps()) {
     try {
       const data = await getJsonVia<T>(ip, url);
-      // Loudly, every time. A fallback that goes unmentioned turns someone
-      // else's outage into our permanent configuration.
-      log.warn({ url, ip }, 'published address unreachable; served from a fallback node');
+      // Loudly, and once per run rather than once per request — but never
+      // silently. A fallback that goes unmentioned turns someone else's outage
+      // into our permanent configuration.
+      log.warn(
+        { url, ip },
+        'published address unreachable; serving the rest of this run from a fallback node',
+      );
+      preferredIp = ip;
       return data;
     } catch (err) {
       log.warn({ url, ip, error: describe(err) }, 'fallback node failed too');
@@ -224,6 +267,8 @@ async function getJson<T>(url: string): Promise<T> {
  */
 export async function ingestTcgCatalog(): Promise<void> {
   log.info('fetching the TCGdex catalog');
+  // Each run re-checks the published address, so a fixed upstream is noticed.
+  resetPreferredNode();
   try {
     await run();
   } catch (err) {
