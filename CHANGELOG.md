@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-31 - version 4.18.0
+
+- **draft-results gains a full export and a batch write.** `GET /api/fantasy/draft-results?full=true` returns complete rows (picks + standings + team names) for the Elite "download every result" export, while the default stays a lightweight summary. A new `POST /api/fantasy/draft-results/batch` takes every finished draft in one request — the extension flushes its queue on a 10-minute wall clock instead of one call per sim — and the server splits and upserts each, idempotent on `(client_key, client_draft_id)`.
+- **Manual projection adjustments are stored alongside the draft.** Migration `030_draft_results_proj_adjustments` adds a JSONB column recording the Tiers-tab +/- point tweaks that were in effect when a draft finished, batched into the same write and returned by the full export. Applies automatically on deploy.
+
 ## 2026-08-31 - version 4.17.0
 
 - **Draft Lab can now save finished drafts.** New `fantasy/draft-results` resource: a `POST` records a completed draft — the full pick log, each pick tagged with its source (user, sim, keeper, or ESPN-detected), the team the user controlled, whether it was fully simulated, the human-pick count, and the final projected-lineup standings — and a public `GET` lists recent drafts newest-first. Idempotent on `(client_key, client_draft_id)`, so a re-send updates the one row.

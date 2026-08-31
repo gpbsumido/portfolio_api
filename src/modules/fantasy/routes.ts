@@ -8,7 +8,7 @@ import { adjWriteAuth } from './adjustments.write-auth.js';
 import { FantasyController } from './controller.js';
 import { CLIENT_KEY_HEADER, requireClientKey } from './results.client-key.js';
 import { ResultsController } from './results.controller.js';
-import { listResultsQuerySchema, resultInputSchema } from './results.schemas.js';
+import { listResultsQuerySchema, resultBatchSchema, resultInputSchema } from './results.schemas.js';
 
 // CORS for the /adjustments routes (permissive, for the extension's
 // moz-extension:// origin) is applied in app.ts BEFORE the global policy — it
@@ -59,6 +59,15 @@ router.post(
   requireClientKey(),
   validateBody(resultInputSchema),
   (req, res, next) => results.post(req, res, next),
+);
+// One batched request per 10-minute flush carries every finished draft.
+router.post(
+  '/draft-results/batch',
+  resultsIpLimiter,
+  resultsKeyLimiter,
+  requireClientKey(),
+  validateBody(resultBatchSchema),
+  (req, res, next) => results.postBatch(req, res, next),
 );
 
 export default router;
