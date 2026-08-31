@@ -57,6 +57,36 @@ export function createUserLimiter(opts: {
   });
 }
 
+/**
+ * Creates a rate limiter keyed by a request header (e.g. a self-minted install
+ * key), falling back to the request IP when the header is absent. Pair this
+ * with an IP limiter on the same route: since anyone can mint a fresh key,
+ * per-key throttling alone is lapped by rotating keys — the IP limiter is the
+ * backstop.
+ */
+export function createHeaderKeyLimiter(opts: {
+  header: string;
+  windowMs: number;
+  max: number;
+  message?: string;
+}) {
+  const header = opts.header.toLowerCase();
+  return rateLimit({
+    windowMs: opts.windowMs,
+    limit: opts.max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: nextStore('header'),
+    keyGenerator: (req: Request) => {
+      const v = req.get(header);
+      return v ? `k:${v.toLowerCase()}` : req.ip ? ipKeyGenerator(req.ip) : 'unknown';
+    },
+    message: {
+      error: opts.message ?? 'Too many requests, please try again later.',
+    },
+  });
+}
+
 /** Pre-configured IP limiter for NBA proxy routes: 60 req / 5 min. */
 export const nbaIpLimiter = createIpLimiter({
   windowMs: 5 * 60 * 1000,

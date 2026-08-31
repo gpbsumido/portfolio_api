@@ -86,8 +86,8 @@ describe('draft results API', () => {
     expect(repo.upsertResult).not.toHaveBeenCalled();
   });
 
-  test('POST caps the picks array so a payload cannot be unbounded', async () => {
-    const picks = Array.from({ length: 5000 }, (_, i) => ({
+  test('POST caps the picks array (601 > 600) so a payload cannot be unbounded', async () => {
+    const picks = Array.from({ length: 601 }, (_, i) => ({
       overall: i, teamIdx: 0, playerId: `p${i}`, name: `P${i}`, pos: 'RB', source: 'sim', keeper: false,
     }));
     const res = await request(makeApp())
@@ -95,6 +95,7 @@ describe('draft results API', () => {
       .set(CLIENT_KEY_HEADER, KEY)
       .send(validBody({ picks }));
     expect(res.status).toBe(400);
+    expect(repo.upsertResult).not.toHaveBeenCalled();
   });
 
   test('GET returns results newest-first as summaries', async () => {
