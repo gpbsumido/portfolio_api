@@ -33,11 +33,36 @@ export const resultInputSchema = z.object({
   teamNames: z.string().max(4000),
   picks: z.array(pickSchema).min(1).max(600),
   standings: standingsSchema,
+  // Manual projection tweaks (Tiers-tab +/- deltas) in effect at draft time.
+  projAdjustments: z
+    .array(
+      z.object({
+        playerId: z.string().min(1),
+        name: z.string().min(1),
+        pos: z.string().min(1).max(8),
+        delta: z.number(),
+      }),
+    )
+    .max(600)
+    .default([]),
+});
+
+// The extension batches finished drafts and sends them in ONE request per
+// 10-minute flush; the server splits the batch and upserts each.
+export const resultBatchSchema = z.object({
+  results: z.array(resultInputSchema).min(1).max(500),
 });
 
 export const listResultsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  // full=true returns the complete rows (picks + standings), for the Elite
+  // "download every result" export. Default is the lightweight summary.
+  full: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .transform((v) => v === true || v === 'true' || v === '1')
+    .default(false),
 });
 
 export type ResultInputBody = z.infer<typeof resultInputSchema>;
+export type ResultBatchBody = z.infer<typeof resultBatchSchema>;
 export type ListResultsQuery = z.infer<typeof listResultsQuerySchema>;
