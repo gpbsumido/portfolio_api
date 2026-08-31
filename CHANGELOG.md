@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-31 - version 4.16.1
+
+- **The fallback I shipped yesterday never worked.** Its first production run logged `fallback node failed too ... error: Invalid IP address: undefined` against both nodes. Node calls a custom `lookup` two different ways: with `all: true` it wants an array of `{address, family}`, otherwise `(err, address, family)`. Since Node 20 `autoSelectFamily` is on and `net.connect` asks for `all`, so answering only the second way puts `undefined` into the socket. `fixedLookup` now handles both shapes and is exported so the shape — the entire difficulty — is pinned by tests rather than by hope.
+- **I had explicitly declined to test that path**, on the grounds that mocking `node:https` would only assert the mock works. That was true and it was still the wrong call: the bug landed in the one piece of novel code with no coverage. The lookup's call shapes are pure logic and testable without a socket, and the whole path was verifiable by running it against a real node — which now returns 200 and 21 series, and which reproduces `Invalid IP address: undefined` exactly when reverted.
+- **The existing failure-path tests were passing because the fallback was broken.** With it fixed they began making real network calls to TCGdex, so the suite now clears `TCGDEX_FALLBACK_IPS` in `beforeEach` and the fallback tests opt in. A test that reaches the internet to prove a failure is not testing the failure.
+
 ## 2026-08-31 - version 4.16.0
 
 - **The catalog ingest can reach TCGdex again when their GeoDNS cannot.** Their North America record points at a node that refuses connections, and every environment we deploy on resolves as North America, so the first production run died with `fetch failed`. This is not a blip to wait out: their maintainer closed the report (tcgdex/cards-database#2293) with "na is experiencing outages, we cant just drop a node like that". After the published address fails, the job now retries against nodes that do answer, using `node:https` with a fixed `lookup` — the URL still drives SNI and certificate validation, so this is curl's `--resolve`, not a way of skipping the checks, and it needs no new dependency.

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 vi.mock('../modules/tcg/catalog.js', () => ({ writeCatalog: vi.fn() }));
 
 import { writeCatalog } from '../modules/tcg/catalog.js';
-import { ingestTcgCatalog } from './ingestTcgCatalog.js';
+import { fixedLookup, ingestTcgCatalog } from './ingestTcgCatalog.js';
 
 const SERIES = [{ id: 'tcgp', name: 'Pokémon TCG Pocket' }];
 
@@ -39,6 +39,11 @@ function stubFetch(handler: (url: string) => { ok?: boolean; status?: number; bo
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // No fallback by default. With one configured, any test that makes the
+  // primary fetch fail would reach a real TCGdex node over the network --
+  // which these tests did until the fallback started working, and passed only
+  // because it did not.
+  process.env.TCGDEX_FALLBACK_IPS = '';
   vi.mocked(writeCatalog).mockResolvedValue({ series: 1, sets: 1 });
 });
 
@@ -160,15 +165,7 @@ describe('when TCGdex is having a bad day', () => {
 });
 
 describe('falling back to a node that answers', () => {
-  const originalIps = process.env.TCGDEX_FALLBACK_IPS;
-
-  afterEach(() => {
-    if (originalIps === undefined) delete process.env.TCGDEX_FALLBACK_IPS;
-    else process.env.TCGDEX_FALLBACK_IPS = originalIps;
-  });
-
   test('is switched off by an empty TCGDEX_FALLBACK_IPS', async () => {
-    process.env.TCGDEX_FALLBACK_IPS = '';
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -190,5 +187,38 @@ describe('falling back to a node that answers', () => {
     // The fallback exists for someone else's outage. If it engaged while the
     // normal path was fine we would silently stop noticing their recovery.
     expect(writeCatalog).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fixedLookup', () => {
+  test('answers with an array when Node asks for all', () => {
+    // Since Node 20 autoSelectFamily is on and net.connect passes all: true.
+    // Answering the other way put undefined into the socket and produced
+    // "Invalid IP address: undefined" on the fallback's first production run.
+    const cb = vi.fn();
+    fixedLookup('51.68.233.163')('api.tcgdex.net', { all: true }, cb as never);
+    expect(cb).toHaveBeenCalledWith(null, [
+      { address: '51.68.233.163', family: 4 },
+    ]);
+  });
+
+  test('answers with address and family when it does not', () => {
+    const cb = vi.fn();
+    fixedLookup('51.68.233.163')('api.tcgdex.net', { all: false }, cb as never);
+    expect(cb).toHaveBeenCalledWith(null, '51.68.233.163', 4);
+  });
+
+  test('tolerates the options argument being a bare family number', () => {
+    const cb = vi.fn();
+    fixedLookup('51.68.233.163')('api.tcgdex.net', 4, cb as never);
+    expect(cb).toHaveBeenCalledWith(null, '51.68.233.163', 4);
+  });
+
+  test('reports family 6 for an IPv6 address', () => {
+    const cb = vi.fn();
+    fixedLookup('2001:41d0:303:1c2b::1')('api.tcgdex.net', { all: true }, cb as never);
+    expect(cb).toHaveBeenCalledWith(null, [
+      { address: '2001:41d0:303:1c2b::1', family: 6 },
+    ]);
   });
 });
