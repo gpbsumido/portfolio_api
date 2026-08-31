@@ -28,6 +28,7 @@ function toFull(row: ResultRow) {
     teamNames: row.team_names,
     picks: row.picks,
     standings: row.standings,
+    projAdjustments: row.proj_adjustments,
   };
 }
 

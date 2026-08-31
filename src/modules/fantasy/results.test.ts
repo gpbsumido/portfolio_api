@@ -36,6 +36,7 @@ const validBody = (over: Record<string, unknown> = {}) => ({
     { overall: 10, teamIdx: 10, playerId: 'bijan-robinson', name: 'Bijan Robinson', pos: 'RB', source: 'user', keeper: false },
   ],
   standings: { rows: [{ teamIdx: 10, starterPts: 1800 }], myRank: 1 },
+  projAdjustments: [],
   ...over,
 });
 
@@ -109,13 +110,35 @@ describe('draft results API', () => {
     expect(repo.listResults).toHaveBeenCalledWith(50, false); // default limit, summary
   });
 
+  test('POST threads the manual projection adjustments through to the repo', async () => {
+    (repo.upsertResult as any).mockResolvedValue({ id: 'z' });
+    const projAdjustments = [{ playerId: 'josh-allen', name: 'Josh Allen', pos: 'QB', delta: 5 }];
+    const res = await request(makeApp())
+      .post('/api/fantasy/draft-results')
+      .set(CLIENT_KEY_HEADER, KEY)
+      .send(validBody({ projAdjustments }));
+    expect(res.status).toBe(201);
+    expect(repo.upsertResult).toHaveBeenCalledWith(KEY, expect.objectContaining({ projAdjustments }));
+  });
+
+  test('POST defaults projAdjustments to [] when omitted', async () => {
+    (repo.upsertResult as any).mockResolvedValue({ id: 'z' });
+    const body = validBody();
+    delete (body as any).projAdjustments;
+    const res = await request(makeApp()).post('/api/fantasy/draft-results').set(CLIENT_KEY_HEADER, KEY).send(body);
+    expect(res.status).toBe(201);
+    expect(repo.upsertResult).toHaveBeenCalledWith(KEY, expect.objectContaining({ projAdjustments: [] }));
+  });
+
   test('GET ?full=true includes the picks + standings blobs', async () => {
     (repo.listResults as any).mockResolvedValue([
       {
         id: '1', client_key: KEY, client_draft_id: 'd1', sport: 'nfl', num_teams: 12, rounds: 15,
         my_slot: 10, mode: 'practice', fully_sim: false, human_pick_count: 2, team_names: 'A|B',
         picks: [{ overall: 0, teamIdx: 0, playerId: 'x', name: 'X', pos: 'QB', source: 'sim', keeper: false }],
-        standings: { rows: [{ teamIdx: 10, starterPts: 1800 }], myRank: 1 }, created_at: new Date(),
+        standings: { rows: [{ teamIdx: 10, starterPts: 1800 }], myRank: 1 },
+        proj_adjustments: [{ playerId: 'josh-allen', name: 'Josh Allen', pos: 'QB', delta: 5 }],
+        created_at: new Date(),
       },
     ]);
     const res = await request(makeApp()).get('/api/fantasy/draft-results?full=true&limit=200');
@@ -124,5 +147,6 @@ describe('draft results API', () => {
     expect(res.body.results[0].picks).toHaveLength(1);
     expect(res.body.results[0].standings.myRank).toBe(1);
     expect(res.body.results[0].clientDraftId).toBe('d1');
+    expect(res.body.results[0].projAdjustments[0].delta).toBe(5);
   });
 });

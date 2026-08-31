@@ -33,6 +33,18 @@ export const resultInputSchema = z.object({
   teamNames: z.string().max(4000),
   picks: z.array(pickSchema).min(1).max(600),
   standings: standingsSchema,
+  // Manual projection tweaks (Tiers-tab +/- deltas) in effect at draft time.
+  projAdjustments: z
+    .array(
+      z.object({
+        playerId: z.string().min(1),
+        name: z.string().min(1),
+        pos: z.string().min(1).max(8),
+        delta: z.number(),
+      }),
+    )
+    .max(600)
+    .default([]),
 });
 
 export const listResultsQuerySchema = z.object({

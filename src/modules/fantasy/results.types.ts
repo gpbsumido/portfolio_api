@@ -17,6 +17,13 @@ export interface ResultStandings {
   myRank: number | null;
 }
 
+export interface ProjAdjustment {
+  playerId: string;
+  name: string;
+  pos: string;
+  delta: number;
+}
+
 /** One finished draft, as the extension posts it. */
 export interface ResultInput {
   clientDraftId: string;
@@ -30,6 +37,7 @@ export interface ResultInput {
   teamNames: string; // pipe-joined
   picks: ResultPick[];
   standings: ResultStandings;
+  projAdjustments: ProjAdjustment[];
 }
 
 export interface ResultRow {
@@ -46,6 +54,7 @@ export interface ResultRow {
   team_names: string;
   picks: ResultPick[];
   standings: ResultStandings;
+  proj_adjustments: ProjAdjustment[];
   created_at: Date;
 }
 
