@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 vi.mock('../modules/tcg/catalog.js', () => ({ writeCatalog: vi.fn() }));
 
 import { writeCatalog } from '../modules/tcg/catalog.js';
-import { fixedLookup, ingestTcgCatalog } from './ingestTcgCatalog.js';
+import {
+  fixedLookup,
+  ingestTcgCatalog,
+  preferredNode,
+  resetPreferredNode,
+} from './ingestTcgCatalog.js';
 
 const SERIES = [{ id: 'tcgp', name: 'Pokémon TCG Pocket' }];
 
@@ -197,9 +202,7 @@ describe('fixedLookup', () => {
     // "Invalid IP address: undefined" on the fallback's first production run.
     const cb = vi.fn();
     fixedLookup('51.68.233.163')('api.tcgdex.net', { all: true }, cb as never);
-    expect(cb).toHaveBeenCalledWith(null, [
-      { address: '51.68.233.163', family: 4 },
-    ]);
+    expect(cb).toHaveBeenCalledWith(null, [{ address: '51.68.233.163', family: 4 }]);
   });
 
   test('answers with address and family when it does not', () => {
@@ -217,8 +220,29 @@ describe('fixedLookup', () => {
   test('reports family 6 for an IPv6 address', () => {
     const cb = vi.fn();
     fixedLookup('2001:41d0:303:1c2b::1')('api.tcgdex.net', { all: true }, cb as never);
-    expect(cb).toHaveBeenCalledWith(null, [
-      { address: '2001:41d0:303:1c2b::1', family: 6 },
-    ]);
+    expect(cb).toHaveBeenCalledWith(null, [{ address: '2001:41d0:303:1c2b::1', family: 6 }]);
+  });
+});
+
+describe('remembering the node that worked', () => {
+  test('a run starts with no preferred node, so a fixed upstream is noticed', async () => {
+    stubFetch((url) => ({ body: url.endsWith('/series') ? SERIES : DETAIL }));
+
+    await ingestTcgCatalog();
+
+    // If this stuck across runs, TCGdex could fix its DNS and we would keep
+    // routing around it forever without noticing.
+    expect(preferredNode()).toBeNull();
+  });
+
+  test('a healthy published address never sets one', async () => {
+    stubFetch((url) => ({ body: url.endsWith('/series') ? SERIES : DETAIL }));
+    await ingestTcgCatalog();
+    expect(preferredNode()).toBeNull();
+  });
+
+  test('resetPreferredNode clears it', () => {
+    resetPreferredNode();
+    expect(preferredNode()).toBeNull();
   });
 });
