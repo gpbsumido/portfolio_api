@@ -113,3 +113,52 @@ describe('ingestTcgCatalog', () => {
     expect(options.signal).toBeDefined();
   });
 });
+
+describe('when TCGdex is having a bad day', () => {
+  test('retries a network blip and carries on', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls += 1;
+        // First call fails the way undici reports every network problem.
+        if (calls === 1) throw new TypeError('fetch failed');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (String(url).endsWith('/series') ? SERIES : DETAIL),
+        } as unknown as Response;
+      }),
+    );
+
+    await ingestTcgCatalog();
+
+    expect(writeCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  test('names the url it gave up on rather than just "fetch failed"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    );
+
+    // "fetch failed" alone does not say which of the dozens of calls this job
+    // makes died, which is what the first real outage logged.
+    await expect(ingestTcgCatalog()).rejects.toThrow(/api\.tcgdex\.net/);
+    expect(writeCatalog).not.toHaveBeenCalled();
+  });
+
+  test('does not retry a 404, which will not improve', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(ingestTcgCatalog()).rejects.toThrow(/404/);
+    expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(1);
+  });
+});

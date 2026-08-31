@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-30 - version 4.15.2
+
+- **The catalog ingest now says what went wrong.** Its first production run failed with `cron job "ingest-tcg-catalog" failed: fetch failed` — Node's word for every network problem, naming neither the URL nor the reason, so a DNS failure and a refused connection log identically. Errors now carry the URL and whatever `cause.code` undici attached, and the top-level failure states plainly that the stored catalog is unchanged, so nobody goes looking for a half-written one.
+- **And retries the failures worth retrying.** Three attempts with a short backoff for network errors and 5xx; a 4xx breaks out immediately, since asking again only makes the log longer. This job exists because TCGdex is unreliable, so treating the first blip as final was the wrong default — though it deliberately does not paper over an outage, where a quick clear failure that leaves yesterday's catalog serving is the right outcome.
+
 ## 2026-08-30 - version 4.15.1
 
 - **A new Railway service crashed waiting for `host.docker.internal`.** The image's `CMD` wrapped the entrypoint in wait-for-it against `${DB_HOST:-host.docker.internal}`, a local-development address. Any hosted service that doesn't set `DB_HOST` — which is every one of them — waits 15 seconds for a host that cannot exist and then crashes, reporting a Docker address that sends you to look at entirely the wrong thing. Nothing needed the wrapper: docker-compose gates the app on the database's healthcheck, and `scripts/start.sh` already does its own bounded `pg_isready` wait using `DATABASE_URL`, which is the variable that actually says where the database is. The `CMD` is now just the entrypoint.
