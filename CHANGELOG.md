@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-31 - version 4.16.2
+
+- **The ingest stops re-learning the same outage twenty-two times.** The first successful run took 2m34s: with TCGdex's North America node dead, every one of the 22 requests spent three attempts and two backoffs on the published address before falling back to a node that answered. The run now remembers the node that worked and goes straight there for the rest of it, so only the first request pays that cost — roughly seven seconds instead of two and a half minutes of waiting to fail the same way.
+- **It is remembered per run, not persisted.** Every run re-checks the published address, so the day TCGdex fixes its GeoDNS we notice and go back to using it. If a remembered node stops answering mid-run the job says so and starts over from the published address rather than quietly giving up on the request.
+
 ## 2026-08-31 - version 4.16.1
 
 - **The fallback I shipped yesterday never worked.** Its first production run logged `fallback node failed too ... error: Invalid IP address: undefined` against both nodes. Node calls a custom `lookup` two different ways: with `all: true` it wants an array of `{address, family}`, otherwise `(err, address, family)`. Since Node 20 `autoSelectFamily` is on and `net.connect` asks for `all`, so answering only the second way puts `undefined` into the socket. `fixedLookup` now handles both shapes and is exported so the shape — the entire difficulty — is pinned by tests rather than by hope.
