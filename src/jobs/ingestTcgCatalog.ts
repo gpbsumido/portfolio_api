@@ -71,12 +71,41 @@ function fallbackIps(): string[] {
  * curl's --resolve, not a way of skipping the checks. node:https takes a
  * lookup, so this needs no new dependency.
  */
+/**
+ * A DNS lookup that always answers with one fixed address.
+ *
+ * Exported because its shape is the whole difficulty. Node calls `lookup` two
+ * different ways: with `all: true` it wants an array of `{address, family}`,
+ * otherwise it wants `(err, address, family)`. Since Node 20, autoSelectFamily
+ * is on by default and `net.connect` asks for `all`, so answering only the
+ * second way returns undefined into the socket and fails with
+ * `Invalid IP address: undefined` -- which is exactly how the first production
+ * run of the fallback died.
+ */
+export function fixedLookup(ip: string) {
+  const family = ip.includes(':') ? 6 : 4;
+  return (
+    _hostname: string,
+    options: { all?: boolean } | number | undefined,
+    cb: (err: NodeJS.ErrnoException | null, ...args: never[]) => void,
+  ): void => {
+    if (typeof options === 'object' && options?.all) {
+      (cb as unknown as (e: null, a: { address: string; family: number }[]) => void)(
+        null,
+        [{ address: ip, family }],
+      );
+      return;
+    }
+    (cb as unknown as (e: null, a: string, f: number) => void)(null, ip, family);
+  };
+}
+
 function getJsonVia<T>(ip: string, url: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const req = https.get(
       url,
       {
-        lookup: (_hostname, _options, cb) => cb(null, ip, ip.includes(':') ? 6 : 4),
+        lookup: fixedLookup(ip) as unknown as undefined,
         timeout: REQUEST_TIMEOUT_MS,
       },
       (res) => {
