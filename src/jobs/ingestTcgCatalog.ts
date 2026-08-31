@@ -14,8 +14,9 @@
 // Suggested schedule: daily, `0 5 * * *`.
 // ---------------------------------------------------------------------------
 
+import https from 'node:https';
+import { type IngestSerie, writeCatalog } from '../modules/tcg/catalog.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
-import { writeCatalog, type IngestSerie } from '../modules/tcg/catalog.js';
 
 const log = createModuleLogger('ingest-tcg-catalog');
 
@@ -34,6 +35,74 @@ const REQUEST_TIMEOUT_MS = 15_000;
  */
 const ATTEMPTS = 3;
 const BACKOFF_MS = 2_000;
+
+/**
+ * Nodes to try when the address DNS hands us will not answer.
+ *
+ * TCGdex runs GeoDNS, and the North America record points at a node that
+ * refuses connections. Their maintainer knows -- tcgdex/cards-database#2293,
+ * closed with "na is experiencing outages, we cant just drop a node like that"
+ * -- so this is not a blip to wait out, and everything we run from (Vercel,
+ * Railway) resolves as North America.
+ *
+ * These are only tried after the published address has already failed, so if
+ * the NA node comes back we go straight back to using it. They are a last
+ * resort, not a route around their traffic management: this job makes about
+ * twenty requests a day.
+ *
+ * IPs move. Override with TCGDEX_FALLBACK_IPS (comma separated), or set it
+ * empty to switch this off entirely.
+ */
+const DEFAULT_FALLBACK_IPS = ['51.68.233.163', '217.182.193.43'];
+
+function fallbackIps(): string[] {
+  const configured = process.env.TCGDEX_FALLBACK_IPS;
+  if (configured === undefined) return DEFAULT_FALLBACK_IPS;
+  return configured
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Fetches over HTTPS with the hostname resolved to a fixed address.
+ *
+ * The URL's hostname still drives SNI and certificate validation -- this is
+ * curl's --resolve, not a way of skipping the checks. node:https takes a
+ * lookup, so this needs no new dependency.
+ */
+function getJsonVia<T>(ip: string, url: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const req = https.get(
+      url,
+      {
+        lookup: (_hostname, _options, cb) => cb(null, ip, ip.includes(':') ? 6 : 4),
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+      (res) => {
+        if (!res.statusCode || res.statusCode >= 400) {
+          res.resume();
+          reject(new Error(`answered ${res.statusCode}`));
+          return;
+        }
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body) as T);
+          } catch (err) {
+            reject(new Error(`unparseable response: ${describe(err)}`));
+          }
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('timed out')));
+    req.on('error', reject);
+  });
+}
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,6 +168,21 @@ async function getJson<T>(url: string): Promise<T> {
       await wait(BACKOFF_MS * attempt);
     }
   }
+  // The published address is not answering. Everything we run from resolves as
+  // North America, where TCGdex's GeoDNS currently points at a dead node, so
+  // try the ones that do answer before giving up.
+  for (const ip of fallbackIps()) {
+    try {
+      const data = await getJsonVia<T>(ip, url);
+      // Loudly, every time. A fallback that goes unmentioned turns someone
+      // else's outage into our permanent configuration.
+      log.warn({ url, ip }, 'published address unreachable; served from a fallback node');
+      return data;
+    } catch (err) {
+      log.warn({ url, ip, error: describe(err) }, 'fallback node failed too');
+    }
+  }
+
   throw new Error(`${url}: ${last}`);
 }
 
@@ -126,7 +210,6 @@ export async function ingestTcgCatalog(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-
   const resumes = await getJson<SerieResume[]>(`${API}/series`);
   if (!Array.isArray(resumes) || resumes.length === 0) {
     // An empty list is not a catalog with nothing in it; it is a response worth
@@ -136,9 +219,7 @@ async function run(): Promise<void> {
 
   const series: IngestSerie[] = [];
   for (const resume of resumes) {
-    const detail = await getJson<SerieDetail>(
-      `${API}/series/${encodeURIComponent(resume.id)}`,
-    );
+    const detail = await getJson<SerieDetail>(`${API}/series/${encodeURIComponent(resume.id)}`);
     series.push({
       id: detail.id ?? resume.id,
       name: detail.name ?? resume.name ?? resume.id,
