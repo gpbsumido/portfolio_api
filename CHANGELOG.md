@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-31 - version 4.17.0
+
+- **Draft Lab can now save finished drafts.** New `fantasy/draft-results` resource: a `POST` records a completed draft — the full pick log, each pick tagged with its source (user, sim, keeper, or ESPN-detected), the team the user controlled, whether it was fully simulated, the human-pick count, and the final projected-lineup standings — and a public `GET` lists recent drafts newest-first. Idempotent on `(client_key, client_draft_id)`, so a re-send updates the one row.
+- **Open to any copy of the companion, but throttled.** Unlike the owner-secret adjustments path, this endpoint takes a self-minted per-install key (`x-draft-client-key`, a UUID) — any install can write, none can spam. The key is validated as a UUID and rate-limited on both the key and the source IP, so rotating fresh keys can't lap the limit. A new `createHeaderKeyLimiter` backs the per-key throttle.
+- Migration `029_draft_results` (JSONB pick log + standings) applies automatically on deploy via the web container's start script.
+
 ## 2026-08-31 - version 4.16.2
 
 - **The ingest stops re-learning the same outage twenty-two times.** The first successful run took 2m34s: with TCGdex's North America node dead, every one of the 22 requests spent three attempts and two backoffs on the published address before falling back to a node that answered. The run now remembers the node that worked and goes straight there for the rest of it, so only the first request pays that cost — roughly seven seconds instead of two and a half minutes of waiting to fail the same way.
