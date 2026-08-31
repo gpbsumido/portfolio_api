@@ -1,9 +1,9 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('../modules/tcg/catalog.js', () => ({ writeCatalog: vi.fn() }));
 
-import { ingestTcgCatalog } from './ingestTcgCatalog.js';
 import { writeCatalog } from '../modules/tcg/catalog.js';
+import { ingestTcgCatalog } from './ingestTcgCatalog.js';
 
 const SERIES = [{ id: 'tcgp', name: 'Pokémon TCG Pocket' }];
 
@@ -23,9 +23,7 @@ const DETAIL = {
 };
 
 /** Answers the two endpoints the job walks. */
-function stubFetch(
-  handler: (url: string) => { ok?: boolean; status?: number; body?: unknown },
-) {
+function stubFetch(handler: (url: string) => { ok?: boolean; status?: number; body?: unknown }) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -89,9 +87,7 @@ describe('ingestTcgCatalog', () => {
   });
 
   test('writes nothing when one serie cannot be fetched', async () => {
-    stubFetch((url) =>
-      url.endsWith('/series') ? { body: SERIES } : { ok: false, status: 503 },
-    );
+    stubFetch((url) => (url.endsWith('/series') ? { body: SERIES } : { ok: false, status: 503 }));
 
     await expect(ingestTcgCatalog()).rejects.toThrow();
     // Yesterday's catalog keeps serving rather than half of two of them.
@@ -160,5 +156,39 @@ describe('when TCGdex is having a bad day', () => {
 
     await expect(ingestTcgCatalog()).rejects.toThrow(/404/);
     expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('falling back to a node that answers', () => {
+  const originalIps = process.env.TCGDEX_FALLBACK_IPS;
+
+  afterEach(() => {
+    if (originalIps === undefined) delete process.env.TCGDEX_FALLBACK_IPS;
+    else process.env.TCGDEX_FALLBACK_IPS = originalIps;
+  });
+
+  test('is switched off by an empty TCGDEX_FALLBACK_IPS', async () => {
+    process.env.TCGDEX_FALLBACK_IPS = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    );
+
+    // With no fallbacks configured the job fails at the published address,
+    // which is what someone setting this to empty is asking for.
+    await expect(ingestTcgCatalog()).rejects.toThrow(/api\.tcgdex\.net/);
+    expect(writeCatalog).not.toHaveBeenCalled();
+  });
+
+  test('does not reach for a fallback when the published address works', async () => {
+    stubFetch((url) => ({ body: url.endsWith('/series') ? SERIES : DETAIL }));
+
+    await ingestTcgCatalog();
+
+    // The fallback exists for someone else's outage. If it engaged while the
+    // normal path was fine we would silently stop noticing their recovery.
+    expect(writeCatalog).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-31 - version 4.16.0
+
+- **The catalog ingest can reach TCGdex again when their GeoDNS cannot.** Their North America record points at a node that refuses connections, and every environment we deploy on resolves as North America, so the first production run died with `fetch failed`. This is not a blip to wait out: their maintainer closed the report (tcgdex/cards-database#2293) with "na is experiencing outages, we cant just drop a node like that". After the published address fails, the job now retries against nodes that do answer, using `node:https` with a fixed `lookup` — the URL still drives SNI and certificate validation, so this is curl's `--resolve`, not a way of skipping the checks, and it needs no new dependency.
+- **It only engages after the normal path has already failed, and says so every time.** If the North America node recovers we go straight back to using it, and a fallback that went unmentioned would quietly turn someone else's outage into our permanent configuration. `TCGDEX_FALLBACK_IPS` overrides the built-in list, or switches it off entirely when set empty — addresses move, and this one should be data rather than something that needs a deploy to correct.
+
 ## 2026-08-30 - version 4.15.2
 
 - **The catalog ingest now says what went wrong.** Its first production run failed with `cron job "ingest-tcg-catalog" failed: fetch failed` — Node's word for every network problem, naming neither the URL nor the reason, so a DNS failure and a refused connection log identically. Errors now carry the URL and whatever `cause.code` undici attached, and the top-level failure states plainly that the stored catalog is unchanged, so nobody goes looking for a half-written one.
