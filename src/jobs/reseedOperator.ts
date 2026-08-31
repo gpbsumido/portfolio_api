@@ -12,8 +12,8 @@
 // ---------------------------------------------------------------------------
 
 import { pool } from '../config/database.js';
-import { createModuleLogger } from '../shared/utils/logger.js';
 import { seedOperator } from '../modules/operator/seed.js';
+import { createModuleLogger } from '../shared/utils/logger.js';
 
 const log = createModuleLogger('reseed-operator');
 

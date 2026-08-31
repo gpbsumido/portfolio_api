@@ -35,12 +35,19 @@ COPY . .
 # Build TypeScript
 RUN pnpm run build
 
-# Add wait-for-it script to handle database startup
-ADD https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /wait-for-it.sh
-RUN chmod +x /wait-for-it.sh
 
 # Expose app port
 EXPOSE ${PORT:-3001}
 
-# Start command that waits for database
-CMD ["/bin/bash", "-c", "/wait-for-it.sh ${DB_HOST:-host.docker.internal}:${DB_PORT:-5432} -- bash scripts/start.sh"]
+# The entrypoint waits for the database itself, so nothing wraps it here.
+#
+# This used to be wrapped in wait-for-it against ${DB_HOST:-host.docker.internal},
+# which is a local-development address. On Railway DB_HOST is not set, so a new
+# service would sit for 15 seconds waiting on a host that cannot exist and then
+# crash pointing at host.docker.internal -- an error that sends you to look at
+# Docker when the container never had a database to wait for.
+#
+# Nothing needed it. docker-compose already gates the app on the db's
+# healthcheck, and scripts/start.sh does its own bounded pg_isready wait using
+# DATABASE_URL, which is the variable that actually says where the database is.
+CMD ["bash", "scripts/start.sh"]
