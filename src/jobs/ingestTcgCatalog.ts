@@ -24,6 +24,32 @@ const API = 'https://api.tcgdex.net/v2/en';
 /** Per-request ceiling, so one hanging call cannot pin the cron container. */
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/**
+ * Attempts per request, and the pause between them.
+ *
+ * This job exists because TCGdex is unreliable, so treating the first network
+ * error as final would be odd. Three attempts covers a blip; it deliberately
+ * does not cover an outage, because when the API is actually down the right
+ * outcome is a quick clear failure that leaves yesterday's catalog serving.
+ */
+const ATTEMPTS = 3;
+const BACKOFF_MS = 2_000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** What went wrong, in a form a log line can carry. */
+function describe(err: unknown): string {
+  if (err instanceof Error) {
+    // fetch() reports every network failure as the word "failed" and hides the
+    // reason underneath, which is how a DNS problem and a refused connection
+    // end up looking identical in a cron log.
+    const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+    const detail = cause?.code ?? cause?.message;
+    return detail ? `${err.message} (${detail})` : err.message;
+  }
+  return String(err);
+}
+
 interface SerieResume {
   id: string;
   name?: string;
@@ -43,12 +69,37 @@ interface SerieDetail {
   }[];
 }
 
+/**
+ * Fetches JSON, retrying the failures worth retrying.
+ *
+ * A 4xx is upstream telling us the request was wrong; asking again three times
+ * only makes the log longer. Network errors and 5xx get another go.
+ *
+ * Whatever comes out names the URL. "fetch failed" on its own -- which is all
+ * Node gives you -- says nothing about which of the dozens of calls this job
+ * makes gave up, or why.
+ */
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`${url} answered ${res.status}`);
-  return (await res.json()) as T;
+  let last = '';
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (res.ok) return (await res.json()) as T;
+
+      last = `answered ${res.status}`;
+      if (res.status < 500) break;
+    } catch (err) {
+      last = describe(err);
+    }
+
+    if (attempt < ATTEMPTS) {
+      log.warn({ url, attempt, error: last }, 'request failed, retrying');
+      await wait(BACKOFF_MS * attempt);
+    }
+  }
+  throw new Error(`${url}: ${last}`);
 }
 
 /**
@@ -60,6 +111,21 @@ async function getJson<T>(url: string): Promise<T> {
  */
 export async function ingestTcgCatalog(): Promise<void> {
   log.info('fetching the TCGdex catalog');
+  try {
+    await run();
+  } catch (err) {
+    // Say what was left behind, not just what broke. The catalog is untouched
+    // on any failure, and a log that does not say so invites someone to go
+    // looking for a half-written one.
+    log.error(
+      { error: describe(err) },
+      'TCGdex catalog ingest failed; the stored catalog is unchanged',
+    );
+    throw err;
+  }
+}
+
+async function run(): Promise<void> {
 
   const resumes = await getJson<SerieResume[]>(`${API}/series`);
   if (!Array.isArray(resumes) || resumes.length === 0) {

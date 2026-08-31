@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-30 - version 4.15.2
+
+- **The catalog ingest now says what went wrong.** Its first production run failed with `cron job "ingest-tcg-catalog" failed: fetch failed` — Node's word for every network problem, naming neither the URL nor the reason, so a DNS failure and a refused connection log identically. Errors now carry the URL and whatever `cause.code` undici attached, and the top-level failure states plainly that the stored catalog is unchanged, so nobody goes looking for a half-written one.
+- **And retries the failures worth retrying.** Three attempts with a short backoff for network errors and 5xx; a 4xx breaks out immediately, since asking again only makes the log longer. This job exists because TCGdex is unreliable, so treating the first blip as final was the wrong default — though it deliberately does not paper over an outage, where a quick clear failure that leaves yesterday's catalog serving is the right outcome.
+
 ## 2026-08-30 - version 4.15.0
 
 - **A local mirror of the TCGdex catalog, so the lists stop rendering from a slow third party.** New `tcg_series` / `tcg_sets` tables (migration `028_tcg_catalog.ts`), an `ingest-tcg-catalog` cron job, and a public `GET /api/tcg/catalog`. paul-explore's set lists were fetching every series and then each one individually at render time; that fan-out timed out `next build` (60s per page, three attempts, then the export dies) and at request time produced an empty list that ISR cached for a day — which reads as data nobody has updated rather than as an outage. Doing the fan-out on a schedule moves it somewhere slowness is free.
