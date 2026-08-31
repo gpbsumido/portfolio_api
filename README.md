@@ -238,7 +238,7 @@ migration applies (`src/modules/feature-flags/seed.ts`), so the demo can't drift
 Run it as its **own** Railway cron service (separate from the web service and the
 calendar cron — a service has only one schedule and one `CRON_JOB`):
 
-- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Source**: this repo, `main`; **Start command**: leave it — `railway.json` sets `bash scripts/start.sh`, which skips migrations when `RUN_CRON=true` and execs `node start.js`
 - **Schedule**: `0 */6 * * *` (00/06/12/18 UTC)
 - **Variables**: `RUN_CRON=true`, `CRON_JOB=reset-feature-flags`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
 
@@ -261,7 +261,7 @@ being slow costs nothing, and the pages read `GET /api/tcg/catalog` instead.
 Run it as its **own** Railway cron service (a service has only one schedule and one
 `CRON_JOB`):
 
-- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Source**: this repo, `main`; **Start command**: leave it — `railway.json` sets `bash scripts/start.sh`, which skips migrations when `RUN_CRON=true` and execs `node start.js`
 - **Schedule**: `0 5 * * *` (daily at 5am UTC)
 - **Variables**: `RUN_CRON=true`, `CRON_JOB=ingest-tcg-catalog`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
 
@@ -287,7 +287,7 @@ refreshing every timestamp. It reuses the same `seedOperator()` the CLI seed use
 Run it as its **own** Railway cron service (a service has only one schedule and one
 `CRON_JOB`):
 
-- **Source**: this repo, `main`; **Start command**: `node start.js` (from `railway.json`)
+- **Source**: this repo, `main`; **Start command**: leave it — `railway.json` sets `bash scripts/start.sh`, which skips migrations when `RUN_CRON=true` and execs `node start.js`
 - **Schedule**: `0 4 * * *` (daily at 4am UTC)
 - **Variables**: `RUN_CRON=true`, `CRON_JOB=reseed-operator`, `NODE_ENV=production`, `DATABASE_URL=<railway postgres>`
 
