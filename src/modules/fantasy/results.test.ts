@@ -98,12 +98,31 @@ describe('draft results API', () => {
     expect(repo.upsertResult).not.toHaveBeenCalled();
   });
 
-  test('GET returns results newest-first as summaries', async () => {
+  test('GET returns results newest-first as summaries (no blobs)', async () => {
     (repo.listResults as any).mockResolvedValue([
       { id: '1', client_key: KEY, sport: 'nfl', num_teams: 12, my_slot: 10, mode: 'practice', fully_sim: false, human_pick_count: 2, created_at: new Date() },
     ]);
     const res = await request(makeApp()).get('/api/fantasy/draft-results');
     expect(res.status).toBe(200);
     expect(res.body.results[0]).toMatchObject({ sport: 'nfl', mode: 'practice', fullySim: false, humanPickCount: 2 });
+    expect(res.body.results[0].picks).toBeUndefined();
+    expect(repo.listResults).toHaveBeenCalledWith(50, false); // default limit, summary
+  });
+
+  test('GET ?full=true includes the picks + standings blobs', async () => {
+    (repo.listResults as any).mockResolvedValue([
+      {
+        id: '1', client_key: KEY, client_draft_id: 'd1', sport: 'nfl', num_teams: 12, rounds: 15,
+        my_slot: 10, mode: 'practice', fully_sim: false, human_pick_count: 2, team_names: 'A|B',
+        picks: [{ overall: 0, teamIdx: 0, playerId: 'x', name: 'X', pos: 'QB', source: 'sim', keeper: false }],
+        standings: { rows: [{ teamIdx: 10, starterPts: 1800 }], myRank: 1 }, created_at: new Date(),
+      },
+    ]);
+    const res = await request(makeApp()).get('/api/fantasy/draft-results?full=true&limit=200');
+    expect(res.status).toBe(200);
+    expect(repo.listResults).toHaveBeenCalledWith(200, true);
+    expect(res.body.results[0].picks).toHaveLength(1);
+    expect(res.body.results[0].standings.myRank).toBe(1);
+    expect(res.body.results[0].clientDraftId).toBe('d1');
   });
 });

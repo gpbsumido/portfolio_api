@@ -27,14 +27,17 @@ export async function upsertResult(clientKey: string, input: ResultInput): Promi
   return rows[0];
 }
 
-/** Recent finished drafts, newest first. Summary columns only — no blobs. */
-export async function listResults(limit: number): Promise<ResultRow[]> {
+/**
+ * Recent finished drafts, newest first. Summary columns by default; `full`
+ * adds the picks + standings blobs for the download-everything export.
+ */
+export async function listResults(limit: number, full = false): Promise<ResultRow[]> {
+  const cols = full
+    ? '*'
+    : `id, client_key, client_draft_id, sport, num_teams, rounds, my_slot,
+       mode, fully_sim, human_pick_count, created_at`;
   const { rows } = await pool.query<ResultRow>(
-    `SELECT id, client_key, client_draft_id, sport, num_teams, rounds, my_slot,
-            mode, fully_sim, human_pick_count, created_at
-       FROM draft_results
-      ORDER BY created_at DESC
-      LIMIT $1`,
+    `SELECT ${cols} FROM draft_results ORDER BY created_at DESC LIMIT $1`,
     [limit],
   );
   return rows;

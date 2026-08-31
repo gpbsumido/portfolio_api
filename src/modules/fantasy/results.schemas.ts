@@ -37,6 +37,12 @@ export const resultInputSchema = z.object({
 
 export const listResultsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  // full=true returns the complete rows (picks + standings), for the Elite
+  // "download every result" export. Default is the lightweight summary.
+  full: z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .transform((v) => v === true || v === 'true' || v === '1')
+    .default(false),
 });
 
 export type ResultInputBody = z.infer<typeof resultInputSchema>;

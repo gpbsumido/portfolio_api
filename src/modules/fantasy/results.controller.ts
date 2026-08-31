@@ -4,6 +4,8 @@ import { readClientKey } from './results.client-key.js';
 import type { ListResultsQuery, ResultInputBody } from './results.schemas.js';
 import type { ResultRow, ResultSummaryDto } from './results.types.js';
 
+const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : String(d));
+
 function toSummary(row: ResultRow): ResultSummaryDto {
   return {
     id: row.id,
@@ -13,16 +15,28 @@ function toSummary(row: ResultRow): ResultSummaryDto {
     mode: row.mode,
     fullySim: row.fully_sim,
     humanPickCount: row.human_pick_count,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    createdAt: iso(row.created_at),
+  };
+}
+
+// The full export: summary fields plus the picks + standings blobs.
+function toFull(row: ResultRow) {
+  return {
+    ...toSummary(row),
+    clientDraftId: row.client_draft_id,
+    rounds: row.rounds,
+    teamNames: row.team_names,
+    picks: row.picks,
+    standings: row.standings,
   };
 }
 
 export class ResultsController {
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { limit } = (req.validatedQuery ?? req.query) as unknown as ListResultsQuery;
-      const rows = await repo.listResults(limit);
-      res.json({ results: rows.map(toSummary) });
+      const { limit, full } = (req.validatedQuery ?? req.query) as unknown as ListResultsQuery;
+      const rows = await repo.listResults(limit, full);
+      res.json({ results: rows.map((r) => (full ? toFull(r) : toSummary(r))) });
     } catch (err) {
       next(err);
     }
