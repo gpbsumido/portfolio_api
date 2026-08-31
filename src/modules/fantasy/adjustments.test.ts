@@ -11,6 +11,7 @@ vi.mock('./adjustments.repository.js', () => ({
 }));
 vi.mock('../../middleware/rateLimiter.js', () => ({
   createIpLimiter: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  createHeaderKeyLimiter: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 // The write token the router reads at import time.
 vi.mock('../../config/env.js', () => ({ env: { DRAFT_ADJ_SERVICE_TOKEN: 'test-secret' } }));

@@ -56,19 +56,20 @@ const ALLOWED_ORIGINS = [
   'https://develop.paulsumido.com',
   ...(env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
 ];
-// The Draft Lab extension calls /api/fantasy/adjustments from a moz-extension://
-// page whose per-install origin the allowlist can't enumerate. This resource is
-// non-credentialed (public reads, a custom-header token for writes, no cookie),
-// so it gets a permissive CORS policy. It MUST run before the global cors below:
-// otherwise the global policy answers the write preflight itself for a
-// non-allowlisted origin — a 204 with no Access-Control-Allow-Origin, which the
-// browser rejects — before this handler ever sees it.
+// The Draft Lab extension calls /api/fantasy/{adjustments,draft-results} from a
+// moz-extension:// page whose per-install origin the allowlist can't enumerate.
+// Both resources are non-credentialed (public reads, a custom-header token or a
+// self-minted key for writes, no cookie), so they get a permissive CORS policy.
+// It MUST run before the global cors below: otherwise the global policy answers
+// the write preflight itself for a non-allowlisted origin — a 204 with no
+// Access-Control-Allow-Origin, which the browser rejects — before this handler
+// ever sees it.
 app.use(
-  '/api/fantasy/adjustments',
+  ['/api/fantasy/adjustments', '/api/fantasy/draft-results'],
   cors({
     origin: '*',
     methods: ['GET', 'PATCH', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-draft-adj-token'],
+    allowedHeaders: ['Content-Type', 'x-draft-adj-token', 'x-draft-client-key'],
   }),
 );
 app.use(cors({ origin: ALLOWED_ORIGINS }));
