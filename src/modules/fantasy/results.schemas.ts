@@ -47,6 +47,12 @@ export const resultInputSchema = z.object({
     .default([]),
 });
 
+// The extension batches finished drafts and sends them in ONE request per
+// 10-minute flush; the server splits the batch and upserts each.
+export const resultBatchSchema = z.object({
+  results: z.array(resultInputSchema).min(1).max(500),
+});
+
 export const listResultsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   // full=true returns the complete rows (picks + standings), for the Elite
@@ -58,4 +64,5 @@ export const listResultsQuerySchema = z.object({
 });
 
 export type ResultInputBody = z.infer<typeof resultInputSchema>;
+export type ResultBatchBody = z.infer<typeof resultBatchSchema>;
 export type ListResultsQuery = z.infer<typeof listResultsQuerySchema>;

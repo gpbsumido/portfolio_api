@@ -99,6 +99,28 @@ describe('draft results API', () => {
     expect(repo.upsertResult).not.toHaveBeenCalled();
   });
 
+  test('POST /batch upserts every result in one request', async () => {
+    (repo.upsertResult as any)
+      .mockResolvedValueOnce({ id: 'a' })
+      .mockResolvedValueOnce({ id: 'b' });
+    const res = await request(makeApp())
+      .post('/api/fantasy/draft-results/batch')
+      .set(CLIENT_KEY_HEADER, KEY)
+      .send({ results: [validBody({ clientDraftId: 'd1' }), validBody({ clientDraftId: 'd2' })] });
+    expect(res.status).toBe(201);
+    expect(res.body.upserted).toBe(2);
+    expect(res.body.ids).toEqual(['a', 'b']);
+    expect(repo.upsertResult).toHaveBeenCalledTimes(2);
+  });
+
+  test('POST /batch requires a valid client key and rejects an empty batch', async () => {
+    const noKey = await request(makeApp()).post('/api/fantasy/draft-results/batch').send({ results: [validBody()] });
+    expect(noKey.status).toBe(400);
+    const empty = await request(makeApp()).post('/api/fantasy/draft-results/batch').set(CLIENT_KEY_HEADER, KEY).send({ results: [] });
+    expect(empty.status).toBe(400);
+    expect(repo.upsertResult).not.toHaveBeenCalled();
+  });
+
   test('GET returns results newest-first as summaries (no blobs)', async () => {
     (repo.listResults as any).mockResolvedValue([
       { id: '1', client_key: KEY, sport: 'nfl', num_teams: 12, my_slot: 10, mode: 'practice', fully_sim: false, human_pick_count: 2, created_at: new Date() },

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import * as repo from './results.repository.js';
 import { readClientKey } from './results.client-key.js';
-import type { ListResultsQuery, ResultInputBody } from './results.schemas.js';
+import type { ListResultsQuery, ResultBatchBody, ResultInputBody } from './results.schemas.js';
 import type { ResultRow, ResultSummaryDto } from './results.types.js';
 
 const iso = (d: Date | string) => (d instanceof Date ? d.toISOString() : String(d));
@@ -50,6 +50,20 @@ export class ResultsController {
       const body = req.body as ResultInputBody;
       const { id } = await repo.upsertResult(key, body);
       res.status(201).json({ id });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // One request per 10-minute flush carries every finished draft; split it and
+  // upsert each. Idempotent, so a re-sent batch updates rather than duplicates.
+  async postBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const key = readClientKey(req) as string;
+      const { results } = req.body as ResultBatchBody;
+      const ids: string[] = [];
+      for (const r of results) ids.push((await repo.upsertResult(key, r)).id);
+      res.status(201).json({ upserted: ids.length, ids });
     } catch (err) {
       next(err);
     }
