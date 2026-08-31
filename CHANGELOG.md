@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-30 - version 4.15.1
+
+- **A new Railway service crashed waiting for `host.docker.internal`.** The image's `CMD` wrapped the entrypoint in wait-for-it against `${DB_HOST:-host.docker.internal}`, a local-development address. Any hosted service that doesn't set `DB_HOST` — which is every one of them — waits 15 seconds for a host that cannot exist and then crashes, reporting a Docker address that sends you to look at entirely the wrong thing. Nothing needed the wrapper: docker-compose gates the app on the database's healthcheck, and `scripts/start.sh` already does its own bounded `pg_isready` wait using `DATABASE_URL`, which is the variable that actually says where the database is. The `CMD` is now just the entrypoint.
+- **The cron setup docs named the wrong start command.** All three cron sections said `node start.js` "from `railway.json`", but `railway.json` runs `bash scripts/start.sh` — which is the file that skips migrations when `RUN_CRON=true` so a cron container cannot race the web container for the knex lock. Following the README literally would have overridden that and had every cron try to migrate. Corrected in all three.
+
 ## 2026-08-30 - version 4.15.0
 
 - **A local mirror of the TCGdex catalog, so the lists stop rendering from a slow third party.** New `tcg_series` / `tcg_sets` tables (migration `028_tcg_catalog.ts`), an `ingest-tcg-catalog` cron job, and a public `GET /api/tcg/catalog`. paul-explore's set lists were fetching every series and then each one individually at render time; that fan-out timed out `next build` (60s per page, three attempts, then the export dies) and at request time produced an empty list that ISR cached for a day — which reads as data nobody has updated rather than as an outage. Doing the fan-out on a schedule moves it somewhere slowness is free.
