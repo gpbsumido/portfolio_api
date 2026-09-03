@@ -29,6 +29,9 @@ if (process.env.RUN_CRON === "true") {
     // principal of matured wallets. Both sweeps are idempotent.
     "zeroproof-unlock": () =>
       require("./dist/jobs/zeroproofUnlock").zeroproofUnlock(),
+    // Accrue a day's simulated yield on the held ZeroProof float.
+    "zeroproof-yield": () =>
+      require("./dist/jobs/zeroproofYield").zeroproofYield(),
   };
 
   const run = jobs[job];

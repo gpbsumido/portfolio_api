@@ -99,6 +99,27 @@ export class ZeroproofController {
     }
   }
 
+  /** GET /api/zeroproof/refer — log an attributed click and 302 to the book. */
+  async refer(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sub = (req.auth?.payload as { sub?: string } | undefined)?.sub ?? null;
+      const partner = String(req.query.partner ?? '');
+      const target = await service.recordReferralClick(sub, partner);
+      res.redirect(302, target);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/house — company float, yield and referral clicks (admin). */
+  async house(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json(await service.houseSummary());
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/zeroproof/bets — place a bet from one of the caller's wallets. */
   async placeBet(req: Request, res: Response, next: NextFunction) {
     try {

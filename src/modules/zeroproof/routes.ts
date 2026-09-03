@@ -3,8 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { Router } from 'express';
-import { checkJwt } from '../../config/auth.js';
+import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
 import { validateBody } from '../../middleware/validate.js';
+import { requireAdmin } from '../../shared/auth/adminEmail.js';
 import { ZeroproofController } from './controller.js';
 import { openWalletSchema, placeBetSchema } from './schemas.js';
 
@@ -20,6 +21,12 @@ router.get('/leaderboard', (req, res, next) => ctrl.leaderboard(req, res, next))
 
 // GET /api/zeroproof/me — the caller's profile stats
 router.get('/me', checkJwt, (req, res, next) => ctrl.me(req, res, next));
+
+// GET /api/zeroproof/refer — attributed outbound link to a partner book
+router.get('/refer', optionalCheckJwt, (req, res, next) => ctrl.refer(req, res, next));
+
+// GET /api/zeroproof/house — company float, yield, referral clicks (admin only)
+router.get('/house', checkJwt, requireAdmin, (req, res, next) => ctrl.house(req, res, next));
 
 // GET /api/zeroproof/wallets — the caller's wallets and balances
 router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, next));

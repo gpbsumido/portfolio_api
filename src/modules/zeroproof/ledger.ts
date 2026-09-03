@@ -60,6 +60,19 @@ export function refundPrincipalLines(principalCents: number): LedgerLine[] {
   ];
 }
 
+/**
+ * Simulated investment yield on the held float. It accrues to the house against
+ * escrow and nets to zero; it never touches a user's bankroll. On fake dollars
+ * today, this is the "how much did we make" engine — a real investment provider
+ * slots in at the edge later without changing this.
+ */
+export function yieldLines(amountCents: number): LedgerLine[] {
+  return [
+    { account: 'house', kind: 'yield', amountCents },
+    { account: 'escrow', kind: 'yield', amountCents: -amountCents },
+  ];
+}
+
 /** American odds → decimal payout multiplier (stake included). */
 export function americanToDecimal(american: number): number {
   return american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american);

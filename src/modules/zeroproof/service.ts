@@ -260,6 +260,43 @@ export function resolveResultsProvider(): ResultsProvider {
   throw new Error(`Unknown ZEROPROOF_RESULTS_PROVIDER: ${choice}`);
 }
 
+/** Licensed partner books we refer to. Only these are valid redirect targets. */
+const PARTNERS: Record<string, string> = {
+  draftkings: 'https://sportsbook.draftkings.com/',
+  fanduel: 'https://sportsbook.fanduel.com/',
+};
+
+/** The redirect target for a partner, or a 400 for one we don't refer to. */
+export function referralTarget(partner: string): string {
+  const url = PARTNERS[partner];
+  if (!url) throw new ValidationError(`Unknown partner "${partner}"`);
+  return url;
+}
+
+/** Log an attributed click, then hand back the book's URL to redirect to. */
+export async function recordReferralClick(userSub: string | null, partner: string): Promise<string> {
+  const target = referralTarget(partner); // throws before we log an unroutable click
+  await repo.logReferralClick({ userSub, partner });
+  return target;
+}
+
+export function houseSummary() {
+  return repo.houseSummary();
+}
+
+/** ~3.7% annualized on the held float, accrued once per daily run. */
+const DAILY_YIELD_RATE = 0.0001;
+
+/** Accrue a day's simulated yield on the current float. Returns the cents accrued. */
+export async function accrueDailyYield(): Promise<number> {
+  const summary = await repo.houseSummary();
+  // escrow holds the deposits as a negative (a liability); the float is its magnitude.
+  const floatCents = Math.max(0, -summary.escrowCents);
+  const yieldCents = Math.round(floatCents * DAILY_YIELD_RATE);
+  if (yieldCents > 0) await repo.accrueYield(yieldCents);
+  return yieldCents;
+}
+
 /** The sports to sync, from env (comma-separated) or the seed defaults. */
 export function resolveSportKeys(): string[] {
   const raw = process.env.ZEROPROOF_SPORT_KEYS;

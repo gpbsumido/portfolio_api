@@ -459,7 +459,8 @@ export type NewZeroproofWallet = InferInsertModel<typeof zeroproofWallets>;
 // zero; a wallet's balance is the sum of its `user`-account lines.
 export const zeroproofLedgerEntries = pgTable("zeroproof_ledger_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
-  walletId: uuid("wallet_id").notNull(),
+  // Nullable: house-level entries (yield) belong to the float, not a wallet.
+  walletId: uuid("wallet_id"),
   betId: uuid("bet_id"),
   kind: text("kind").notNull(),
   account: text("account").notNull(),
@@ -527,3 +528,15 @@ export const zeroproofBets = pgTable("zeroproof_bets", {
 
 export type ZeroproofBet = InferSelectModel<typeof zeroproofBets>;
 export type NewZeroproofBet = InferInsertModel<typeof zeroproofBets>;
+
+// ── zeroproof_referral_clicks ────────────────────────────────────────────────
+// One outbound click to a partner sportsbook, attributed to a user for CPA.
+export const zeroproofReferralClicks = pgTable("zeroproof_referral_clicks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub"),
+  partner: text("partner").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofReferralClick = InferSelectModel<typeof zeroproofReferralClicks>;
+export type NewZeroproofReferralClick = InferInsertModel<typeof zeroproofReferralClicks>;

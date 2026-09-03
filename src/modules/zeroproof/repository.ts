@@ -2,7 +2,7 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, asc, desc, eq, gt, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type ZeroproofBet,
@@ -12,6 +12,7 @@ import {
   zeroproofEvents,
   zeroproofLedgerEntries,
   zeroproofOddsSnapshots,
+  zeroproofReferralClicks,
   zeroproofWallets,
 } from '../../config/drizzle/schema.js';
 import { ConflictError } from '../../shared/errors/index.js';
@@ -21,6 +22,7 @@ import {
   refundPrincipalLines,
   settlementLines,
   stakeLines,
+  yieldLines,
 } from './ledger.js';
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
@@ -463,4 +465,56 @@ export async function getSettledBetsByUser(): Promise<{ userSub: string; bets: S
     else byUser.set(userSub, [bet]);
   }
   return [...byUser].map(([userSub, bets]) => ({ userSub, bets }));
+}
+
+/** Record an attributed outbound click to a partner sportsbook. */
+export async function logReferralClick(input: { userSub: string | null; partner: string }): Promise<void> {
+  await db.insert(zeroproofReferralClicks).values({ userSub: input.userSub, partner: input.partner });
+}
+
+/** Accrue simulated float yield to the house account. */
+export async function accrueYield(amountCents: number): Promise<void> {
+  await db.insert(zeroproofLedgerEntries).values(
+    yieldLines(amountCents).map((line) => ({
+      kind: line.kind,
+      account: line.account,
+      amountCents: line.amountCents,
+    })),
+  );
+}
+
+export interface HouseSummary {
+  /** The company's net position: won stakes + yield − paid profits. */
+  houseCents: number;
+  /** The escrow float: negative because escrow holds a liability to return deposits. */
+  escrowCents: number;
+  /** Of the house position, how much is accrued yield. */
+  yieldCents: number;
+  referralClicks: number;
+}
+
+function sumByAccount(account: string) {
+  return db
+    .select({ total: sql<number>`coalesce(sum(${zeroproofLedgerEntries.amountCents}), 0)` })
+    .from(zeroproofLedgerEntries)
+    .where(eq(zeroproofLedgerEntries.account, account));
+}
+
+/** The "how much did we make" numbers, derived from the ledger. */
+export async function houseSummary(): Promise<HouseSummary> {
+  const [[house], [escrow], [yieldRow], [clicks]] = await Promise.all([
+    sumByAccount('house'),
+    sumByAccount('escrow'),
+    db
+      .select({ total: sql<number>`coalesce(sum(${zeroproofLedgerEntries.amountCents}), 0)` })
+      .from(zeroproofLedgerEntries)
+      .where(and(eq(zeroproofLedgerEntries.account, 'house'), eq(zeroproofLedgerEntries.kind, 'yield'))),
+    db.select({ count: sql<number>`count(*)` }).from(zeroproofReferralClicks),
+  ]);
+  return {
+    houseCents: Number(house.total),
+    escrowCents: Number(escrow.total),
+    yieldCents: Number(yieldRow.total),
+    referralClicks: Number(clicks.count),
+  };
 }
