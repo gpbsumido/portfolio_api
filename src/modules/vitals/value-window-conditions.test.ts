@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  metricSampleFloor,
   plausibleValueCondition,
   recentWindowCondition,
   WINDOW_DAYS,
@@ -50,5 +51,23 @@ describe('recentWindowCondition', () => {
     // days is an internal constant, but the fragment is interpolated into SQL,
     // so a fractional or junk value must never reach the string verbatim.
     expect(recentWindowCondition(28.9)).toContain("INTERVAL '28 days'");
+  });
+});
+
+describe('metricSampleFloor', () => {
+  test('drops a grouped metric below the sample floor', () => {
+    const sql = metricSampleFloor(10);
+    expect(sql).toMatch(/HAVING\s+COUNT\(\*\)\s*>=\s*10/);
+  });
+
+  test('binds no parameters, so it composes onto any GROUP BY', () => {
+    expect(metricSampleFloor()).not.toContain('$');
+  });
+
+  test('only ever interpolates a whole number', () => {
+    // The floor is an internal constant, but it is interpolated into SQL, so a
+    // fractional or junk value must never reach the string verbatim.
+    expect(metricSampleFloor(10.9)).toMatch(/>=\s*10\b/);
+    expect(metricSampleFloor(-3)).toMatch(/>=\s*0\b/);
   });
 });
