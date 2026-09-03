@@ -2,12 +2,18 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
-import { zeroproofLedgerEntries, zeroproofWallets } from '../../config/drizzle/schema.js';
+import {
+  zeroproofEvents,
+  zeroproofLedgerEntries,
+  zeroproofOddsSnapshots,
+  zeroproofWallets,
+} from '../../config/drizzle/schema.js';
 import { ConflictError } from '../../shared/errors/index.js';
 import { depositLines, deriveBalanceCents } from './ledger.js';
-import type { WalletMode, WalletWithBalance } from './types.js';
+import type { MarketKey, NormalizedOutcome } from './providers/types.js';
+import type { EventWithLines, WalletMode, WalletWithBalance } from './types.js';
 
 interface OpenWalletInput {
   userSub: string;
@@ -86,4 +92,93 @@ export async function listWallets(userSub: string): Promise<WalletWithBalance[]>
     ...w,
     balanceCents: deriveBalanceCents(entries.filter((e) => e.walletId === w.id)),
   }));
+}
+
+interface UpsertEventInput {
+  providerKey: string;
+  sport: string;
+  home: string;
+  away: string;
+  commenceTime: Date;
+}
+
+/** Insert an event or refresh a known one (matched on provider_key). Returns our id. */
+export async function upsertEvent(input: UpsertEventInput): Promise<string> {
+  const [row] = await db
+    .insert(zeroproofEvents)
+    .values({
+      providerKey: input.providerKey,
+      sport: input.sport,
+      home: input.home,
+      away: input.away,
+      commenceTime: input.commenceTime,
+    })
+    .onConflictDoUpdate({
+      target: zeroproofEvents.providerKey,
+      set: {
+        home: input.home,
+        away: input.away,
+        commenceTime: input.commenceTime,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ id: zeroproofEvents.id });
+  return row.id;
+}
+
+interface InsertSnapshotInput {
+  eventId: string;
+  market: MarketKey;
+  outcomes: NormalizedOutcome[];
+  fetchedAt?: Date;
+}
+
+/** Append one market's lines. Snapshots are never overwritten. */
+export async function insertSnapshot(input: InsertSnapshotInput): Promise<void> {
+  await db.insert(zeroproofOddsSnapshots).values({
+    eventId: input.eventId,
+    market: input.market,
+    outcomes: input.outcomes,
+    ...(input.fetchedAt ? { fetchedAt: input.fetchedAt } : {}),
+  });
+}
+
+/**
+ * Upcoming events (kickoff still ahead) with the latest snapshot per market.
+ * Served straight from the DB, so user traffic never touches the vendor.
+ */
+export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
+  const events = await db
+    .select()
+    .from(zeroproofEvents)
+    .where(and(eq(zeroproofEvents.status, 'upcoming'), gt(zeroproofEvents.commenceTime, new Date())))
+    .orderBy(asc(zeroproofEvents.commenceTime));
+  if (events.length === 0) return [];
+
+  const ids = events.map((e) => e.id);
+  const snapshots = await db
+    .select()
+    .from(zeroproofOddsSnapshots)
+    .where(inArray(zeroproofOddsSnapshots.eventId, ids))
+    .orderBy(desc(zeroproofOddsSnapshots.fetchedAt));
+
+  return events.map((event) => {
+    const seen = new Set<string>();
+    const markets = [];
+    // Snapshots come newest-first, so the first row per market is the latest line.
+    for (const snap of snapshots) {
+      if (snap.eventId !== event.id || seen.has(snap.market)) continue;
+      seen.add(snap.market);
+      markets.push({ market: snap.market, fetchedAt: snap.fetchedAt, outcomes: snap.outcomes });
+    }
+    return {
+      id: event.id,
+      sport: event.sport,
+      home: event.home,
+      away: event.away,
+      commenceTime: event.commenceTime,
+      status: event.status,
+      markets,
+    };
+  });
 }

@@ -11,6 +11,10 @@ import { openWalletSchema } from './schemas.js';
 const router = Router();
 const ctrl = new ZeroproofController();
 
+// GET /api/zeroproof/events — upcoming events with latest lines (public: the
+// slate renders for signed-out visitors, and it's served from the DB only).
+router.get('/events', (req, res, next) => ctrl.listEvents(req, res, next));
+
 // GET /api/zeroproof/wallets — the caller's wallets and balances
 router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, next));
 

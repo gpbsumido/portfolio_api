@@ -10,6 +10,38 @@ export type WalletStatus = 'active' | 'busted' | 'refunded';
 /** A wallet row plus its derived bettable balance. */
 export type WalletWithBalance = ZeroproofWallet & { balanceCents: number };
 
+/** A market's latest lines for an event, as stored/derived from snapshots. */
+export interface MarketLines {
+  market: string;
+  fetchedAt: Date;
+  outcomes: { name: string; priceAmerican: number; point?: number }[];
+}
+
+/** An upcoming event with its latest line per market. */
+export interface EventWithLines {
+  id: string;
+  sport: string;
+  home: string;
+  away: string;
+  commenceTime: Date;
+  status: string;
+  markets: MarketLines[];
+}
+
+export interface EventDto {
+  id: string;
+  sport: string;
+  home: string;
+  away: string;
+  commenceTime: string;
+  status: string;
+  markets: {
+    market: string;
+    fetchedAt: string;
+    outcomes: { name: string; priceAmerican: number; point?: number }[];
+  }[];
+}
+
 export interface WalletDto {
   id: string;
   mode: string;

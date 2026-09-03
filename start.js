@@ -17,6 +17,10 @@ if (process.env.RUN_CRON === "true") {
     // slow third party (daily, 0 5 * * *).
     "ingest-tcg-catalog": () =>
       require("./dist/jobs/ingestTcgCatalog").ingestTcgCatalog(),
+    // Pull ZeroProof odds and snapshot them so the events feed serves from the
+    // DB (default provider is fixtures — zero credits — until a key is set).
+    "zeroproof-odds-sync": () =>
+      require("./dist/jobs/zeroproofOddsSync").zeroproofOddsSync(),
   };
 
   const run = jobs[job];

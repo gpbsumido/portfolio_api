@@ -6,7 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
 import type { OpenWalletInput } from './schemas.js';
 import * as service from './service.js';
-import type { WalletDto, WalletWithBalance } from './types.js';
+import type { EventDto, EventWithLines, WalletDto, WalletWithBalance } from './types.js';
 
 /** The Auth0 subject of the caller, or a 401 if the token carried none. */
 function requireSub(req: Request): string {
@@ -28,7 +28,33 @@ function toWalletDto(w: WalletWithBalance): WalletDto {
   };
 }
 
+function toEventDto(e: EventWithLines): EventDto {
+  return {
+    id: e.id,
+    sport: e.sport,
+    home: e.home,
+    away: e.away,
+    commenceTime: e.commenceTime.toISOString(),
+    status: e.status,
+    markets: e.markets.map((m) => ({
+      market: m.market,
+      fetchedAt: m.fetchedAt.toISOString(),
+      outcomes: m.outcomes,
+    })),
+  };
+}
+
 export class ZeroproofController {
+  /** GET /api/zeroproof/events — upcoming events with latest lines (public). */
+  async listEvents(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const events = await service.listEvents();
+      res.json({ events: events.map(toEventDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/zeroproof/wallets — open a Season or Challenge wallet. */
   async openWallet(req: Request, res: Response, next: NextFunction) {
     try {
