@@ -4,6 +4,7 @@
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   doublePrecision,
   integer,
@@ -434,3 +435,36 @@ export const cardPulls = pgTable("card_pulls", {
 
 export type CardPull = InferSelectModel<typeof cardPulls>;
 export type NewCardPull = InferInsertModel<typeof cardPulls>;
+
+// ── zeroproof_wallets ────────────────────────────────────────────────────────
+// A locked deposit the user bets from. `principal_cents` refunds in full at
+// lock_end; the bettable balance floats with play and is derived from the ledger.
+export const zeroproofWallets = pgTable("zeroproof_wallets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub").notNull(),
+  mode: text("mode").notNull(),
+  principalCents: integer("principal_cents").notNull(),
+  lockStart: timestamp("lock_start", { withTimezone: true }).notNull(),
+  lockEnd: timestamp("lock_end", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofWallet = InferSelectModel<typeof zeroproofWallets>;
+export type NewZeroproofWallet = InferInsertModel<typeof zeroproofWallets>;
+
+// ── zeroproof_ledger_entries ─────────────────────────────────────────────────
+// One line of a double-entry money movement. Every movement's lines net to
+// zero; a wallet's balance is the sum of its `user`-account lines.
+export const zeroproofLedgerEntries = pgTable("zeroproof_ledger_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  walletId: uuid("wallet_id").notNull(),
+  betId: uuid("bet_id"),
+  kind: text("kind").notNull(),
+  account: text("account").notNull(),
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofLedgerEntry = InferSelectModel<typeof zeroproofLedgerEntries>;
+export type NewZeroproofLedgerEntry = InferInsertModel<typeof zeroproofLedgerEntries>;
