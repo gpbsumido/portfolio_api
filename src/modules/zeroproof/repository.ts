@@ -2,10 +2,11 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type ZeroproofBet,
+  type ZeroproofEvent,
   type ZeroproofWallet,
   zeroproofBets,
   zeroproofEvents,
@@ -14,9 +15,10 @@ import {
   zeroproofWallets,
 } from '../../config/drizzle/schema.js';
 import { ConflictError } from '../../shared/errors/index.js';
-import { depositLines, deriveBalanceCents, stakeLines } from './ledger.js';
+import { depositLines, deriveBalanceCents, settlementLines, stakeLines } from './ledger.js';
 import { canAfford } from './placement.js';
-import type { MarketKey, NormalizedOutcome } from './providers/types.js';
+import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
+import type { Grade } from './settlement.js';
 import type { EventWithLines, WalletMode, WalletWithBalance } from './types.js';
 
 interface OpenWalletInput {
@@ -267,4 +269,88 @@ export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
 
     return { ok: true, bet };
   });
+}
+
+/** An event by the vendor's id — the settler's entry point. */
+export async function getEventByProviderKey(providerKey: string): Promise<ZeroproofEvent | undefined> {
+  const rows = await db
+    .select()
+    .from(zeroproofEvents)
+    .where(eq(zeroproofEvents.providerKey, providerKey))
+    .limit(1);
+  return rows[0];
+}
+
+/** The still-open bets on an event — what the settler grades. */
+export async function getOpenBetsForEvent(eventId: string): Promise<ZeroproofBet[]> {
+  return db
+    .select()
+    .from(zeroproofBets)
+    .where(and(eq(zeroproofBets.eventId, eventId), eq(zeroproofBets.status, 'open')));
+}
+
+/** The closing line: the latest snapshot for a market taken before kickoff. */
+export async function getClosingSnapshot(
+  eventId: string,
+  market: MarketKey,
+  commenceTime: Date,
+): Promise<{ outcomes: NormalizedOutcome[] } | null> {
+  const rows = await db
+    .select({ outcomes: zeroproofOddsSnapshots.outcomes })
+    .from(zeroproofOddsSnapshots)
+    .where(
+      and(
+        eq(zeroproofOddsSnapshots.eventId, eventId),
+        eq(zeroproofOddsSnapshots.market, market),
+        lte(zeroproofOddsSnapshots.fetchedAt, commenceTime),
+      ),
+    )
+    .orderBy(desc(zeroproofOddsSnapshots.fetchedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+interface SettleBetInput {
+  bet: Pick<ZeroproofBet, 'id' | 'walletId' | 'stakeCents' | 'oddsAmerican'>;
+  grade: Grade;
+  closingOdds: number | null;
+  clv: number | null;
+}
+
+/**
+ * Settle one bet: stamp its grade, closing line and CLV, and write the payout
+ * ledger — all in one transaction, so a bet is never marked graded without its
+ * money moving.
+ */
+export async function settleBet(input: SettleBetInput): Promise<void> {
+  const { bet, grade, closingOdds, clv } = input;
+  await db.transaction(async (tx) => {
+    await tx
+      .update(zeroproofBets)
+      .set({
+        status: grade,
+        settledAt: new Date(),
+        closingOddsAmerican: closingOdds,
+        clv: clv != null ? String(clv) : null,
+      })
+      .where(eq(zeroproofBets.id, bet.id));
+
+    await tx.insert(zeroproofLedgerEntries).values(
+      settlementLines(grade, bet.stakeCents, bet.oddsAmerican).map((line) => ({
+        walletId: bet.walletId,
+        betId: bet.id,
+        kind: line.kind,
+        account: line.account,
+        amountCents: line.amountCents,
+      })),
+    );
+  });
+}
+
+/** Record the final result and close the event to further betting. */
+export async function markEventFinal(eventId: string, result: NormalizedResult): Promise<void> {
+  await db
+    .update(zeroproofEvents)
+    .set({ status: 'final', result, updatedAt: new Date() })
+    .where(eq(zeroproofEvents.id, eventId));
 }

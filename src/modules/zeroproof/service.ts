@@ -5,9 +5,12 @@
 import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import { isBettable, isStale, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
+import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { TheOddsApiProvider } from './providers/theOddsApi.js';
-import type { MarketKey, OddsProvider } from './providers/types.js';
+import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
+import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
 import * as repo from './repository.js';
+import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
 import type { WalletMode } from './types.js';
 
 /** Season takes any deposit at or above $20; Challenge is a fixed $100. */
@@ -142,6 +145,58 @@ export function resolveOddsProvider(): OddsProvider {
     return new TheOddsApiProvider(key);
   }
   throw new Error(`Unknown ZEROPROOF_ODDS_PROVIDER: ${choice}`);
+}
+
+/**
+ * Settle finished events: for each completed result, grade the open bets, stamp
+ * the closing line and CLV, pay the ledger, and mark the event final. Idempotent
+ * — a second run skips events already final and never re-grades a settled bet.
+ */
+export async function settle(
+  provider: ResultsProvider,
+  sportKeys: string[],
+): Promise<{ eventsSettled: number; betsGraded: number }> {
+  const results = await provider.getResults(sportKeys);
+  let eventsSettled = 0;
+  let betsGraded = 0;
+
+  for (const result of results) {
+    if (!result.completed) continue;
+    const event = await repo.getEventByProviderKey(result.providerKey);
+    if (!event || event.status === 'final') continue;
+
+    const openBets = await repo.getOpenBetsForEvent(event.id);
+    for (const bet of openBets) {
+      const grade = gradeBet(
+        { market: bet.market, selection: bet.selection, lineValue: bet.lineValue != null ? Number(bet.lineValue) : null },
+        result,
+      );
+      const closingSnapshot = await repo.getClosingSnapshot(event.id, bet.market as MarketKey, event.commenceTime);
+      const closingOdds = closingSnapshot ? closingOddsFor(closingSnapshot, bet.selection) : null;
+      const clv = closingOdds != null ? computeClv(bet.oddsAmerican, closingOdds) : null;
+      await repo.settleBet({ bet, grade, closingOdds, clv });
+      betsGraded += 1;
+    }
+
+    await repo.markEventFinal(event.id, result);
+    eventsSettled += 1;
+  }
+
+  return { eventsSettled, betsGraded };
+}
+
+/** Choose the results provider from env — fixtures by default, never a silent swap. */
+export function resolveResultsProvider(): ResultsProvider {
+  const choice = process.env.ZEROPROOF_RESULTS_PROVIDER ?? 'fixtures';
+  if (choice === 'fixtures') return fixturesResultsProvider;
+  if (choice === 'the-odds-api') {
+    const key = process.env.ODDS_API_KEY;
+    if (!key) {
+      throw new Error('ZEROPROOF_RESULTS_PROVIDER=the-odds-api but ODDS_API_KEY is unset');
+    }
+    return new TheOddsApiResultsProvider(key);
+  }
+  throw new Error(`Unknown ZEROPROOF_RESULTS_PROVIDER: ${choice}`);
 }
 
 /** The sports to sync, from env (comma-separated) or the seed defaults. */

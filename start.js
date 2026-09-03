@@ -21,6 +21,10 @@ if (process.env.RUN_CRON === "true") {
     // DB (default provider is fixtures — zero credits — until a key is set).
     "zeroproof-odds-sync": () =>
       require("./dist/jobs/zeroproofOddsSync").zeroproofOddsSync(),
+    // Settle finished ZeroProof events: grade open bets, stamp CLV, pay the
+    // ledger. Idempotent, so a re-run is safe.
+    "zeroproof-settle": () =>
+      require("./dist/jobs/zeroproofSettle").zeroproofSettle(),
   };
 
   const run = jobs[job];
