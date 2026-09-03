@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-02 - version 5.2.0
+
+- **You can place a bet now, and the line is frozen the instant you do.** `POST /api/zeroproof/bets` copies the price (and the handicap, for spread/total) off the latest snapshot onto the bet, so a line move after placement never rewrites a bet. Every gate runs before any write: the wallet must be the caller's and inside its lock window, and the line can't be stale.
+- **The available-balance floor is enforced inside the transaction.** The stake is checked against the live derived balance and written as a `user → escrow` ledger pair in the same transaction, so two concurrent bets can't spend the same cents and a wallet can never go negative — an unaffordable stake gets a 402, not a bet nobody paid for.
+- **Stale lines are refused (409).** A snapshot older than 60 minutes can't be bet, so a dead price from a quiet worker doesn't become a live wager. Bets also carry `closing_odds_american` and `clv` columns from row one — the moat's raw material, filled at settlement, unrecoverable if the columns didn't exist yet.
+
 ## 2026-09-02 - version 5.1.0
 
 - **ZeroProof pulls real lines behind a swappable provider.** The Odds API v4 client normalizes h2h/spread/total to american prices; a fixtures provider replays a captured MLB/EPL/NFL slate with zero vendor credits, so dev, test, and seeding never spend quota. The vendor hides behind one `OddsProvider` interface, so it's swappable — and a dead vendor or exhausted quota surfaces as an error, not a silently empty slate that reads as "no games today".
