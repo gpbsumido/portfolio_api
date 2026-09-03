@@ -4,7 +4,9 @@
 
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
+  decimal,
   doublePrecision,
   integer,
   jsonb,
@@ -434,3 +436,120 @@ export const cardPulls = pgTable("card_pulls", {
 
 export type CardPull = InferSelectModel<typeof cardPulls>;
 export type NewCardPull = InferInsertModel<typeof cardPulls>;
+
+// ── zeroproof_wallets ────────────────────────────────────────────────────────
+// A locked deposit the user bets from. `principal_cents` refunds in full at
+// lock_end; the bettable balance floats with play and is derived from the ledger.
+export const zeroproofWallets = pgTable("zeroproof_wallets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub").notNull(),
+  mode: text("mode").notNull(),
+  principalCents: integer("principal_cents").notNull(),
+  lockStart: timestamp("lock_start", { withTimezone: true }).notNull(),
+  lockEnd: timestamp("lock_end", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofWallet = InferSelectModel<typeof zeroproofWallets>;
+export type NewZeroproofWallet = InferInsertModel<typeof zeroproofWallets>;
+
+// ── zeroproof_ledger_entries ─────────────────────────────────────────────────
+// One line of a double-entry money movement. Every movement's lines net to
+// zero; a wallet's balance is the sum of its `user`-account lines.
+export const zeroproofLedgerEntries = pgTable("zeroproof_ledger_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Nullable: house-level entries (yield) belong to the float, not a wallet.
+  walletId: uuid("wallet_id"),
+  betId: uuid("bet_id"),
+  kind: text("kind").notNull(),
+  account: text("account").notNull(),
+  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofLedgerEntry = InferSelectModel<typeof zeroproofLedgerEntries>;
+export type NewZeroproofLedgerEntry = InferInsertModel<typeof zeroproofLedgerEntries>;
+
+// ── zeroproof_events ─────────────────────────────────────────────────────────
+// A game we take bets on. `provider_key` maps the vendor's id to ours so a
+// provider swap keeps history; `result` fills in at settlement.
+export const zeroproofEvents = pgTable("zeroproof_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerKey: text("provider_key").notNull().unique(),
+  sport: text("sport").notNull(),
+  home: text("home").notNull(),
+  away: text("away").notNull(),
+  commenceTime: timestamp("commence_time", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("upcoming"),
+  result: jsonb("result"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofEvent = InferSelectModel<typeof zeroproofEvents>;
+export type NewZeroproofEvent = InferInsertModel<typeof zeroproofEvents>;
+
+// ── zeroproof_odds_snapshots ─────────────────────────────────────────────────
+// One market's lines at one moment. Never overwritten — every pull appends, so
+// the latest line and the closing line are both readable from history.
+export const zeroproofOddsSnapshots = pgTable("zeroproof_odds_snapshots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull(),
+  market: text("market").notNull(),
+  outcomes: jsonb("outcomes")
+    .$type<{ name: string; priceAmerican: number; point?: number }[]>()
+    .notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofOddsSnapshot = InferSelectModel<typeof zeroproofOddsSnapshots>;
+export type NewZeroproofOddsSnapshot = InferInsertModel<typeof zeroproofOddsSnapshots>;
+
+// ── zeroproof_bets ───────────────────────────────────────────────────────────
+// A decision at a frozen line. `oddsAmerican`/`lineValue` copy the line at
+// placement so it never drifts; `closingOddsAmerican`/`clv` are the moat, filled
+// at settlement. Decimals come back as strings from pg — parsed at the edge.
+export const zeroproofBets = pgTable("zeroproof_bets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  walletId: uuid("wallet_id").notNull(),
+  eventId: uuid("event_id").notNull(),
+  market: text("market").notNull(),
+  selection: text("selection").notNull(),
+  oddsAmerican: integer("odds_american").notNull(),
+  lineValue: decimal("line_value"),
+  closingOddsAmerican: integer("closing_odds_american"),
+  clv: decimal("clv"),
+  stakeCents: bigint("stake_cents", { mode: "number" }).notNull(),
+  status: text("status").notNull().default("open"),
+  placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+});
+
+export type ZeroproofBet = InferSelectModel<typeof zeroproofBets>;
+export type NewZeroproofBet = InferInsertModel<typeof zeroproofBets>;
+
+// ── zeroproof_referral_clicks ────────────────────────────────────────────────
+// One outbound click to a partner sportsbook, attributed to a user for CPA.
+export const zeroproofReferralClicks = pgTable("zeroproof_referral_clicks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub"),
+  partner: text("partner").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofReferralClick = InferSelectModel<typeof zeroproofReferralClicks>;
+export type NewZeroproofReferralClick = InferInsertModel<typeof zeroproofReferralClicks>;
+
+// ── zeroproof_accolade_awards ────────────────────────────────────────────────
+// The ledger of which user earned which badge. The catalog lives in code; a
+// unique (user_sub, accolade_id) makes re-awarding on profile view a no-op.
+export const zeroproofAccoladeAwards = pgTable("zeroproof_accolade_awards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub").notNull(),
+  accoladeId: text("accolade_id").notNull(),
+  awardedAt: timestamp("awarded_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofAccoladeAward = InferSelectModel<typeof zeroproofAccoladeAwards>;
+export type NewZeroproofAccoladeAward = InferInsertModel<typeof zeroproofAccoladeAwards>;
