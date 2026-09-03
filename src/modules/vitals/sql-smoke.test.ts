@@ -158,3 +158,56 @@ describe.skipIf(!DATABASE_URL)('vitals value and window SQL against a real datab
     expect(result.rows.map((r) => r.label)).toEqual(['recent']);
   });
 });
+
+describe.skipIf(!DATABASE_URL)('by-page per-metric sample floor against a real database', () => {
+  // A page can clear the page-total floor while one of its metrics has only a
+  // handful of samples. A P75 over three samples is two slow phones and a
+  // guess, and on the dashboard it reads as a real Poor-band score. This is the
+  // page /research hit: its CLS cell showed 0.716 off a sample count too small
+  // to trust. The floor is per metric so the trustworthy cells on a page stay
+  // and only the thin ones drop.
+  const PAGE = '/__sample_floor_probe__';
+
+  async function seed(): Promise<void> {
+    const { pool } = await import('../../config/database.js');
+    await pool.query('DELETE FROM web_vitals WHERE page = $1', [PAGE]);
+    // MIN_METRIC_SAMPLES is 10: LCP clears it with 12, CLS falls short at 3.
+    const rows: string[] = [];
+    const params: unknown[] = [PAGE];
+    for (let i = 0; i < 12; i++) {
+      params.push('LCP', 1200 + i, 'good');
+      const b = params.length;
+      rows.push(`($1, $${b - 2}, $${b - 1}, $${b}, 'navigate', '4.16.2')`);
+    }
+    for (let i = 0; i < 3; i++) {
+      params.push('CLS', 0.05, 'good');
+      const b = params.length;
+      rows.push(`($1, $${b - 2}, $${b - 1}, $${b}, 'navigate', '4.16.2')`);
+    }
+    await pool.query(
+      `INSERT INTO web_vitals (page, metric, value, rating, nav_type, app_version)
+       VALUES ${rows.join(', ')}`,
+      params,
+    );
+  }
+
+  async function cleanup(): Promise<void> {
+    const { pool } = await import('../../config/database.js');
+    await pool.query('DELETE FROM web_vitals WHERE page = $1', [PAGE]);
+  }
+
+  test('a metric below the floor is dropped while a metric above it stays', async () => {
+    const { VitalsRepository } = await import('./repository.js');
+    await seed();
+    try {
+      const byPage = await new VitalsRepository().getByPage(undefined, undefined);
+      const probe = byPage.find((p) => p.page === PAGE);
+
+      expect(probe).toBeDefined();
+      expect(probe?.metrics.LCP).toBeDefined();
+      expect(probe?.metrics.CLS).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+});
