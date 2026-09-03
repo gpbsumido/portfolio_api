@@ -1,8 +1,14 @@
 # Changelog
 
-## 2026-09-02 - version 4.17.0
+## 2026-09-02 - version 5.1.0
 
-- **ZeroProof gets its money foundation: a double-entry ledger and wallets.** This is the base of a stacked build for a no-loss betting product where the ledger is real but the dollars are simulated. Every movement is a set of lines that nets to zero across `user`/`escrow`/`house` accounts, and a wallet's bettable balance is never stored — it's derived from its `user`-account lines. I built it this way on purpose: it's the one decision that's expensive to reverse, and doing it double-entry from row one is what lets the fake-money MVP become real money later without a rewrite.
+- **ZeroProof pulls real lines behind a swappable provider.** The Odds API v4 client normalizes h2h/spread/total to american prices; a fixtures provider replays a captured MLB/EPL/NFL slate with zero vendor credits, so dev, test, and seeding never spend quota. The vendor hides behind one `OddsProvider` interface, so it's swappable — and a dead vendor or exhausted quota surfaces as an error, not a silently empty slate that reads as "no games today".
+- **Odds are snapshotted on every pull, never overwritten.** `syncOdds` upserts each event by `provider_key` and appends one `zeroproof_odds_snapshots` row per market, so the latest line and (later) the closing line are both readable from history. A `zeroproof-odds-sync` cron runs it; the provider is chosen explicitly by env — fixtures by default so no key is needed — and logs which one actually ran.
+- **`GET /api/zeroproof/events` serves the lobby from the DB only.** Upcoming games with their latest lines, public so the slate renders for signed-out visitors, and user traffic never touches the vendor — quota stays a worker concern, not a scaling one.
+
+## 2026-09-02 - version 5.0.0
+
+- **ZeroProof gets its money foundation: a double-entry ledger and wallets.** A major bump because this opens a whole new product surface, not because anything broke — every existing route is untouched. This is the base of a stacked build for a no-loss betting product where the ledger is real but the dollars are simulated. Every movement is a set of lines that nets to zero across `user`/`escrow`/`house` accounts, and a wallet's bettable balance is never stored — it's derived from its `user`-account lines. I built it this way on purpose: it's the one decision that's expensive to reverse, and doing it double-entry from row one is what lets the fake-money MVP become real money later without a rewrite.
 - **`/api/zeroproof/wallets` opens a Season or Challenge wallet and lists them.** Season takes any deposit at a $20 floor; Challenge is forced to $100 no matter what the body asks for. Opening a wallet writes its deposit pair in one transaction. A partial unique index enforces one active wallet per mode per user, so a Challenge retry can't run beside a live one and a race can't slip two past the app check — a second open returns 409.
 - **Namespaced under `zeroproof_*` and `/api/zeroproof/*`** rather than the plan's bare `/api/wallets`, since this API is shared across many features and the bare names would collide. Tables are keyed by `user_sub` with no FK to `users`, matching the card-economy convention; the ledger's `bet_id` is a nullable column with no FK yet, waiting on the bets table in the next slice.
 
