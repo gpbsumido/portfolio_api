@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-02 - version 4.17.0
+
+- **ZeroProof gets its money foundation: a double-entry ledger and wallets.** This is the base of a stacked build for a no-loss betting product where the ledger is real but the dollars are simulated. Every movement is a set of lines that nets to zero across `user`/`escrow`/`house` accounts, and a wallet's bettable balance is never stored — it's derived from its `user`-account lines. I built it this way on purpose: it's the one decision that's expensive to reverse, and doing it double-entry from row one is what lets the fake-money MVP become real money later without a rewrite.
+- **`/api/zeroproof/wallets` opens a Season or Challenge wallet and lists them.** Season takes any deposit at a $20 floor; Challenge is forced to $100 no matter what the body asks for. Opening a wallet writes its deposit pair in one transaction. A partial unique index enforces one active wallet per mode per user, so a Challenge retry can't run beside a live one and a race can't slip two past the app check — a second open returns 409.
+- **Namespaced under `zeroproof_*` and `/api/zeroproof/*`** rather than the plan's bare `/api/wallets`, since this API is shared across many features and the bare names would collide. Tables are keyed by `user_sub` with no FK to `users`, matching the card-economy convention; the ledger's `bet_id` is a nullable column with no FK yet, waiting on the bets table in the next slice.
+
 ## 2026-08-31 - version 4.16.2
 
 - **The ingest stops re-learning the same outage twenty-two times.** The first successful run took 2m34s: with TCGdex's North America node dead, every one of the 22 requests spent three attempts and two backoffs on the published address before falling back to a node that answered. The run now remembers the node that worked and goes straight there for the rest of it, so only the first request pays that cost — roughly seven seconds instead of two and a half minutes of waiting to fail the same way.
