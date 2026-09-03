@@ -298,6 +298,25 @@ export async function getOpenBetsForEvent(eventId: string): Promise<ZeroproofBet
     .where(and(eq(zeroproofBets.eventId, eventId), eq(zeroproofBets.status, 'open')));
 }
 
+/** Every bet the caller has placed, newest first — full rows for the DTO. */
+export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
+  const wallets = await db
+    .select({ id: zeroproofWallets.id })
+    .from(zeroproofWallets)
+    .where(eq(zeroproofWallets.userSub, userSub));
+  if (wallets.length === 0) return [];
+  return db
+    .select()
+    .from(zeroproofBets)
+    .where(
+      inArray(
+        zeroproofBets.walletId,
+        wallets.map((w) => w.id),
+      ),
+    )
+    .orderBy(desc(zeroproofBets.placedAt));
+}
+
 /** The closing line: the latest snapshot for a market taken before kickoff. */
 export async function getClosingSnapshot(
   eventId: string,

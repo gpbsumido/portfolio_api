@@ -26,6 +26,7 @@ vi.mock('./repository.js', () => ({
   getWalletById: vi.fn(),
   getLatestSnapshot: vi.fn(),
   placeBet: vi.fn(),
+  getBetsForUser: vi.fn(),
   getSettledBetsForUser: vi.fn(),
   getSettledBetsByUser: vi.fn(),
   logReferralClick: vi.fn(),
@@ -411,5 +412,43 @@ describe('listing wallets', () => {
     expect(res.body.wallets).toHaveLength(1);
     expect(res.body.wallets[0].lockEnd).toBe('2026-12-02T00:00:00.000Z');
     expect(repo.listWallets).toHaveBeenCalledWith('auth0|me');
+  });
+});
+
+describe('bet history', () => {
+  test('returns the caller-scoped bets as DTOs with ISO dates and closing-line value', async () => {
+    vi.mocked(repo.getBetsForUser).mockResolvedValue([
+      {
+        id: 'bet-1',
+        walletId: 'w1',
+        eventId: 'evt-1',
+        market: 'h2h',
+        selection: 'Celtics',
+        oddsAmerican: 122,
+        lineValue: null,
+        closingOddsAmerican: 130,
+        clv: 7.9,
+        stakeCents: 2500,
+        status: 'won',
+        placedAt: new Date('2026-09-01T00:00:00.000Z'),
+        settledAt: new Date('2026-09-02T00:00:00.000Z'),
+      },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/bets');
+
+    expect(res.status).toBe(200);
+    expect(res.body.bets).toHaveLength(1);
+    expect(res.body.bets[0]).toMatchObject({
+      id: 'bet-1',
+      selection: 'Celtics',
+      oddsAmerican: 122,
+      closingOddsAmerican: 130,
+      clv: 7.9,
+      status: 'won',
+      placedAt: '2026-09-01T00:00:00.000Z',
+      settledAt: '2026-09-02T00:00:00.000Z',
+    });
+    expect(repo.getBetsForUser).toHaveBeenCalledWith('auth0|me');
   });
 });
