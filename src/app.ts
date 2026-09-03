@@ -33,6 +33,7 @@ import searchRoutes from './modules/search/routes.js';
 import tcgRoutes from './modules/tcg/routes.js';
 import timelineRoutes from './modules/timeline/routes.js';
 import todosRoutes from './modules/todos/routes.js';
+import zeroproofRoutes from './modules/zeroproof/routes.js';
 import vitalsRoutes from './modules/vitals/routes.js';
 import wallsRoutes from './modules/walls/routes.js';
 import youtubeRoutes from './modules/youtube/routes.js';
@@ -93,6 +94,7 @@ app.use('/api/geo', geoRoutes);
 app.use('/api/referrals', referralsRoutes);
 app.use('/api/operator', operatorRoutes);
 app.use('/api/tcg', tcgRoutes);
+app.use('/api/zeroproof', zeroproofRoutes);
 // Reads public; the PATCH write applies checkJwt internally per-route.
 app.use('/api/feature-flags', featureFlagsRoutes);
 app.use('/api/todos', todosRoutes);
