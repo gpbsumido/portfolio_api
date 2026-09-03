@@ -34,3 +34,18 @@ export interface OddsProvider {
   readonly name: string;
   getOdds(sportKeys: string[]): Promise<NormalizedEvent[]>;
 }
+
+export interface NormalizedResult {
+  /** The vendor's event id — the same id space as the odds, so it maps to our event. */
+  providerKey: string;
+  completed: boolean;
+  home: string;
+  away: string;
+  homeScore: number;
+  awayScore: number;
+}
+
+export interface ResultsProvider {
+  readonly name: string;
+  getResults(sportKeys: string[]): Promise<NormalizedResult[]>;
+}
