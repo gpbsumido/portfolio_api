@@ -9,7 +9,13 @@ vi.mock('../../config/auth.js', () => ({
     req.auth = { payload: claims };
     next();
   },
-  optionalCheckJwt: (req: any, _res: any, next: any) => next(),
+  optionalCheckJwt: (req: any, _res: any, next: any) => {
+    req.auth = { payload: claims };
+    next();
+  },
+}));
+vi.mock('../../shared/auth/adminEmail.js', () => ({
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('./repository.js', () => ({
   openWallet: vi.fn(),
@@ -22,6 +28,8 @@ vi.mock('./repository.js', () => ({
   placeBet: vi.fn(),
   getSettledBetsForUser: vi.fn(),
   getSettledBetsByUser: vi.fn(),
+  logReferralClick: vi.fn(),
+  houseSummary: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -245,6 +253,42 @@ describe('opening a wallet', () => {
 
     expect(res.status).toBe(401);
     expect(repo.openWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('referral link (/refer)', () => {
+  test('logs the click with the caller and partner, then 302s to the book', async () => {
+    vi.mocked(repo.logReferralClick).mockResolvedValue(undefined as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/refer?partner=draftkings').redirects(0);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain('draftkings');
+    expect(repo.logReferralClick).toHaveBeenCalledWith(
+      expect.objectContaining({ userSub: 'auth0|me', partner: 'draftkings' }),
+    );
+  });
+
+  test('rejects an unknown partner rather than redirect anywhere', async () => {
+    const res = await request(makeApp()).get('/api/zeroproof/refer?partner=sketchybook').redirects(0);
+    expect(res.status).toBe(400);
+    expect(repo.logReferralClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('house view (/house)', () => {
+  test('returns the float, accrued yield and referral clicks', async () => {
+    vi.mocked(repo.houseSummary).mockResolvedValue({
+      houseCents: 15000,
+      escrowCents: -60000,
+      yieldCents: 5000,
+      referralClicks: 3,
+    } as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/house');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ houseCents: 15000, yieldCents: 5000, referralClicks: 3 });
   });
 });
 

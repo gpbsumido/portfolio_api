@@ -6,6 +6,7 @@ import {
   refundPrincipalLines,
   settlementLines,
   stakeLines,
+  yieldLines,
 } from './ledger.js';
 
 // The ledger is the hardest-to-reverse decision in ZeroProof: every money
@@ -72,5 +73,14 @@ describe('settlement ledger lines', () => {
     const lines = refundPrincipalLines(50000);
     expect(linesNetToZero(lines)).toBe(true);
     expect(deriveBalanceCents(lines)).toBe(50000);
+  });
+
+  test('simulated yield accrues to the house account and nets to zero', () => {
+    const lines = yieldLines(1000);
+    expect(linesNetToZero(lines)).toBe(true);
+    expect(lines).toContainEqual({ account: 'house', kind: 'yield', amountCents: 1000 });
+    expect(lines).toContainEqual({ account: 'escrow', kind: 'yield', amountCents: -1000 });
+    // Yield never touches a user's bankroll.
+    expect(deriveBalanceCents(lines)).toBe(0);
   });
 });
