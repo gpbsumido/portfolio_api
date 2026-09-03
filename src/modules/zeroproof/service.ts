@@ -54,6 +54,11 @@ export function listWallets(userSub: string) {
   return repo.listWallets(userSub);
 }
 
+/** The caller's bets, newest first — their history with closing lines and CLV. */
+export function getBets(userSub: string) {
+  return repo.getBetsForUser(userSub);
+}
+
 /** The caller's profile: wallets, stats, and the accolades their play has earned. */
 export async function getProfile(userSub: string): Promise<ProfileResponse> {
   const [wallets, bets] = await Promise.all([

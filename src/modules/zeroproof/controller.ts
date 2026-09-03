@@ -160,4 +160,14 @@ export class ZeroproofController {
       next(err);
     }
   }
+
+  /** GET /api/zeroproof/bets — the caller's bet history, newest first. */
+  async myBets(req: Request, res: Response, next: NextFunction) {
+    try {
+      const bets = await service.getBets(requireSub(req));
+      res.json({ bets: bets.map(toBetDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
 }

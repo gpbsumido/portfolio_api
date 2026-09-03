@@ -31,6 +31,9 @@ router.get('/house', checkJwt, requireAdmin, (req, res, next) => ctrl.house(req,
 // GET /api/zeroproof/wallets — the caller's wallets and balances
 router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, next));
 
+// GET /api/zeroproof/bets — the caller's bet history, newest first
+router.get('/bets', checkJwt, (req, res, next) => ctrl.myBets(req, res, next));
+
 // POST /api/zeroproof/wallets — open a Season or Challenge wallet
 router.post('/wallets', checkJwt, validateBody(openWalletSchema), (req, res, next) =>
   ctrl.openWallet(req, res, next),
