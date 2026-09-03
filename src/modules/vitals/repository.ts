@@ -10,7 +10,16 @@ import type {
 
 const VALID_METRICS = new Set(['LCP', 'CLS', 'FCP', 'INP', 'TTFB']);
 const VALID_RATINGS = new Set(['good', 'needs-improvement', 'poor']);
-const MIN_PAGE_SAMPLES = 5;
+const MIN_PAGE_SAMPLES = 10;
+
+/**
+ * Fewest samples a single metric on a page needs before its P75 is trustworthy
+ * enough to show. The page floor above counts every metric together, so a page
+ * can clear it while one metric has three samples - and a P75 over three
+ * samples is two slow phones and a guess. This floor is per metric, so the
+ * cells with real data survive and only the thin ones drop.
+ */
+const MIN_METRIC_SAMPLES = 10;
 
 export { VALID_METRICS, VALID_RATINGS };
 
@@ -125,6 +134,18 @@ export function recentWindowCondition(days: number = WINDOW_DAYS): string {
   return `AND created_at >= NOW() - INTERVAL '${whole} days'`;
 }
 
+/**
+ * HAVING fragment dropping a grouped metric that hasn't got enough samples to
+ * trust its percentile. Interpolates a whole-number floor with no parameter, so
+ * it drops onto a GROUP BY without disturbing the caller's $n numbering - the
+ * same shape as recentWindowCondition. `min` is an internal constant but is
+ * interpolated into SQL, so it is floored to a whole number as a guard.
+ */
+export function metricSampleFloor(min: number = MIN_METRIC_SAMPLES): string {
+  const whole = Math.max(0, Math.trunc(min));
+  return `HAVING COUNT(*) >= ${whole}`;
+}
+
 export class VitalsRepository {
   async insert(input: {
     metric: string;
@@ -207,6 +228,7 @@ export class VitalsRepository {
       JOIN page_totals pt ON pt.page = w.page
       WHERE TRUE ${conditions} ${plausibleValueCondition()} ${recentWindowCondition()}
       GROUP BY w.page, w.metric, pt.total
+      ${metricSampleFloor()}
       ORDER BY pt.total DESC, w.page, w.metric
       `,
       params,
