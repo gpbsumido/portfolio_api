@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-03 - version 5.7.0
+
+- **The profile has badges to show off now.** A code-defined catalog of accolades — first bet, first win, a five-win hot hand, the challenge height milestones ($250/$500/$1k/$5k) and a speed badge for reaching $1k inside 14 days. `GET /api/zeroproof/me` evaluates them from your play and returns the ones you've earned, named, instead of the empty list the profile slice shipped.
+- **Awarding is idempotent by construction.** A unique `(user_sub, accolade_id)` means the profile can re-evaluate and re-award on every view without ever duplicating, so awarding lazily on read is safe — no separate cron to keep in step. The height and speed logic reads a challenge wallet's bankroll curve for its peak and its time-to-$1k, both pure and unit-tested: crossing $1k on day 13 earns first-$1k and the under-14-days badge, exactly once.
+
 ## 2026-09-03 - version 5.6.0
 
 - **The first-dollar plumbing: attributed sportsbook referrals.** `GET /api/zeroproof/refer?partner=…` logs the click with the caller's id for CPA attribution and 302s to the licensed book — and refuses an unknown partner rather than redirect anywhere. This is revenue line #1, the one that needs no custody licensing: prove who's sharp, then refer them. The sharp score from the last slice is exactly the targeting signal that makes those referrals convert.
