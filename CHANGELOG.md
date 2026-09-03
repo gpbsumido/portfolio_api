@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-03 - version 5.8.0
+
+- **The profile can show your bet history now.** New authed `GET /api/zeroproof/bets` returns the caller's bets, newest first, as full DTOs — the selection and the odds locked at placement, the stake, the status, and the closing-line value the settler stamped on each graded bet. The rows already existed (the settler writes closing odds and CLV at settlement); this exposes them so the front end can render each decision next to how the market moved on it, which is the whole point of a no-loss book where the record is what you keep. Scoped to the caller's own wallets, ordered by placement, and returned through the same `toBetDto` the place-bet response uses. Tested with supertest against a mocked repository.
+
 ## 2026-09-03 - version 5.7.0
 
 - **The profile has badges to show off now.** A code-defined catalog of accolades — first bet, first win, a five-win hot hand, the challenge height milestones ($250/$500/$1k/$5k) and a speed badge for reaching $1k inside 14 days. `GET /api/zeroproof/me` evaluates them from your play and returns the ones you've earned, named, instead of the empty list the profile slice shipped.
