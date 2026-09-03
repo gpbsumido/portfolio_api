@@ -43,10 +43,17 @@ export interface EventDto {
   }[];
 }
 
-/** What `getProfile` returns: the caller's wallets plus their rolled-up stats. */
+export interface EarnedAccolade {
+  id: string;
+  name: string;
+  awardedAt: Date;
+}
+
+/** What `getProfile` returns: the caller's wallets, stats, and earned accolades. */
 export interface ProfileResponse {
   wallets: WalletWithBalance[];
   stats: ProfileStats;
+  accolades: EarnedAccolade[];
 }
 
 export interface LeaderboardEntry {

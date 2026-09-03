@@ -8,6 +8,7 @@ import {
   type ZeroproofBet,
   type ZeroproofEvent,
   type ZeroproofWallet,
+  zeroproofAccoladeAwards,
   zeroproofBets,
   zeroproofEvents,
   zeroproofLedgerEntries,
@@ -426,12 +427,15 @@ interface SettledBetRow {
   oddsAmerican: number;
   clv: string | null;
   settledAt: Date | null;
+  /** Present on the per-user query (accolades group by wallet); absent on the leaderboard scan. */
+  walletId?: string;
 }
 
 /** A user's settled bets across all their wallets — the raw material for stats. */
 export async function getSettledBetsForUser(userSub: string): Promise<SettledBetRow[]> {
   return db
     .select({
+      walletId: zeroproofBets.walletId,
       status: zeroproofBets.status,
       stakeCents: zeroproofBets.stakeCents,
       oddsAmerican: zeroproofBets.oddsAmerican,
@@ -470,6 +474,31 @@ export async function getSettledBetsByUser(): Promise<{ userSub: string; bets: S
 /** Record an attributed outbound click to a partner sportsbook. */
 export async function logReferralClick(input: { userSub: string | null; partner: string }): Promise<void> {
   await db.insert(zeroproofReferralClicks).values({ userSub: input.userSub, partner: input.partner });
+}
+
+/** The accolades a user has earned, oldest first. */
+export async function getAwardedAccolades(
+  userSub: string,
+): Promise<{ accoladeId: string; awardedAt: Date }[]> {
+  return db
+    .select({
+      accoladeId: zeroproofAccoladeAwards.accoladeId,
+      awardedAt: zeroproofAccoladeAwards.awardedAt,
+    })
+    .from(zeroproofAccoladeAwards)
+    .where(eq(zeroproofAccoladeAwards.userSub, userSub))
+    .orderBy(asc(zeroproofAccoladeAwards.awardedAt));
+}
+
+/** Award accolades idempotently — a badge already held is left untouched. */
+export async function awardAccolades(userSub: string, accoladeIds: string[]): Promise<void> {
+  if (accoladeIds.length === 0) return;
+  await db
+    .insert(zeroproofAccoladeAwards)
+    .values(accoladeIds.map((accoladeId) => ({ userSub, accoladeId })))
+    .onConflictDoNothing({
+      target: [zeroproofAccoladeAwards.userSub, zeroproofAccoladeAwards.accoladeId],
+    });
 }
 
 /** Accrue simulated float yield to the house account. */

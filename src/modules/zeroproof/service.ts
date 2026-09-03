@@ -9,6 +9,7 @@ import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { TheOddsApiProvider } from './providers/theOddsApi.js';
 import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
+import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
 import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
 import { computeStats } from './stats.js';
@@ -53,13 +54,33 @@ export function listWallets(userSub: string) {
   return repo.listWallets(userSub);
 }
 
-/** The caller's profile: their wallets and the stats rolled up from settled bets. */
+/** The caller's profile: wallets, stats, and the accolades their play has earned. */
 export async function getProfile(userSub: string): Promise<ProfileResponse> {
   const [wallets, bets] = await Promise.all([
     repo.listWallets(userSub),
     repo.getSettledBetsForUser(userSub),
   ]);
-  return { wallets, stats: computeStats(bets) };
+  const stats = computeStats(bets);
+
+  // Evaluate and award any newly-earned accolades, then read them back named.
+  // Awarding is idempotent, so re-evaluating on every profile view is safe.
+  const challengeWallets = wallets
+    .filter((w) => w.mode === 'challenge')
+    .map((w) => challengeMilestone(w.principalCents, w.lockStart, bets.filter((b) => b.walletId === w.id)));
+  const earned = earnedAccolades({
+    hasPlacedBet: bets.length > 0,
+    wins: stats.wins,
+    longestWinStreak: stats.longestStreak,
+    challengeWallets,
+  });
+  await repo.awardAccolades(userSub, earned);
+  const accolades = (await repo.getAwardedAccolades(userSub)).map((a) => ({
+    id: a.accoladeId,
+    name: accoladeName(a.accoladeId),
+    awardedAt: a.awardedAt,
+  }));
+
+  return { wallets, stats, accolades };
 }
 
 export type LeaderboardBoard = 'sharp' | 'roi';

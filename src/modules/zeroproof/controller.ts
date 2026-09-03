@@ -79,11 +79,15 @@ export class ZeroproofController {
     }
   }
 
-  /** GET /api/zeroproof/me — the caller's profile stats and wallets. */
+  /** GET /api/zeroproof/me — the caller's profile stats, wallets and accolades. */
   async me(req: Request, res: Response, next: NextFunction) {
     try {
-      const { wallets, stats } = await service.getProfile(requireSub(req));
-      res.json({ stats, wallets: wallets.map(toWalletDto), accolades: [] });
+      const { wallets, stats, accolades } = await service.getProfile(requireSub(req));
+      res.json({
+        stats,
+        wallets: wallets.map(toWalletDto),
+        accolades: accolades.map((a) => ({ id: a.id, name: a.name, awardedAt: a.awardedAt.toISOString() })),
+      });
     } catch (err) {
       next(err);
     }

@@ -540,3 +540,16 @@ export const zeroproofReferralClicks = pgTable("zeroproof_referral_clicks", {
 
 export type ZeroproofReferralClick = InferSelectModel<typeof zeroproofReferralClicks>;
 export type NewZeroproofReferralClick = InferInsertModel<typeof zeroproofReferralClicks>;
+
+// ── zeroproof_accolade_awards ────────────────────────────────────────────────
+// The ledger of which user earned which badge. The catalog lives in code; a
+// unique (user_sub, accolade_id) makes re-awarding on profile view a no-op.
+export const zeroproofAccoladeAwards = pgTable("zeroproof_accolade_awards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userSub: text("user_sub").notNull(),
+  accoladeId: text("accolade_id").notNull(),
+  awardedAt: timestamp("awarded_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofAccoladeAward = InferSelectModel<typeof zeroproofAccoladeAwards>;
+export type NewZeroproofAccoladeAward = InferInsertModel<typeof zeroproofAccoladeAwards>;
