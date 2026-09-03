@@ -17,6 +17,21 @@ if (process.env.RUN_CRON === "true") {
     // slow third party (daily, 0 5 * * *).
     "ingest-tcg-catalog": () =>
       require("./dist/jobs/ingestTcgCatalog").ingestTcgCatalog(),
+    // Pull ZeroProof odds and snapshot them so the events feed serves from the
+    // DB (default provider is fixtures — zero credits — until a key is set).
+    "zeroproof-odds-sync": () =>
+      require("./dist/jobs/zeroproofOddsSync").zeroproofOddsSync(),
+    // Settle finished ZeroProof events: grade open bets, stamp CLV, pay the
+    // ledger. Idempotent, so a re-run is safe.
+    "zeroproof-settle": () =>
+      require("./dist/jobs/zeroproofSettle").zeroproofSettle(),
+    // ZeroProof wallet maintenance: bust empty challenge wallets, refund the
+    // principal of matured wallets. Both sweeps are idempotent.
+    "zeroproof-unlock": () =>
+      require("./dist/jobs/zeroproofUnlock").zeroproofUnlock(),
+    // Accrue a day's simulated yield on the held ZeroProof float.
+    "zeroproof-yield": () =>
+      require("./dist/jobs/zeroproofYield").zeroproofYield(),
   };
 
   const run = jobs[job];

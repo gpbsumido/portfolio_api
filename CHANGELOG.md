@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-09-03 - version 5.7.0
+
+- **The profile has badges to show off now.** A code-defined catalog of accolades — first bet, first win, a five-win hot hand, the challenge height milestones ($250/$500/$1k/$5k) and a speed badge for reaching $1k inside 14 days. `GET /api/zeroproof/me` evaluates them from your play and returns the ones you've earned, named, instead of the empty list the profile slice shipped.
+- **Awarding is idempotent by construction.** A unique `(user_sub, accolade_id)` means the profile can re-evaluate and re-award on every view without ever duplicating, so awarding lazily on read is safe — no separate cron to keep in step. The height and speed logic reads a challenge wallet's bankroll curve for its peak and its time-to-$1k, both pure and unit-tested: crossing $1k on day 13 earns first-$1k and the under-14-days badge, exactly once.
+
+## 2026-09-03 - version 5.6.0
+
+- **The first-dollar plumbing: attributed sportsbook referrals.** `GET /api/zeroproof/refer?partner=…` logs the click with the caller's id for CPA attribution and 302s to the licensed book — and refuses an unknown partner rather than redirect anywhere. This is revenue line #1, the one that needs no custody licensing: prove who's sharp, then refer them. The sharp score from the last slice is exactly the targeting signal that makes those referrals convert.
+- **Simulated float yield, tracked in its own ledger account.** A `zeroproof-yield` cron accrues a day's yield on the held float to the `house` account (against escrow), netting to zero and never touching a user's bankroll. It's the original "invest the float" idea modeled on fake dollars — real code, so a payment/investment provider slots in at the edge later without a rewrite.
+- **`GET /api/zeroproof/house` (admin) is the "how much did we make" view** — company net, escrow float, accrued yield and referral clicks, all derived from the ledger. To make room, `ledger_entries.wallet_id` is now nullable so house-level yield entries live in the same ledger and `house` stays a single derivable account.
+
+## 2026-09-03 - version 5.5.0
+
+- **The profile is real now: record, ROI, streaks, biggest hit, and a sharp score.** `GET /api/zeroproof/me` rolls those up from your settled bets and returns your wallets alongside. The sharp score is a CLV-weighted number, defined only past a minimum bet count and monotonic in closing-line value — beating the close is what it rewards, which is the moat surfaced as a single figure. (`accolades` comes back empty for now; the accolades slice fills it.)
+- **A public leaderboard ranks who's actually sharp.** `GET /api/zeroproof/leaderboard?board=sharp` ranks users by sharp score (those below the volume floor withheld), `board=roi` by return on investment. It scans every user's settled bets — fine at this scale, a materialized rollup when it isn't. All the stats math is pure and unit-tested, so the ranking can't drift from what `/me` shows you.
+
+## 2026-09-03 - version 5.4.0
+
+- **Wallets unlock themselves and refund the principal only.** A `zeroproof-unlock` cron refunds every wallet whose 3-month term is up — the full `principal_cents`, whatever the record. A season wallet up 40% and a busted challenge wallet both get exactly their deposit back; paper profit was always stats, not cash. The refund is a double-entry pair that nets to zero, and the wallet flips to `refunded`. Idempotent: the query only returns wallets not yet refunded.
+- **A challenge that hits zero is archived, not erased.** The same cron busts active challenge wallets whose balance has reached zero — which blocks new bets (the placement gate already refuses non-active wallets) while the stats and any badges survive. A busted wallet still collects its principal refund at term end; bust archives the record, it doesn't forfeit the deposit.
+
+## 2026-09-03 - version 5.3.0
+
+- **Bets settle themselves now, and the settler is safe to run twice.** A `zeroproof-settle` cron pulls results (fixtures by default, or The Odds API `/scores` — quota-free, same event ids as the odds), grades every open bet, pays the ledger and marks the event final. Idempotency is keyed on event status plus open-bet status, so a second pass over a final event grades nothing rather than double-paying.
+- **The moat is captured on every graded bet: closing-line value.** At settlement I read the closing line — the latest snapshot before kickoff — and stamp `closing_odds_american` and `clv` onto the bet. CLV is positive when the bet's price beat the close (bet -110, closes -130), the single best public proxy for skill. It's unrecoverable after the fact, which is why the snapshot history and the columns were there from the first slice.
+- **Grading covers the messy tail, not just the happy path.** h2h, spread (handicap applied) and total (combined score) each grade to won/lost/push/void; an exact cover is a push, an incomplete event voids and refunds the stake. The payout ledger stays double-entry: a win returns stake from escrow and profit from the house, a loss moves the held stake escrow → house, a push refunds — every set nets to zero.
+
+## 2026-09-02 - version 5.2.0
+
+- **You can place a bet now, and the line is frozen the instant you do.** `POST /api/zeroproof/bets` copies the price (and the handicap, for spread/total) off the latest snapshot onto the bet, so a line move after placement never rewrites a bet. Every gate runs before any write: the wallet must be the caller's and inside its lock window, and the line can't be stale.
+- **The available-balance floor is enforced inside the transaction.** The stake is checked against the live derived balance and written as a `user → escrow` ledger pair in the same transaction, so two concurrent bets can't spend the same cents and a wallet can never go negative — an unaffordable stake gets a 402, not a bet nobody paid for.
+- **Stale lines are refused (409).** A snapshot older than 60 minutes can't be bet, so a dead price from a quiet worker doesn't become a live wager. Bets also carry `closing_odds_american` and `clv` columns from row one — the moat's raw material, filled at settlement, unrecoverable if the columns didn't exist yet.
+
+## 2026-09-02 - version 5.1.0
+
+- **ZeroProof pulls real lines behind a swappable provider.** The Odds API v4 client normalizes h2h/spread/total to american prices; a fixtures provider replays a captured MLB/EPL/NFL slate with zero vendor credits, so dev, test, and seeding never spend quota. The vendor hides behind one `OddsProvider` interface, so it's swappable — and a dead vendor or exhausted quota surfaces as an error, not a silently empty slate that reads as "no games today".
+- **Odds are snapshotted on every pull, never overwritten.** `syncOdds` upserts each event by `provider_key` and appends one `zeroproof_odds_snapshots` row per market, so the latest line and (later) the closing line are both readable from history. A `zeroproof-odds-sync` cron runs it; the provider is chosen explicitly by env — fixtures by default so no key is needed — and logs which one actually ran.
+- **`GET /api/zeroproof/events` serves the lobby from the DB only.** Upcoming games with their latest lines, public so the slate renders for signed-out visitors, and user traffic never touches the vendor — quota stays a worker concern, not a scaling one.
+
+## 2026-09-02 - version 5.0.0
+
+- **ZeroProof gets its money foundation: a double-entry ledger and wallets.** A major bump because this opens a whole new product surface, not because anything broke — every existing route is untouched. This is the base of a stacked build for a no-loss betting product where the ledger is real but the dollars are simulated. Every movement is a set of lines that nets to zero across `user`/`escrow`/`house` accounts, and a wallet's bettable balance is never stored — it's derived from its `user`-account lines. I built it this way on purpose: it's the one decision that's expensive to reverse, and doing it double-entry from row one is what lets the fake-money MVP become real money later without a rewrite.
+- **`/api/zeroproof/wallets` opens a Season or Challenge wallet and lists them.** Season takes any deposit at a $20 floor; Challenge is forced to $100 no matter what the body asks for. Opening a wallet writes its deposit pair in one transaction. A partial unique index enforces one active wallet per mode per user, so a Challenge retry can't run beside a live one and a race can't slip two past the app check — a second open returns 409.
+- **Namespaced under `zeroproof_*` and `/api/zeroproof/*`** rather than the plan's bare `/api/wallets`, since this API is shared across many features and the bare names would collide. Tables are keyed by `user_sub` with no FK to `users`, matching the card-economy convention; the ledger's `bet_id` is a nullable column with no FK yet, waiting on the bets table in the next slice.
+
 ## 2026-09-02 - version 4.16.3
 
 - **A vitals cell now needs enough samples before it's shown as a score.** The by-page table computes a P75 per metric, but the only floor on how much data backs a cell was a per-*page* one that counted every metric together. A page could clear it while one metric had three samples — and a P75 over three samples is two slow phones and a guess, shown on the dashboard as a real Poor-band score. That's what `/research` hit: a CLS of 0.716 off a sample count too small to trust, while the same page's LCP/FCP/INP read fine. `getByPage` now applies a per-metric floor (`MIN_METRIC_SAMPLES = 10`) as a `HAVING COUNT(*)` on the grouped metric, so the cells with real data stay and only the thin ones drop — rendered as `--`, the same as any absent metric. The page floor rose from 5 to 10 to match. Summary and by-version are untouched: summary aggregates across every page so it's never sample-starved, and by-version compares releases on purpose. The floor is a pure, unit-tested `metricSampleFloor` builder, with the drop exercised against real Postgres. This is the next layer of the 4.12.2 de-noising — small-N cells rather than impossible values.
