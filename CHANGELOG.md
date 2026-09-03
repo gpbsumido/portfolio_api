@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-03 - version 5.4.0
+
+- **Wallets unlock themselves and refund the principal only.** A `zeroproof-unlock` cron refunds every wallet whose 3-month term is up — the full `principal_cents`, whatever the record. A season wallet up 40% and a busted challenge wallet both get exactly their deposit back; paper profit was always stats, not cash. The refund is a double-entry pair that nets to zero, and the wallet flips to `refunded`. Idempotent: the query only returns wallets not yet refunded.
+- **A challenge that hits zero is archived, not erased.** The same cron busts active challenge wallets whose balance has reached zero — which blocks new bets (the placement gate already refuses non-active wallets) while the stats and any badges survive. A busted wallet still collects its principal refund at term end; bust archives the record, it doesn't forfeit the deposit.
+
 ## 2026-09-03 - version 5.3.0
 
 - **Bets settle themselves now, and the settler is safe to run twice.** A `zeroproof-settle` cron pulls results (fixtures by default, or The Odds API `/scores` — quota-free, same event ids as the odds), grades every open bet, pays the ledger and marks the event final. Idempotency is keyed on event status plus open-bet status, so a second pass over a final event grades nothing rather than double-paying.
