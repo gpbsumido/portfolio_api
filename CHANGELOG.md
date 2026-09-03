@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-02 - version 4.16.3
+
+- **A vitals cell now needs enough samples before it's shown as a score.** The by-page table computes a P75 per metric, but the only floor on how much data backs a cell was a per-*page* one that counted every metric together. A page could clear it while one metric had three samples — and a P75 over three samples is two slow phones and a guess, shown on the dashboard as a real Poor-band score. That's what `/research` hit: a CLS of 0.716 off a sample count too small to trust, while the same page's LCP/FCP/INP read fine. `getByPage` now applies a per-metric floor (`MIN_METRIC_SAMPLES = 10`) as a `HAVING COUNT(*)` on the grouped metric, so the cells with real data stay and only the thin ones drop — rendered as `--`, the same as any absent metric. The page floor rose from 5 to 10 to match. Summary and by-version are untouched: summary aggregates across every page so it's never sample-starved, and by-version compares releases on purpose. The floor is a pure, unit-tested `metricSampleFloor` builder, with the drop exercised against real Postgres. This is the next layer of the 4.12.2 de-noising — small-N cells rather than impossible values.
+
 ## 2026-08-31 - version 4.16.2
 
 - **The ingest stops re-learning the same outage twenty-two times.** The first successful run took 2m34s: with TCGdex's North America node dead, every one of the 22 requests spent three attempts and two backoffs on the published address before falling back to a node that answered. The run now remembers the node that worked and goes straight there for the rest of it, so only the first request pays that cost — roughly seven seconds instead of two and a half minutes of waiting to fail the same way.
