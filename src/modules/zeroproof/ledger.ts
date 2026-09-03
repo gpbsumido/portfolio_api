@@ -29,6 +29,17 @@ export function depositLines(amountCents: number): LedgerLine[] {
 }
 
 /**
+ * A stake moves money out of the user's bankroll into escrow, where it's held
+ * until the bet settles. The pair nets to zero.
+ */
+export function stakeLines(amountCents: number): LedgerLine[] {
+  return [
+    { account: 'user', kind: 'stake', amountCents: -amountCents },
+    { account: 'escrow', kind: 'stake', amountCents: amountCents },
+  ];
+}
+
+/**
  * The double-entry invariant: a transaction's lines must sum to zero. Callers
  * assert this before writing, so an unbalanced set never reaches the database.
  */
