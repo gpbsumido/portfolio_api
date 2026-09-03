@@ -20,6 +20,8 @@ vi.mock('./repository.js', () => ({
   getWalletById: vi.fn(),
   getLatestSnapshot: vi.fn(),
   placeBet: vi.fn(),
+  getSettledBetsForUser: vi.fn(),
+  getSettledBetsByUser: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -243,6 +245,63 @@ describe('opening a wallet', () => {
 
     expect(res.status).toBe(401);
     expect(repo.openWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('profile (/me)', () => {
+  test('returns the caller record, ROI and wallets', async () => {
+    vi.mocked(repo.listWallets).mockResolvedValue([wallet()] as never);
+    vi.mocked(repo.getSettledBetsForUser).mockResolvedValue([
+      { status: 'won', stakeCents: 1000, oddsAmerican: 100, clv: '5', settledAt: new Date('2026-09-01') },
+      { status: 'lost', stakeCents: 1000, oddsAmerican: -110, clv: '-2', settledAt: new Date('2026-09-02') },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/me');
+
+    expect(res.status).toBe(200);
+    expect(res.body.stats.wins).toBe(1);
+    expect(res.body.stats.losses).toBe(1);
+    expect(res.body.wallets).toHaveLength(1);
+    expect(res.body.accolades).toEqual([]);
+    expect(repo.getSettledBetsForUser).toHaveBeenCalledWith('auth0|me');
+  });
+
+  test('a token without a subject is refused', async () => {
+    claims = {};
+    const res = await request(makeApp()).get('/api/zeroproof/me');
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('leaderboard', () => {
+  const manyBets = (clv: number, count: number) =>
+    Array.from({ length: count }, () => ({
+      status: 'won',
+      stakeCents: 1000,
+      oddsAmerican: 100,
+      clv: String(clv),
+      settledAt: new Date('2026-09-01'),
+    }));
+
+  test('ranks the higher-CLV user first on the sharp board', async () => {
+    vi.mocked(repo.getSettledBetsByUser).mockResolvedValue([
+      { userSub: 'auth0|low', bets: manyBets(2, 50) },
+      { userSub: 'auth0|high', bets: manyBets(8, 50) },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/leaderboard?board=sharp');
+
+    expect(res.status).toBe(200);
+    expect(res.body.entries[0].userSub).toBe('auth0|high');
+    expect(res.body.entries[0].sharpScore).toBeGreaterThan(res.body.entries[1].sharpScore);
+  });
+
+  test('is public — readable without a token', async () => {
+    claims = {};
+    vi.mocked(repo.getSettledBetsByUser).mockResolvedValue([] as never);
+    const res = await request(makeApp()).get('/api/zeroproof/leaderboard');
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toEqual([]);
   });
 });
 
