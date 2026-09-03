@@ -468,3 +468,38 @@ export const zeroproofLedgerEntries = pgTable("zeroproof_ledger_entries", {
 
 export type ZeroproofLedgerEntry = InferSelectModel<typeof zeroproofLedgerEntries>;
 export type NewZeroproofLedgerEntry = InferInsertModel<typeof zeroproofLedgerEntries>;
+
+// ── zeroproof_events ─────────────────────────────────────────────────────────
+// A game we take bets on. `provider_key` maps the vendor's id to ours so a
+// provider swap keeps history; `result` fills in at settlement.
+export const zeroproofEvents = pgTable("zeroproof_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  providerKey: text("provider_key").notNull().unique(),
+  sport: text("sport").notNull(),
+  home: text("home").notNull(),
+  away: text("away").notNull(),
+  commenceTime: timestamp("commence_time", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("upcoming"),
+  result: jsonb("result"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofEvent = InferSelectModel<typeof zeroproofEvents>;
+export type NewZeroproofEvent = InferInsertModel<typeof zeroproofEvents>;
+
+// ── zeroproof_odds_snapshots ─────────────────────────────────────────────────
+// One market's lines at one moment. Never overwritten — every pull appends, so
+// the latest line and the closing line are both readable from history.
+export const zeroproofOddsSnapshots = pgTable("zeroproof_odds_snapshots", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull(),
+  market: text("market").notNull(),
+  outcomes: jsonb("outcomes")
+    .$type<{ name: string; priceAmerican: number; point?: number }[]>()
+    .notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofOddsSnapshot = InferSelectModel<typeof zeroproofOddsSnapshots>;
+export type NewZeroproofOddsSnapshot = InferInsertModel<typeof zeroproofOddsSnapshots>;
