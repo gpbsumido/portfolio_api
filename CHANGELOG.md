@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-03 - version 5.6.0
+
+- **The first-dollar plumbing: attributed sportsbook referrals.** `GET /api/zeroproof/refer?partner=…` logs the click with the caller's id for CPA attribution and 302s to the licensed book — and refuses an unknown partner rather than redirect anywhere. This is revenue line #1, the one that needs no custody licensing: prove who's sharp, then refer them. The sharp score from the last slice is exactly the targeting signal that makes those referrals convert.
+- **Simulated float yield, tracked in its own ledger account.** A `zeroproof-yield` cron accrues a day's yield on the held float to the `house` account (against escrow), netting to zero and never touching a user's bankroll. It's the original "invest the float" idea modeled on fake dollars — real code, so a payment/investment provider slots in at the edge later without a rewrite.
+- **`GET /api/zeroproof/house` (admin) is the "how much did we make" view** — company net, escrow float, accrued yield and referral clicks, all derived from the ledger. To make room, `ledger_entries.wallet_id` is now nullable so house-level yield entries live in the same ledger and `house` stays a single derivable account.
+
 ## 2026-09-03 - version 5.5.0
 
 - **The profile is real now: record, ROI, streaks, biggest hit, and a sharp score.** `GET /api/zeroproof/me` rolls those up from your settled bets and returns your wallets alongside. The sharp score is a CLV-weighted number, defined only past a minimum bet count and monotonic in closing-line value — beating the close is what it rewards, which is the moat surfaced as a single figure. (`accolades` comes back empty for now; the accolades slice fills it.)
