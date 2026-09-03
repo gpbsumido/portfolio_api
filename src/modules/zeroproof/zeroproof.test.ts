@@ -14,6 +14,9 @@ vi.mock('../../config/auth.js', () => ({
 vi.mock('./repository.js', () => ({
   openWallet: vi.fn(),
   listWallets: vi.fn(),
+  listUpcomingEventsWithLines: vi.fn(),
+  upsertEvent: vi.fn(),
+  insertSnapshot: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -121,6 +124,49 @@ describe('opening a wallet', () => {
 
     expect(res.status).toBe(401);
     expect(repo.openWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('listing events', () => {
+  test('returns upcoming events with their latest lines from the DB, ISO-dated', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([
+      {
+        id: 'evt-1',
+        sport: 'baseball_mlb',
+        home: 'Boston Red Sox',
+        away: 'New York Yankees',
+        commenceTime: new Date('2026-09-02T23:05:00Z'),
+        status: 'upcoming',
+        markets: [
+          {
+            market: 'h2h',
+            fetchedAt: new Date('2026-09-02T20:00:00Z'),
+            outcomes: [
+              { name: 'New York Yankees', priceAmerican: -145 },
+              { name: 'Boston Red Sox', priceAmerican: 122 },
+            ],
+          },
+        ],
+      },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/events');
+
+    expect(res.status).toBe(200);
+    expect(res.body.events).toHaveLength(1);
+    expect(res.body.events[0].commenceTime).toBe('2026-09-02T23:05:00.000Z');
+    expect(res.body.events[0].markets[0].market).toBe('h2h');
+    expect(res.body.events[0].markets[0].outcomes[0].priceAmerican).toBe(-145);
+  });
+
+  test('is public — no auth token required to read the slate', async () => {
+    claims = {};
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/events');
+
+    expect(res.status).toBe(200);
+    expect(res.body.events).toEqual([]);
   });
 });
 
