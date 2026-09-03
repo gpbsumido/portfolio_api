@@ -79,6 +79,26 @@ export class ZeroproofController {
     }
   }
 
+  /** GET /api/zeroproof/me — the caller's profile stats and wallets. */
+  async me(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { wallets, stats } = await service.getProfile(requireSub(req));
+      res.json({ stats, wallets: wallets.map(toWalletDto), accolades: [] });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/leaderboard — ranked profiles (public). */
+  async leaderboard(req: Request, res: Response, next: NextFunction) {
+    try {
+      const board = req.query.board === 'roi' ? 'roi' : 'sharp';
+      res.json({ board, entries: await service.leaderboard(board) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** POST /api/zeroproof/bets — place a bet from one of the caller's wallets. */
   async placeBet(req: Request, res: Response, next: NextFunction) {
     try {

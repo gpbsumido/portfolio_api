@@ -415,3 +415,52 @@ export async function getBustableChallengeWallets(): Promise<{ id: string }[]> {
 export async function bustWallet(walletId: string): Promise<void> {
   await db.update(zeroproofWallets).set({ status: 'busted' }).where(eq(zeroproofWallets.id, walletId));
 }
+
+const SETTLED_STATUSES = ['won', 'lost', 'push', 'void'];
+
+interface SettledBetRow {
+  status: string;
+  stakeCents: number;
+  oddsAmerican: number;
+  clv: string | null;
+  settledAt: Date | null;
+}
+
+/** A user's settled bets across all their wallets — the raw material for stats. */
+export async function getSettledBetsForUser(userSub: string): Promise<SettledBetRow[]> {
+  return db
+    .select({
+      status: zeroproofBets.status,
+      stakeCents: zeroproofBets.stakeCents,
+      oddsAmerican: zeroproofBets.oddsAmerican,
+      clv: zeroproofBets.clv,
+      settledAt: zeroproofBets.settledAt,
+    })
+    .from(zeroproofBets)
+    .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
+    .where(and(eq(zeroproofWallets.userSub, userSub), inArray(zeroproofBets.status, SETTLED_STATUSES)));
+}
+
+/** Every user's settled bets, grouped — the leaderboard scans this. */
+export async function getSettledBetsByUser(): Promise<{ userSub: string; bets: SettledBetRow[] }[]> {
+  const rows = await db
+    .select({
+      userSub: zeroproofWallets.userSub,
+      status: zeroproofBets.status,
+      stakeCents: zeroproofBets.stakeCents,
+      oddsAmerican: zeroproofBets.oddsAmerican,
+      clv: zeroproofBets.clv,
+      settledAt: zeroproofBets.settledAt,
+    })
+    .from(zeroproofBets)
+    .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
+    .where(inArray(zeroproofBets.status, SETTLED_STATUSES));
+
+  const byUser = new Map<string, SettledBetRow[]>();
+  for (const { userSub, ...bet } of rows) {
+    const list = byUser.get(userSub);
+    if (list) list.push(bet);
+    else byUser.set(userSub, [bet]);
+  }
+  return [...byUser].map(([userSub, bets]) => ({ userSub, bets }));
+}

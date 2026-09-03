@@ -11,7 +11,8 @@ import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
 import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
-import type { WalletMode } from './types.js';
+import { computeStats } from './stats.js';
+import type { LeaderboardEntry, ProfileResponse, WalletMode } from './types.js';
 
 /** Season takes any deposit at or above $20; Challenge is a fixed $100. */
 export const MIN_SEASON_DEPOSIT_CENTS = 2000;
@@ -50,6 +51,45 @@ export function openWallet(userSub: string, mode: WalletMode, depositCents?: num
 
 export function listWallets(userSub: string) {
   return repo.listWallets(userSub);
+}
+
+/** The caller's profile: their wallets and the stats rolled up from settled bets. */
+export async function getProfile(userSub: string): Promise<ProfileResponse> {
+  const [wallets, bets] = await Promise.all([
+    repo.listWallets(userSub),
+    repo.getSettledBetsForUser(userSub),
+  ]);
+  return { wallets, stats: computeStats(bets) };
+}
+
+export type LeaderboardBoard = 'sharp' | 'roi';
+
+/**
+ * Rank users on a board. `sharp` ranks by sharp_score (users below the volume
+ * floor are withheld); `roi` ranks by return on investment. Computed by scanning
+ * every user's settled bets — fine at MVP scale, a materialized rollup later.
+ */
+export async function leaderboard(board: LeaderboardBoard): Promise<LeaderboardEntry[]> {
+  const grouped = await repo.getSettledBetsByUser();
+  const entries: LeaderboardEntry[] = grouped.map(({ userSub, bets }) => {
+    const stats = computeStats(bets);
+    return {
+      userSub,
+      wins: stats.wins,
+      losses: stats.losses,
+      pushes: stats.pushes,
+      betCount: stats.betCount,
+      roiPct: stats.roiPct,
+      sharpScore: stats.sharpScore,
+    };
+  });
+
+  if (board === 'sharp') {
+    return entries
+      .filter((e) => e.sharpScore !== null)
+      .sort((a, b) => (b.sharpScore ?? 0) - (a.sharpScore ?? 0));
+  }
+  return entries.sort((a, b) => b.roiPct - a.roiPct);
 }
 
 /** The seed sports: daily MLB slate now, EPL weekends, NFL hype in three weeks. */

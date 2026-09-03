@@ -15,6 +15,12 @@ const ctrl = new ZeroproofController();
 // slate renders for signed-out visitors, and it's served from the DB only).
 router.get('/events', (req, res, next) => ctrl.listEvents(req, res, next));
 
+// GET /api/zeroproof/leaderboard — ranked profiles (public)
+router.get('/leaderboard', (req, res, next) => ctrl.leaderboard(req, res, next));
+
+// GET /api/zeroproof/me — the caller's profile stats
+router.get('/me', checkJwt, (req, res, next) => ctrl.me(req, res, next));
+
 // GET /api/zeroproof/wallets — the caller's wallets and balances
 router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, next));
 

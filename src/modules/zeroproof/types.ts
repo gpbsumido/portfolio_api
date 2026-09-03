@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ZeroproofWallet } from '../../config/drizzle/schema.js';
+import type { ProfileStats } from './stats.js';
 
 export type WalletMode = 'season' | 'challenge';
 export type WalletStatus = 'active' | 'busted' | 'refunded';
@@ -40,6 +41,22 @@ export interface EventDto {
     fetchedAt: string;
     outcomes: { name: string; priceAmerican: number; point?: number }[];
   }[];
+}
+
+/** What `getProfile` returns: the caller's wallets plus their rolled-up stats. */
+export interface ProfileResponse {
+  wallets: WalletWithBalance[];
+  stats: ProfileStats;
+}
+
+export interface LeaderboardEntry {
+  userSub: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  betCount: number;
+  roiPct: number;
+  sharpScore: number | null;
 }
 
 export interface BetDto {
