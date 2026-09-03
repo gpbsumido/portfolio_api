@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-03 - version 5.5.0
+
+- **The profile is real now: record, ROI, streaks, biggest hit, and a sharp score.** `GET /api/zeroproof/me` rolls those up from your settled bets and returns your wallets alongside. The sharp score is a CLV-weighted number, defined only past a minimum bet count and monotonic in closing-line value — beating the close is what it rewards, which is the moat surfaced as a single figure. (`accolades` comes back empty for now; the accolades slice fills it.)
+- **A public leaderboard ranks who's actually sharp.** `GET /api/zeroproof/leaderboard?board=sharp` ranks users by sharp score (those below the volume floor withheld), `board=roi` by return on investment. It scans every user's settled bets — fine at this scale, a materialized rollup when it isn't. All the stats math is pure and unit-tested, so the ranking can't drift from what `/me` shows you.
+
 ## 2026-09-03 - version 5.4.0
 
 - **Wallets unlock themselves and refund the principal only.** A `zeroproof-unlock` cron refunds every wallet whose 3-month term is up — the full `principal_cents`, whatever the record. A season wallet up 40% and a busted challenge wallet both get exactly their deposit back; paper profit was always stats, not cash. The refund is a double-entry pair that nets to zero, and the wallet flips to `refunded`. Idempotent: the query only returns wallets not yet refunded.
