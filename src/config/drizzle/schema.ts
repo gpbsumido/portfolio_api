@@ -6,6 +6,7 @@ import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  decimal,
   doublePrecision,
   integer,
   jsonb,
@@ -503,3 +504,26 @@ export const zeroproofOddsSnapshots = pgTable("zeroproof_odds_snapshots", {
 
 export type ZeroproofOddsSnapshot = InferSelectModel<typeof zeroproofOddsSnapshots>;
 export type NewZeroproofOddsSnapshot = InferInsertModel<typeof zeroproofOddsSnapshots>;
+
+// ── zeroproof_bets ───────────────────────────────────────────────────────────
+// A decision at a frozen line. `oddsAmerican`/`lineValue` copy the line at
+// placement so it never drifts; `closingOddsAmerican`/`clv` are the moat, filled
+// at settlement. Decimals come back as strings from pg — parsed at the edge.
+export const zeroproofBets = pgTable("zeroproof_bets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  walletId: uuid("wallet_id").notNull(),
+  eventId: uuid("event_id").notNull(),
+  market: text("market").notNull(),
+  selection: text("selection").notNull(),
+  oddsAmerican: integer("odds_american").notNull(),
+  lineValue: decimal("line_value"),
+  closingOddsAmerican: integer("closing_odds_american"),
+  clv: decimal("clv"),
+  stakeCents: bigint("stake_cents", { mode: "number" }).notNull(),
+  status: text("status").notNull().default("open"),
+  placedAt: timestamp("placed_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+});
+
+export type ZeroproofBet = InferSelectModel<typeof zeroproofBets>;
+export type NewZeroproofBet = InferInsertModel<typeof zeroproofBets>;
