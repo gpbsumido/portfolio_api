@@ -17,6 +17,9 @@ vi.mock('./repository.js', () => ({
   listUpcomingEventsWithLines: vi.fn(),
   upsertEvent: vi.fn(),
   insertSnapshot: vi.fn(),
+  getWalletById: vi.fn(),
+  getLatestSnapshot: vi.fn(),
+  placeBet: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -48,6 +51,122 @@ const wallet = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   claims = { sub: 'auth0|me' };
+});
+
+const freshSnapshot = (overrides: Record<string, unknown> = {}) => ({
+  outcomes: [
+    { name: 'New York Yankees', priceAmerican: -145 },
+    { name: 'Boston Red Sox', priceAmerican: 122 },
+  ],
+  fetchedAt: new Date(),
+  ...overrides,
+});
+
+const bet = (overrides: Record<string, unknown> = {}) => ({
+  id: 'bet-1',
+  walletId: 'wallet-1',
+  eventId: 'evt-1',
+  market: 'h2h',
+  selection: 'Boston Red Sox',
+  oddsAmerican: 122,
+  lineValue: null,
+  closingOddsAmerican: null,
+  clv: null,
+  stakeCents: 2500,
+  status: 'open',
+  placedAt: new Date('2026-09-02T19:00:00Z'),
+  settledAt: null,
+  ...overrides,
+});
+
+describe('placing a bet', () => {
+  const body = {
+    walletId: 'wallet-1',
+    eventId: 'evt-1',
+    market: 'h2h',
+    selection: 'Boston Red Sox',
+    stakeCents: 2500,
+  };
+
+  test('places a bet at the current line and copies the odds onto it', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(201);
+    expect(res.body.bet).toMatchObject({ id: 'bet-1', oddsAmerican: 122, status: 'open' });
+    expect(repo.placeBet).toHaveBeenCalledWith(
+      expect.objectContaining({ oddsAmerican: 122, lineValue: null, stakeCents: 2500 }),
+    );
+  });
+
+  test('rejects a stake the wallet cannot afford with 402', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: false, availableCents: 1000 } as never);
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/bets')
+      .send({ ...body, stakeCents: 999999 });
+
+    expect(res.status).toBe(402);
+    expect(res.body.availableCents).toBe(1000);
+  });
+
+  test('refuses a stale line older than 60 minutes', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(
+      freshSnapshot({ fetchedAt: new Date('2020-01-01T00:00:00Z') }) as never,
+    );
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(409);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test('refuses to bet once the wallet is past its lock end', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(
+      wallet({ lockEnd: new Date('2020-01-01T00:00:00Z') }) as never,
+    );
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(409);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test('rejects a selection the market does not offer', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/bets')
+      .send({ ...body, selection: 'Nobody' });
+
+    expect(res.status).toBe(400);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test("cannot bet from a wallet that isn't the caller's", async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet({ userSub: 'auth0|someone-else' }) as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(404);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test('a token without a subject is refused', async () => {
+    claims = {};
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+    expect(res.status).toBe(401);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
 });
 
 describe('opening a wallet', () => {

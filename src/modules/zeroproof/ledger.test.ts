@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { depositLines, deriveBalanceCents, linesNetToZero } from './ledger.js';
+import { depositLines, deriveBalanceCents, linesNetToZero, stakeLines } from './ledger.js';
 
 // The ledger is the hardest-to-reverse decision in ZeroProof: every money
 // movement is a set of double-entry lines that net to zero, and a wallet's
@@ -17,6 +17,14 @@ describe('double-entry ledger', () => {
   test('the invariant rejects any set of lines that does not sum to zero', () => {
     expect(linesNetToZero([{ amountCents: 10000 }, { amountCents: -10000 }])).toBe(true);
     expect(linesNetToZero([{ amountCents: 10000 }, { amountCents: -9999 }])).toBe(false);
+  });
+
+  test('a stake moves money from the user to escrow and nets to zero', () => {
+    const lines = stakeLines(2500);
+
+    expect(linesNetToZero(lines)).toBe(true);
+    expect(lines).toContainEqual({ account: 'user', kind: 'stake', amountCents: -2500 });
+    expect(lines).toContainEqual({ account: 'escrow', kind: 'stake', amountCents: 2500 });
   });
 
   test('balance is derived from the user-account lines only', () => {
