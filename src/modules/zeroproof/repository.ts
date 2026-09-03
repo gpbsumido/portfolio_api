@@ -15,7 +15,13 @@ import {
   zeroproofWallets,
 } from '../../config/drizzle/schema.js';
 import { ConflictError } from '../../shared/errors/index.js';
-import { depositLines, deriveBalanceCents, settlementLines, stakeLines } from './ledger.js';
+import {
+  depositLines,
+  deriveBalanceCents,
+  refundPrincipalLines,
+  settlementLines,
+  stakeLines,
+} from './ledger.js';
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
 import type { Grade } from './settlement.js';
@@ -353,4 +359,59 @@ export async function markEventFinal(eventId: string, result: NormalizedResult):
     .update(zeroproofEvents)
     .set({ status: 'final', result, updatedAt: new Date() })
     .where(eq(zeroproofEvents.id, eventId));
+}
+
+/**
+ * Wallets whose term is up and haven't been refunded yet. A busted wallet still
+ * qualifies — bust archives the record, it doesn't forfeit the deposit.
+ */
+export async function getMaturedWallets(
+  now: Date,
+): Promise<Pick<ZeroproofWallet, 'id' | 'mode' | 'principalCents' | 'status'>[]> {
+  return db
+    .select({
+      id: zeroproofWallets.id,
+      mode: zeroproofWallets.mode,
+      principalCents: zeroproofWallets.principalCents,
+      status: zeroproofWallets.status,
+    })
+    .from(zeroproofWallets)
+    .where(and(lte(zeroproofWallets.lockEnd, now), inArray(zeroproofWallets.status, ['active', 'busted'])));
+}
+
+/** Refund the principal and close the wallet — the ledger pair and the status flip share one transaction. */
+export async function refundWallet(walletId: string, principalCents: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.insert(zeroproofLedgerEntries).values(
+      refundPrincipalLines(principalCents).map((line) => ({
+        walletId,
+        kind: line.kind,
+        account: line.account,
+        amountCents: line.amountCents,
+      })),
+    );
+    await tx.update(zeroproofWallets).set({ status: 'refunded' }).where(eq(zeroproofWallets.id, walletId));
+  });
+}
+
+/** Active challenge wallets whose derived balance has hit zero — ready to bust. */
+export async function getBustableChallengeWallets(): Promise<{ id: string }[]> {
+  const wallets = await db
+    .select({ id: zeroproofWallets.id })
+    .from(zeroproofWallets)
+    .where(and(eq(zeroproofWallets.mode, 'challenge'), eq(zeroproofWallets.status, 'active')));
+  if (wallets.length === 0) return [];
+
+  const ids = wallets.map((w) => w.id);
+  const entries = await db
+    .select({ walletId: zeroproofLedgerEntries.walletId, account: zeroproofLedgerEntries.account, amountCents: zeroproofLedgerEntries.amountCents })
+    .from(zeroproofLedgerEntries)
+    .where(inArray(zeroproofLedgerEntries.walletId, ids));
+
+  return wallets.filter((w) => deriveBalanceCents(entries.filter((e) => e.walletId === w.id)) <= 0);
+}
+
+/** Archive a busted challenge wallet. Betting is already blocked by the placement gate. */
+export async function bustWallet(walletId: string): Promise<void> {
+  await db.update(zeroproofWallets).set({ status: 'busted' }).where(eq(zeroproofWallets.id, walletId));
 }

@@ -47,6 +47,19 @@ export function linesNetToZero(lines: readonly Pick<LedgerLine, 'amountCents'>[]
   return lines.reduce((sum, line) => sum + line.amountCents, 0) === 0;
 }
 
+/**
+ * Return the locked principal at term end. Paid from escrow (which held the
+ * deposit) regardless of the wallet's record — the no-loss guarantee. In a
+ * real-money system this is the payout rail returning the deposit, not an
+ * addition to the bettable bankroll; here escrow → user models "deposit back".
+ */
+export function refundPrincipalLines(principalCents: number): LedgerLine[] {
+  return [
+    { account: 'user', kind: 'refund', amountCents: principalCents },
+    { account: 'escrow', kind: 'refund', amountCents: -principalCents },
+  ];
+}
+
 /** American odds → decimal payout multiplier (stake included). */
 export function americanToDecimal(american: number): number {
   return american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american);

@@ -25,6 +25,10 @@ if (process.env.RUN_CRON === "true") {
     // ledger. Idempotent, so a re-run is safe.
     "zeroproof-settle": () =>
       require("./dist/jobs/zeroproofSettle").zeroproofSettle(),
+    // ZeroProof wallet maintenance: bust empty challenge wallets, refund the
+    // principal of matured wallets. Both sweeps are idempotent.
+    "zeroproof-unlock": () =>
+      require("./dist/jobs/zeroproofUnlock").zeroproofUnlock(),
   };
 
   const run = jobs[job];

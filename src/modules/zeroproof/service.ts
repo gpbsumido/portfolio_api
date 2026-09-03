@@ -185,6 +185,27 @@ export async function settle(
   return { eventsSettled, betsGraded };
 }
 
+/**
+ * Refund every matured wallet's principal and close it. Idempotent — the query
+ * only returns wallets not yet refunded, so a re-run refunds nothing twice.
+ */
+export async function unlockMaturedWallets(now: Date): Promise<number> {
+  const wallets = await repo.getMaturedWallets(now);
+  for (const wallet of wallets) {
+    await repo.refundWallet(wallet.id, wallet.principalCents);
+  }
+  return wallets.length;
+}
+
+/** Archive challenge wallets that have hit zero. Their principal still refunds at term end. */
+export async function bustEmptyChallengeWallets(): Promise<number> {
+  const wallets = await repo.getBustableChallengeWallets();
+  for (const wallet of wallets) {
+    await repo.bustWallet(wallet.id);
+  }
+  return wallets.length;
+}
+
 /** Choose the results provider from env — fixtures by default, never a silent swap. */
 export function resolveResultsProvider(): ResultsProvider {
   const choice = process.env.ZEROPROOF_RESULTS_PROVIDER ?? 'fixtures';
