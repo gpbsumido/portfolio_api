@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-03 - version 5.3.0
+
+- **Bets settle themselves now, and the settler is safe to run twice.** A `zeroproof-settle` cron pulls results (fixtures by default, or The Odds API `/scores` — quota-free, same event ids as the odds), grades every open bet, pays the ledger and marks the event final. Idempotency is keyed on event status plus open-bet status, so a second pass over a final event grades nothing rather than double-paying.
+- **The moat is captured on every graded bet: closing-line value.** At settlement I read the closing line — the latest snapshot before kickoff — and stamp `closing_odds_american` and `clv` onto the bet. CLV is positive when the bet's price beat the close (bet -110, closes -130), the single best public proxy for skill. It's unrecoverable after the fact, which is why the snapshot history and the columns were there from the first slice.
+- **Grading covers the messy tail, not just the happy path.** h2h, spread (handicap applied) and total (combined score) each grade to won/lost/push/void; an exact cover is a push, an incomplete event voids and refunds the stake. The payout ledger stays double-entry: a win returns stake from escrow and profit from the house, a loss moves the held stake escrow → house, a push refunds — every set nets to zero.
+
 ## 2026-09-02 - version 5.2.0
 
 - **You can place a bet now, and the line is frozen the instant you do.** `POST /api/zeroproof/bets` copies the price (and the handicap, for spread/total) off the latest snapshot onto the bet, so a line move after placement never rewrites a bet. Every gate runs before any write: the wallet must be the caller's and inside its lock window, and the line can't be stale.
