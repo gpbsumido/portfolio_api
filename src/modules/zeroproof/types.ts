@@ -42,6 +42,24 @@ export interface EventDto {
   }[];
 }
 
+export interface BetDto {
+  id: string;
+  walletId: string;
+  eventId: string;
+  market: string;
+  selection: string;
+  /** Locked at placement. */
+  oddsAmerican: number;
+  lineValue: number | null;
+  /** The moat, filled at settlement. */
+  closingOddsAmerican: number | null;
+  clv: number | null;
+  stakeCents: number;
+  status: string;
+  placedAt: string;
+  settledAt: string | null;
+}
+
 export interface WalletDto {
   id: string;
   mode: string;

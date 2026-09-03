@@ -4,9 +4,33 @@
 
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
-import type { OpenWalletInput } from './schemas.js';
+import type { ZeroproofBet } from '../../config/drizzle/schema.js';
+import type { OpenWalletInput, PlaceBetInput } from './schemas.js';
 import * as service from './service.js';
-import type { EventDto, EventWithLines, WalletDto, WalletWithBalance } from './types.js';
+import type { BetDto, EventDto, EventWithLines, WalletDto, WalletWithBalance } from './types.js';
+
+/** Postgres decimals come back as strings; parse to number (or keep null). */
+function toNumber(value: string | null): number | null {
+  return value != null ? Number(value) : null;
+}
+
+function toBetDto(bet: ZeroproofBet): BetDto {
+  return {
+    id: bet.id,
+    walletId: bet.walletId,
+    eventId: bet.eventId,
+    market: bet.market,
+    selection: bet.selection,
+    oddsAmerican: bet.oddsAmerican,
+    lineValue: toNumber(bet.lineValue),
+    closingOddsAmerican: bet.closingOddsAmerican,
+    clv: toNumber(bet.clv),
+    stakeCents: bet.stakeCents,
+    status: bet.status,
+    placedAt: bet.placedAt.toISOString(),
+    settledAt: bet.settledAt ? bet.settledAt.toISOString() : null,
+  };
+}
 
 /** The Auth0 subject of the caller, or a 401 if the token carried none. */
 function requireSub(req: Request): string {
@@ -50,6 +74,21 @@ export class ZeroproofController {
     try {
       const events = await service.listEvents();
       res.json({ events: events.map(toEventDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/bets — place a bet from one of the caller's wallets. */
+  async placeBet(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sub = requireSub(req);
+      const result = await service.placeBet(sub, req.body as PlaceBetInput);
+      if (!result.ok) {
+        res.status(402).json({ error: 'Insufficient balance', availableCents: result.availableCents });
+        return;
+      }
+      res.status(201).json({ bet: toBetDto(result.bet) });
     } catch (err) {
       next(err);
     }

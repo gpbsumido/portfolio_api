@@ -2,10 +2,11 @@
 // ZeroProof wallets — service (deposit rules, lock term, thin orchestration)
 // ---------------------------------------------------------------------------
 
-import { ValidationError } from '../../shared/errors/index.js';
+import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
+import { isBettable, isStale, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
 import { TheOddsApiProvider } from './providers/theOddsApi.js';
-import type { OddsProvider } from './providers/types.js';
+import type { MarketKey, OddsProvider } from './providers/types.js';
 import * as repo from './repository.js';
 import type { WalletMode } from './types.js';
 
@@ -79,6 +80,50 @@ export async function syncOdds(
 
 export function listEvents() {
   return repo.listUpcomingEventsWithLines();
+}
+
+interface PlaceBetRequest {
+  walletId: string;
+  eventId: string;
+  market: MarketKey;
+  selection: string;
+  stakeCents: number;
+}
+
+/**
+ * Place a bet: check ownership and the lock window, refuse a stale line, copy
+ * the price off the latest snapshot, then hand to the repo to debit and record
+ * in one transaction. The ordering matters — every gate runs before any write.
+ */
+export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<repo.PlaceBetResult> {
+  const now = new Date();
+
+  const wallet = await repo.getWalletById(req.walletId);
+  if (!wallet || wallet.userSub !== userSub) {
+    throw new NotFoundError('Wallet not found');
+  }
+  if (!isBettable(wallet, now)) {
+    throw new ConflictError('This wallet is not open for betting');
+  }
+
+  const snapshot = await repo.getLatestSnapshot(req.eventId, req.market);
+  if (!snapshot) {
+    throw new NotFoundError('No line available for this market');
+  }
+  if (isStale(snapshot.fetchedAt, now)) {
+    throw new ConflictError('This line is stale — refresh before betting');
+  }
+
+  const { priceAmerican, lineValue } = selectLine(snapshot.outcomes, req.selection);
+  return repo.placeBet({
+    walletId: req.walletId,
+    eventId: req.eventId,
+    market: req.market,
+    selection: req.selection,
+    oddsAmerican: priceAmerican,
+    lineValue,
+    stakeCents: req.stakeCents,
+  });
 }
 
 /**
