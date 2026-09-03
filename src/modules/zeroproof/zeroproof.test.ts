@@ -30,6 +30,8 @@ vi.mock('./repository.js', () => ({
   getSettledBetsByUser: vi.fn(),
   logReferralClick: vi.fn(),
   houseSummary: vi.fn(),
+  getAwardedAccolades: vi.fn(),
+  awardAccolades: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -293,11 +295,14 @@ describe('house view (/house)', () => {
 });
 
 describe('profile (/me)', () => {
-  test('returns the caller record, ROI and wallets', async () => {
+  test('returns the caller record, ROI, wallets and earned accolades', async () => {
     vi.mocked(repo.listWallets).mockResolvedValue([wallet()] as never);
     vi.mocked(repo.getSettledBetsForUser).mockResolvedValue([
-      { status: 'won', stakeCents: 1000, oddsAmerican: 100, clv: '5', settledAt: new Date('2026-09-01') },
-      { status: 'lost', stakeCents: 1000, oddsAmerican: -110, clv: '-2', settledAt: new Date('2026-09-02') },
+      { walletId: 'wallet-1', status: 'won', stakeCents: 1000, oddsAmerican: 100, clv: '5', settledAt: new Date('2026-09-01') },
+      { walletId: 'wallet-1', status: 'lost', stakeCents: 1000, oddsAmerican: -110, clv: '-2', settledAt: new Date('2026-09-02') },
+    ] as never);
+    vi.mocked(repo.getAwardedAccolades).mockResolvedValue([
+      { accoladeId: 'first_win', awardedAt: new Date('2026-09-01T12:00:00Z') },
     ] as never);
 
     const res = await request(makeApp()).get('/api/zeroproof/me');
@@ -306,7 +311,11 @@ describe('profile (/me)', () => {
     expect(res.body.stats.wins).toBe(1);
     expect(res.body.stats.losses).toBe(1);
     expect(res.body.wallets).toHaveLength(1);
-    expect(res.body.accolades).toEqual([]);
+    // A win means first_win was earned; the profile awards it and returns it named.
+    expect(repo.awardAccolades).toHaveBeenCalledWith('auth0|me', expect.arrayContaining(['first_win']));
+    expect(res.body.accolades).toEqual([
+      { id: 'first_win', name: 'First Win', awardedAt: '2026-09-01T12:00:00.000Z' },
+    ]);
     expect(repo.getSettledBetsForUser).toHaveBeenCalledWith('auth0|me');
   });
 
