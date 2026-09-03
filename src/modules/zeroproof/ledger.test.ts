@@ -3,6 +3,7 @@ import {
   depositLines,
   deriveBalanceCents,
   linesNetToZero,
+  refundPrincipalLines,
   settlementLines,
   stakeLines,
 } from './ledger.js';
@@ -65,5 +66,11 @@ describe('settlement ledger lines', () => {
     const lines = settlementLines('push', 2500, -110);
     expect(linesNetToZero(lines)).toBe(true);
     expect(deriveBalanceCents(lines)).toBe(2500);
+  });
+
+  test('a principal refund returns exactly the principal and nets to zero', () => {
+    const lines = refundPrincipalLines(50000);
+    expect(linesNetToZero(lines)).toBe(true);
+    expect(deriveBalanceCents(lines)).toBe(50000);
   });
 });
