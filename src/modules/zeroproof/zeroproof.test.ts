@@ -123,17 +123,19 @@ describe('placing a bet', () => {
     espnSeason: '2026',
   };
 
-  test('a bound league wallet is refused a bet outside its ESPN league with 403', async () => {
+  test('a league wallet bets outside its featured ESPN league — additive, not gated', async () => {
     vi.mocked(repo.getWalletById).mockResolvedValue(
       wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
     );
     vi.mocked(repo.getLeagueById).mockResolvedValue(boundLeague as never);
     vi.mocked(repo.getEventById).mockResolvedValue({ providerKey: 'baseball_mlb:evt-9' } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
 
     const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
 
-    expect(res.status).toBe(403);
-    expect(repo.placeBet).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(repo.placeBet).toHaveBeenCalled();
   });
 
   test('a bound league wallet can bet its own ESPN matchup', async () => {

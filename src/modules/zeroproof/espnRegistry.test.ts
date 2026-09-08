@@ -21,6 +21,7 @@ vi.mock('./repository.js', () => ({
   listEspnLeagues: vi.fn(),
   addEspnLeague: vi.fn(),
   removeEspnLeague: vi.fn(),
+  listAllLeagueEspnLeagueKeys: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -96,6 +97,7 @@ describe('resolveEspnLeagueKeys', () => {
       row({ game: 'ffl', leagueId: '836777691', season: '2026' }),
       row({ game: 'fba', leagueId: '449389534', season: '2027' }),
     ] as never);
+    vi.mocked(repo.listAllLeagueEspnLeagueKeys).mockResolvedValue([] as never);
     process.env.ESPN_FANTASY_LEAGUES = 'ffl:836777691:2026,ffl:111:2025';
 
     const keys = await resolveEspnLeagueKeys();
@@ -107,8 +109,23 @@ describe('resolveEspnLeagueKeys', () => {
     ]);
   });
 
+  test('also unions the ESPN leagues commissioners added to their leagues, deduped', async () => {
+    vi.mocked(repo.listEspnLeagues).mockResolvedValue([
+      row({ game: 'ffl', leagueId: '836777691', season: '2026' }),
+    ] as never);
+    vi.mocked(repo.listAllLeagueEspnLeagueKeys).mockResolvedValue([
+      'ffl:836777691:2026', // same as the registry — deduped
+      'fhl:222:2026', // a commissioner's own addition
+    ] as never);
+
+    const keys = await resolveEspnLeagueKeys();
+
+    expect(keys).toEqual(['ffl:836777691:2026', 'fhl:222:2026']);
+  });
+
   test('is empty when nothing is registered and no env fallback is set', async () => {
     vi.mocked(repo.listEspnLeagues).mockResolvedValue([] as never);
+    vi.mocked(repo.listAllLeagueEspnLeagueKeys).mockResolvedValue([] as never);
     expect(await resolveEspnLeagueKeys()).toEqual([]);
   });
 });

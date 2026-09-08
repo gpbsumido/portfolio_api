@@ -74,3 +74,8 @@ export const addEspnLeagueSchema = z.object({
 });
 
 export type AddEspnLeagueInput = z.infer<typeof addEspnLeagueSchema>;
+
+/** POST /api/zeroproof/leagues/:id/espn-leagues (commissioner) — add an ESPN league. */
+export const addLeagueEspnLeagueSchema = addEspnLeagueSchema;
+
+export type AddLeagueEspnLeagueInput = z.infer<typeof addLeagueEspnLeagueSchema>;

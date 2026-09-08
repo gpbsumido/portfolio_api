@@ -9,6 +9,7 @@ import { requireAdmin } from '../../shared/auth/adminEmail.js';
 import { ZeroproofController } from './controller.js';
 import {
   addEspnLeagueSchema,
+  addLeagueEspnLeagueSchema,
   createLeagueSchema,
   joinLeagueSchema,
   openWalletSchema,
@@ -69,6 +70,19 @@ router.post('/leagues', checkJwt, validateBody(createLeagueSchema), (req, res, n
 // POST /api/zeroproof/leagues/:id/join — join a league
 router.post('/leagues/:id/join', checkJwt, validateBody(joinLeagueSchema), (req, res, next) =>
   ctrl.joinLeague(req, res, next),
+);
+
+// The ESPN leagues a commissioner adds to their league for members to bet
+// (additive — the league still bets everything else). Commissioner-gated in the
+// service by comparing the caller to the league's commissioner.
+router.post(
+  '/leagues/:id/espn-leagues',
+  checkJwt,
+  validateBody(addLeagueEspnLeagueSchema),
+  (req, res, next) => ctrl.addLeagueEspnLeague(req, res, next),
+);
+router.delete('/leagues/:id/espn-leagues/:espnId', checkJwt, (req, res, next) =>
+  ctrl.removeLeagueEspnLeague(req, res, next),
 );
 
 // The ESPN-league registry — which ESPN fantasy leagues the crons ingest. Admin

@@ -4,9 +4,13 @@
 
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
-import type { ZeroproofBet } from '../../config/drizzle/schema.js';
+import type {
+  ZeroproofBet,
+  ZeroproofLeagueEspnLeague,
+} from '../../config/drizzle/schema.js';
 import type {
   AddEspnLeagueInput,
+  AddLeagueEspnLeagueInput,
   CreateLeagueInput,
   JoinLeagueInput,
   OpenWalletInput,
@@ -18,6 +22,7 @@ import type {
   EventDto,
   EventWithLines,
   LeagueDto,
+  LeagueEspnLeagueDto,
   LeagueListItem,
   LeagueStanding,
   LeagueStandingDto,
@@ -100,6 +105,17 @@ function toStandingDto(s: LeagueStanding): LeagueStandingDto {
     betCount: s.betCount,
     roiPct: s.roiPct,
     rank: s.rank,
+  };
+}
+
+function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeagueDto {
+  return {
+    id: row.id,
+    game: row.game,
+    leagueId: row.espnLeagueId,
+    season: row.season,
+    label: row.label,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -277,10 +293,36 @@ export class ZeroproofController {
           detail.isMember || detail.isCommissioner,
         ),
         standings: detail.standings.map(toStandingDto),
+        espnLeagues: detail.espnLeagues.map(toLeagueEspnLeagueDto),
         callerWalletId: detail.callerWalletId,
         isMember: detail.isMember,
         isCommissioner: detail.isCommissioner,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/leagues/:id/espn-leagues — commissioner adds an ESPN league. */
+  async addLeagueEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body as AddLeagueEspnLeagueInput;
+      const row = await service.addLeagueEspnLeague(requireSub(req), param(req.params.id), body);
+      res.status(201).json({ espnLeague: toLeagueEspnLeagueDto(row) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /api/zeroproof/leagues/:id/espn-leagues/:espnId — commissioner removes one. */
+  async removeLeagueEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      await service.removeLeagueEspnLeague(
+        requireSub(req),
+        param(req.params.id),
+        param(req.params.espnId),
+      );
+      res.status(204).send();
     } catch (err) {
       next(err);
     }
