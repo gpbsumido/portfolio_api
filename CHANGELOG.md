@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-08 - version 5.15.0
+
+- **A league commissioner adds public ESPN leagues their members can bet — additive, not restrictive.** This replaces the old bind, where a bound league could *only* bet its one ESPN league. A commissioner now adds one or more public ESPN leagues to their ZeroProof league (`POST /api/zeroproof/leagues/:id/espn-leagues`, `DELETE .../:espnId`, both commissioner-gated), each held in a new `zeroproof_league_espn_leagues` table (migration 041). The added leagues' matchups start ingesting for the board — their keys are unioned into `resolveEspnLeagueKeys` alongside the admin registry and the env fallback — and members bet them plus everything else. The league detail returns its `espnLeagues`.
+- **Removed the placement restriction.** A `mode='league'` wallet is no longer refused a bet outside a bound ESPN league — the 403 gate in `placeBet` is gone, so league play is additive. The legacy single-bind columns (039) are left in place but unused; creating a league with an ESPN league now seeds the additive list instead. Covered by tests: the placement is no longer gated, the resolver unions per-league additions (deduped), and the commissioner endpoints add/remove with a 403 for anyone else and a 404 for a missing league.
+
 ## 2026-09-08 - version 5.13.0
 
 - **Add ESPN fantasy leagues without a redeploy.** The ESPN sync/settle crons read their league list from a new `zeroproof_espn_leagues` table (migration 040) unioned with the `ESPN_FANTASY_LEAGUES` env fallback, so a league can be registered as data instead of a config change. Admin-only endpoints manage it: `GET /api/zeroproof/espn-leagues`, `POST` (register — idempotent on game/league/season, optional label), and `DELETE /api/zeroproof/espn-leagues/:id`. Existing env config keeps working; the registry just adds to it. Endpoints and the union resolver are covered by tests (list/add/validation/remove, and dedup of a league that's in both the table and the env).
