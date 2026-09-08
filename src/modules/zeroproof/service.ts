@@ -2,7 +2,15 @@
 // ZeroProof wallets — service (deposit rules, lock term, thin orchestration)
 // ---------------------------------------------------------------------------
 
-import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
+import { randomBytes } from 'node:crypto';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
+import {
+  isJoinable,
+  type LeagueWinCondition,
+  leagueWalletLockEnd,
+  rankStandings,
+  validateLeagueRules,
+} from './leagues.js';
 import { isBettable, isStale, maxOddsAgeMsFromMinutes, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
@@ -13,7 +21,14 @@ import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.j
 import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
 import { computeStats } from './stats.js';
-import type { LeaderboardEntry, ProfileResponse, WalletMode } from './types.js';
+import type {
+  LeaderboardEntry,
+  LeagueDetail,
+  LeagueListItem,
+  LeagueStanding,
+  ProfileResponse,
+  WalletMode,
+} from './types.js';
 
 /** Season takes any deposit at or above $20; Challenge is a fixed $100. */
 export const MIN_SEASON_DEPOSIT_CENTS = 2000;
@@ -326,6 +341,152 @@ export async function accrueDailyYield(): Promise<number> {
 /** How old a line may be and still be bettable, from env (minutes) or the default. */
 export function resolveMaxOddsAgeMs(): number {
   return maxOddsAgeMsFromMinutes(process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES);
+}
+
+// ---------------------------------------------------------------------------
+// Leagues
+// ---------------------------------------------------------------------------
+
+/** Ambiguous glyphs (0/O, 1/I/L) left out so a shared code is easy to read aloud. */
+const JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** A short, opaque, uppercase invite code. */
+export function generateJoinCode(): string {
+  const bytes = randomBytes(6);
+  return Array.from(bytes, (b) => JOIN_CODE_ALPHABET[b % JOIN_CODE_ALPHABET.length]).join('');
+}
+
+export interface CreateLeagueRequest {
+  name: string;
+  visibility: string;
+  startingBankrollCents: number;
+  maxMembers: number;
+  winCondition: LeagueWinCondition;
+  thresholdCents?: number;
+  endsAt?: string;
+}
+
+/**
+ * Create a league and auto-join the commissioner. The cross-field rules are
+ * checked here (a target above the bankroll, a future deadline), then the repo
+ * seeds the commissioner's league wallet in the same transaction as the league.
+ */
+export async function createLeague(
+  commissionerSub: string,
+  req: CreateLeagueRequest,
+): Promise<LeagueListItem> {
+  const now = new Date();
+  const endsAt = req.endsAt ? new Date(req.endsAt) : null;
+  const thresholdCents = req.thresholdCents ?? null;
+  validateLeagueRules(
+    {
+      startingBankrollCents: req.startingBankrollCents,
+      maxMembers: req.maxMembers,
+      winCondition: req.winCondition,
+      thresholdCents,
+      endsAt,
+    },
+    now,
+  );
+
+  const league = await repo.createLeague({
+    commissionerSub,
+    name: req.name,
+    joinCode: generateJoinCode(),
+    visibility: req.visibility,
+    startingBankrollCents: req.startingBankrollCents,
+    maxMembers: req.maxMembers,
+    winCondition: req.winCondition,
+    thresholdCents,
+    endsAt,
+    walletLockEnd: leagueWalletLockEnd(req.winCondition, endsAt),
+    now,
+  });
+  return { league, memberCount: 1 };
+}
+
+/**
+ * Join a league. Idempotent — an existing member gets their wallet back without a
+ * second one. A non-member is gated on the league being open and under its cap,
+ * and an invite league needs a matching code.
+ */
+export async function joinLeague(
+  userSub: string,
+  leagueId: string,
+  joinCode?: string,
+): Promise<{ walletId: string }> {
+  const league = await repo.getLeagueById(leagueId);
+  if (!league) throw new NotFoundError('League not found');
+
+  const existing = await repo.getMembership(leagueId, userSub);
+  if (existing) return { walletId: existing.walletId };
+
+  const memberCount = await repo.countMembers(leagueId);
+  if (!isJoinable(league.status, memberCount, league.maxMembers)) {
+    throw new ConflictError(league.status !== 'open' ? 'This league is closed' : 'This league is full');
+  }
+  if (league.visibility === 'invite') {
+    if (!joinCode || joinCode.trim().toUpperCase() !== league.joinCode) {
+      throw new ForbiddenError('This league needs a valid invite code');
+    }
+  }
+
+  const now = new Date();
+  const { walletId } = await repo.joinLeague({
+    leagueId,
+    userSub,
+    startingBankrollCents: league.startingBankrollCents,
+    walletLockEnd: leagueWalletLockEnd(league.winCondition as LeagueWinCondition, league.endsAt),
+    now,
+  });
+  return { walletId };
+}
+
+/** Discover leagues: a join code resolves one (any visibility), else public open ones. */
+export async function listLeagues(opts: { q?: string; code?: string }): Promise<LeagueListItem[]> {
+  if (opts.code) {
+    const league = await repo.getLeagueByJoinCode(opts.code.trim().toUpperCase());
+    if (!league) return [];
+    return [{ league, memberCount: await repo.countMembers(league.id) }];
+  }
+  return repo.listPublicOpenLeagues(opts.q);
+}
+
+/** The leagues the caller belongs to. */
+export function getMyLeagues(userSub: string): Promise<LeagueListItem[]> {
+  return repo.getMyLeagues(userSub);
+}
+
+/** A league's rules, its board (ranked by bankroll), and the caller's place in it. */
+export async function getLeagueDetail(leagueId: string, callerSub: string | null): Promise<LeagueDetail> {
+  const league = await repo.getLeagueById(leagueId);
+  if (!league) throw new NotFoundError('League not found');
+
+  const rows = await repo.getLeagueStandingRows(leagueId);
+  const standings: LeagueStanding[] = rankStandings(
+    rows.map((r) => {
+      const stats = computeStats(r.bets);
+      return {
+        userSub: r.userSub,
+        balanceCents: r.balanceCents,
+        wins: stats.wins,
+        losses: stats.losses,
+        pushes: stats.pushes,
+        betCount: stats.betCount,
+        roiPct: stats.roiPct,
+      };
+    }),
+  );
+
+  const membership = callerSub ? await repo.getMembership(leagueId, callerSub) : undefined;
+  return {
+    league,
+    memberCount: rows.length,
+    standings,
+    callerWalletId: membership?.walletId ?? null,
+    isMember: !!membership,
+    isCommissioner: callerSub != null && callerSub === league.commissionerSub,
+  };
 }
 
 /** The sports to sync, from env (comma-separated) or the seed defaults. */
