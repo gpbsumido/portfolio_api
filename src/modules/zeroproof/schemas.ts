@@ -58,3 +58,14 @@ export const joinLeagueSchema = z.object({
 });
 
 export type JoinLeagueInput = z.infer<typeof joinLeagueSchema>;
+
+/** POST /api/zeroproof/espn-leagues (admin) — register a league for ingestion. */
+export const addEspnLeagueSchema = z.object({
+  // ESPN game code: ffl (football), fba (basketball), flb (baseball), fhl (hockey).
+  game: z.string().regex(/^[a-z]{3}$/),
+  leagueId: z.string().min(1).max(40),
+  season: z.string().regex(/^\d{4}$/),
+  label: z.string().max(80).optional(),
+});
+
+export type AddEspnLeagueInput = z.infer<typeof addEspnLeagueSchema>;
