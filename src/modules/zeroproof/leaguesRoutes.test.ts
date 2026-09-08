@@ -104,6 +104,28 @@ describe('creating a league', () => {
     expect(repo.createLeague).not.toHaveBeenCalled();
   });
 
+  test('creates a league bound to an ESPN league', async () => {
+    vi.mocked(repo.createLeague).mockResolvedValue(league() as never);
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues')
+      .send({ ...body, espnGame: 'ffl', espnLeagueId: '836777691', espnSeason: '2026' });
+
+    expect(res.status).toBe(201);
+    expect(repo.createLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ espnGame: 'ffl', espnLeagueId: '836777691', espnSeason: '2026' }),
+    );
+  });
+
+  test('rejects a partial ESPN binding with 400', async () => {
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues')
+      .send({ ...body, espnGame: 'ffl' });
+
+    expect(res.status).toBe(400);
+    expect(repo.createLeague).not.toHaveBeenCalled();
+  });
+
   test('a token without a subject is refused', async () => {
     claims = {};
     const res = await request(makeApp()).post('/api/zeroproof/leagues').send(body);
