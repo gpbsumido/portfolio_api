@@ -489,6 +489,60 @@ export async function getLeagueDetail(leagueId: string, callerSub: string | null
   };
 }
 
+/**
+ * Settle every league that's finished: a threshold league once a member's
+ * bankroll reaches the target, a timeline league once its deadline passes. The
+ * winner is the current leader (highest balance, ROI breaking ties) — for a
+ * threshold league that's whoever's ahead the moment the crossing is detected.
+ * Idempotent: only open leagues are scanned, and the repo guards the close.
+ */
+export async function settleFinishedLeagues(now: Date): Promise<number> {
+  const open = await repo.getOpenLeagues();
+  let settled = 0;
+
+  for (const league of open) {
+    const rows = await repo.getLeagueStandingRows(league.id);
+    const crossed =
+      league.winCondition === 'threshold' &&
+      league.thresholdCents != null &&
+      rows.some((r) => r.balanceCents >= (league.thresholdCents as number));
+    const expired =
+      league.winCondition === 'timeline' && league.endsAt != null && league.endsAt <= now;
+    if (!crossed && !expired) continue;
+
+    const ranked = rankStandings(
+      rows.map((r) => {
+        const stats = computeStats(r.bets);
+        return {
+          userSub: r.userSub,
+          balanceCents: r.balanceCents,
+          wins: stats.wins,
+          losses: stats.losses,
+          pushes: stats.pushes,
+          betCount: stats.betCount,
+          roiPct: stats.roiPct,
+        };
+      }),
+    );
+    const walletByUser = new Map(rows.map((r) => [r.userSub, r.walletId]));
+
+    await repo.settleLeague({
+      leagueId: league.id,
+      winnerSub: ranked[0]?.userSub ?? null,
+      rankings: ranked.map((r) => ({
+        userSub: r.userSub,
+        walletId: walletByUser.get(r.userSub) as string,
+        balanceCents: r.balanceCents,
+        rank: r.rank,
+      })),
+      now,
+    });
+    settled += 1;
+  }
+
+  return settled;
+}
+
 /** The sports to sync, from env (comma-separated) or the seed defaults. */
 export function resolveSportKeys(): string[] {
   const raw = process.env.ZEROPROOF_SPORT_KEYS;

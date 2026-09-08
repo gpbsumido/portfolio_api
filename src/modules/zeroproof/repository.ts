@@ -808,7 +808,7 @@ export async function getMyLeagues(userSub: string): Promise<LeagueListItem[]> {
 /** Per-member raw material for a league board: bankroll now, plus settled bets for stats. */
 export async function getLeagueStandingRows(
   leagueId: string,
-): Promise<{ userSub: string; balanceCents: number; bets: SettledBetRow[] }[]> {
+): Promise<{ userSub: string; walletId: string; balanceCents: number; bets: SettledBetRow[] }[]> {
   const members = await db
     .select({ userSub: zeroproofLeagueMembers.userSub, walletId: zeroproofLeagueMembers.walletId })
     .from(zeroproofLeagueMembers)
@@ -840,7 +840,66 @@ export async function getLeagueStandingRows(
 
   return members.map((m) => ({
     userSub: m.userSub,
+    walletId: m.walletId,
     balanceCents: deriveBalanceCents(entries.filter((e) => e.walletId === m.walletId)),
     bets: bets.filter((b) => b.walletId === m.walletId),
   }));
+}
+
+/** Open leagues with the fields settlement needs to decide whether they're done. */
+export async function getOpenLeagues(): Promise<
+  Pick<ZeroproofLeague, 'id' | 'winCondition' | 'thresholdCents' | 'endsAt'>[]
+> {
+  return db
+    .select({
+      id: zeroproofLeagues.id,
+      winCondition: zeroproofLeagues.winCondition,
+      thresholdCents: zeroproofLeagues.thresholdCents,
+      endsAt: zeroproofLeagues.endsAt,
+    })
+    .from(zeroproofLeagues)
+    .where(eq(zeroproofLeagues.status, 'open'));
+}
+
+interface SettleLeagueInput {
+  leagueId: string;
+  winnerSub: string | null;
+  rankings: { userSub: string; walletId: string; balanceCents: number; rank: number }[];
+  now: Date;
+}
+
+/**
+ * Settle a league in one transaction: stamp the winner and close it, freeze each
+ * member's final balance and rank, and archive the league wallets so betting
+ * stops. The `status='open'` guard on the league update makes a re-run a no-op.
+ */
+export async function settleLeague(input: SettleLeagueInput): Promise<void> {
+  await db.transaction(async (tx) => {
+    const closed = await tx
+      .update(zeroproofLeagues)
+      .set({ status: 'settled', winnerSub: input.winnerSub, settledAt: input.now })
+      .where(and(eq(zeroproofLeagues.id, input.leagueId), eq(zeroproofLeagues.status, 'open')))
+      .returning({ id: zeroproofLeagues.id });
+    if (closed.length === 0) return; // already settled by an earlier run
+
+    for (const r of input.rankings) {
+      await tx
+        .update(zeroproofLeagueMembers)
+        .set({ finalBalanceCents: r.balanceCents, rank: r.rank })
+        .where(
+          and(
+            eq(zeroproofLeagueMembers.leagueId, input.leagueId),
+            eq(zeroproofLeagueMembers.userSub, r.userSub),
+          ),
+        );
+    }
+
+    const walletIds = input.rankings.map((r) => r.walletId);
+    if (walletIds.length > 0) {
+      await tx
+        .update(zeroproofWallets)
+        .set({ status: 'settled' })
+        .where(and(inArray(zeroproofWallets.id, walletIds), eq(zeroproofWallets.mode, 'league')));
+    }
+  });
 }
