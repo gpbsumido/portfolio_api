@@ -515,9 +515,9 @@ while; the README used to describe it as the whole suite.
 
 Deployed on [Railway](https://railway.app) using the included `Dockerfile`. Environment variables are configured in the Railway dashboard. FastF1 cache is persisted at `./cache/fastf1` via a Railway volume.
 
-Deploys are automatic on merge to `main`, but **not via GitHub Actions** —
-Railway watches the branch through its own GitHub integration and builds from
-the `Dockerfile`. The workflows in `.github/workflows/` are `ci.yml` (lint,
+Deploys are automatic — `main` → **production** and `develop` → **staging** —
+but **not via GitHub Actions**: Railway watches each branch through its own
+GitHub integration and builds from the `Dockerfile`. The workflows in `.github/workflows/` are `ci.yml` (lint,
 typecheck, test, migrations, build) and `tag-release.yml` (tags minor and major
 releases). Neither deploys anything.
 
@@ -525,10 +525,12 @@ The distinction matters when a deploy does not appear: a green CI run says the
 code is sound, not that anything shipped. Railway's own dashboard is the only
 place that knows.
 
-`develop` is not deployed for the API, so the frontend's staging environment
-(`develop.paulsumido.com`) talks to this same production deployment. There is no
-staging API, which is fine for reads and worth remembering before testing
-anything destructive.
+The API now has a **staging** deployment: `develop` builds to its own Railway
+environment alongside production on `main`, so the frontend's staging site
+(`develop.paulsumido.com`) has a staging API to talk to rather than production.
+Each environment runs its own copy of the cron services (odds-sync/settle, the
+ESPN fantasy sync/settle, unlock, yield). Still worth confirming which API a
+client points at before testing anything destructive.
 
 Migrations run as part of the deploy — see the migrations section above. There
 is no separate step and nothing to remember.
