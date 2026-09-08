@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
-import { isBettable, isStale, selectLine } from './placement.js';
+import { isBettable, isStale, maxOddsAgeMsFromMinutes, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { TheOddsApiProvider } from './providers/theOddsApi.js';
@@ -179,7 +179,7 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
   if (!snapshot) {
     throw new NotFoundError('No line available for this market');
   }
-  if (isStale(snapshot.fetchedAt, now)) {
+  if (isStale(snapshot.fetchedAt, now, resolveMaxOddsAgeMs())) {
     throw new ConflictError('This line is stale — refresh before betting');
   }
 
@@ -321,6 +321,11 @@ export async function accrueDailyYield(): Promise<number> {
   const yieldCents = Math.round(floatCents * DAILY_YIELD_RATE);
   if (yieldCents > 0) await repo.accrueYield(yieldCents);
   return yieldCents;
+}
+
+/** How old a line may be and still be bettable, from env (minutes) or the default. */
+export function resolveMaxOddsAgeMs(): number {
+  return maxOddsAgeMsFromMinutes(process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES);
 }
 
 /** The sports to sync, from env (comma-separated) or the seed defaults. */
