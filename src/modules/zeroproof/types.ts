@@ -138,6 +138,10 @@ export interface LeagueDto {
   endsAt: string | null;
   status: string;
   winnerSub: string | null;
+  /** The bound ESPN league, or null — when set, members only bet its matchups. */
+  espnGame: string | null;
+  espnLeagueId: string | null;
+  espnSeason: string | null;
   createdAt: string;
   settledAt: string | null;
   memberCount: number;

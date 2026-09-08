@@ -5,6 +5,9 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import {
+  type EspnBinding,
+  espnBindingOf,
+  isEventInEspnLeague,
   isJoinable,
   type LeagueWinCondition,
   leagueWalletLockEnd,
@@ -191,6 +194,18 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
     throw new ConflictError('This wallet is not open for betting');
   }
 
+  // A league wallet bound to an ESPN league may only bet that league's matchups.
+  if (wallet.mode === 'league' && wallet.leagueId) {
+    const league = await repo.getLeagueById(wallet.leagueId);
+    const binding = league ? espnBindingOf(league) : null;
+    if (binding) {
+      const event = await repo.getEventById(req.eventId);
+      if (!event || !isEventInEspnLeague(event.providerKey, binding)) {
+        throw new ForbiddenError('This league only bets its bound ESPN matchups');
+      }
+    }
+  }
+
   const snapshot = await repo.getLatestSnapshot(req.eventId, req.market);
   if (!snapshot) {
     throw new NotFoundError('No line available for this market');
@@ -365,6 +380,24 @@ export interface CreateLeagueRequest {
   winCondition: LeagueWinCondition;
   thresholdCents?: number;
   endsAt?: string;
+  espnGame?: string;
+  espnLeagueId?: string;
+  espnSeason?: string;
+}
+
+/** The ESPN binding from a create request — all three or nothing, else a 400. */
+function espnBindingFromRequest(req: CreateLeagueRequest): EspnBinding | null {
+  const parts = [req.espnGame, req.espnLeagueId, req.espnSeason];
+  const set = parts.filter(Boolean).length;
+  if (set === 0) return null;
+  if (set !== 3) {
+    throw new ValidationError('An ESPN binding needs game, league id and season together');
+  }
+  return {
+    game: req.espnGame as string,
+    leagueId: req.espnLeagueId as string,
+    season: req.espnSeason as string,
+  };
 }
 
 /**
@@ -389,6 +422,7 @@ export async function createLeague(
     },
     now,
   );
+  const espn = espnBindingFromRequest(req);
 
   const league = await repo.createLeague({
     commissionerSub,
@@ -400,6 +434,9 @@ export async function createLeague(
     winCondition: req.winCondition,
     thresholdCents,
     endsAt,
+    espnGame: espn?.game ?? null,
+    espnLeagueId: espn?.leagueId ?? null,
+    espnSeason: espn?.season ?? null,
     walletLockEnd: leagueWalletLockEnd(req.winCondition, endsAt),
     now,
   });

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
+  espnBindingOf,
+  isEventInEspnLeague,
   isJoinable,
   LEAGUE_NO_DEADLINE,
   leagueWalletLockEnd,
@@ -53,6 +55,25 @@ describe('league rules', () => {
     expect(() => validateLeagueRules({ ...base, startingBankrollCents: 50 }, now)).toThrow();
     expect(() => validateLeagueRules({ ...base, maxMembers: 1 }, now)).toThrow();
     expect(() => validateLeagueRules({ ...base, maxMembers: 1000 }, now)).toThrow();
+  });
+
+  test('espnBindingOf returns a binding only when all three columns are set', () => {
+    expect(espnBindingOf({ espnGame: 'ffl', espnLeagueId: '8', espnSeason: '2026' })).toEqual({
+      game: 'ffl',
+      leagueId: '8',
+      season: '2026',
+    });
+    expect(espnBindingOf({ espnGame: 'ffl', espnLeagueId: null, espnSeason: '2026' })).toBeNull();
+    expect(espnBindingOf({ espnGame: null, espnLeagueId: null, espnSeason: null })).toBeNull();
+  });
+
+  test('isEventInEspnLeague matches by game, season and league in the provider key', () => {
+    const binding = { game: 'ffl', leagueId: '836777691', season: '2026' };
+    expect(isEventInEspnLeague('espn:ffl:2026:836777691:1:5-4', binding)).toBe(true);
+    expect(isEventInEspnLeague('espn:ffl:2026:999999:1:5-4', binding)).toBe(false); // wrong league
+    expect(isEventInEspnLeague('espn:fba:2026:836777691:1:5-4', binding)).toBe(false); // wrong game
+    expect(isEventInEspnLeague('espn:ffl:2025:836777691:1:5-4', binding)).toBe(false); // wrong season
+    expect(isEventInEspnLeague('baseball_mlb:evt-1', binding)).toBe(false); // not ESPN at all
   });
 
   test('rankStandings orders by balance, breaks ties on ROI, and numbers 1-based', () => {
