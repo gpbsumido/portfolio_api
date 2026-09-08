@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-08 - version 5.11.0
+
+- **Bet on ESPN fantasy matchups.** A new ESPN fantasy provider ingests a league's current-week head-to-head matchups as bettable events — team A vs team B, an `h2h` market on `sport='fantasy_ffl'` (or whatever game code) — through the same odds→snapshot→settle machinery the real-sports board uses. Configure it with `ESPN_FANTASY_LEAGUES` (comma-separated `game:leagueId:season` keys) and run the `zeroproof-espn-sync` / `zeroproof-espn-settle` crons; private leagues authenticate with `ESPN_SWID` + `ESPN_S2` cookies, public ones need none. Settlement grades by each matchup's actual weekly score (a tie settles as a push), matched to the events by a stable `espn:...` provider key.
+- **A matchup is a pick'em for now.** ESPN publishes no betting line — only projected and actual scores — so v1 prices every side at -110; a projected-score moneyline is the next step. It also gives no kickoff timestamp, so the commence time is synthesised and betting stays open until the matchup settles. The whole ESPN client and its normalization are pure and unit-tested against a captured league fixture (team-name resolution, current-week selection, results mapping, cookie auth). No schema change — matchups reuse the existing events/snapshots tables. Binding a ZeroProof league to one ESPN league (so its members only bet that league's games) is the follow-up.
+
 ## 2026-09-08 - version 5.10.0
 
 - **Leagues crown a winner now.** A `zeroproof-league-settle` cron closes every league that's finished: a `threshold` league once a member's bankroll reaches the target, a `timeline` league once its deadline passes. It stamps the winner (the leader — highest balance, ROI breaking ties), freezes each member's final balance and rank, and archives the league wallets so betting stops. Idempotent — only open leagues are scanned and the close is guarded, so a re-run settles nothing twice.
