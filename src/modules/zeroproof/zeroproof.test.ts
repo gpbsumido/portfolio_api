@@ -128,7 +128,7 @@ describe('placing a bet', () => {
     expect(res.body.availableCents).toBe(1000);
   });
 
-  test('refuses a stale line older than 60 minutes', async () => {
+  test('refuses a line past the freshness window', async () => {
     vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
     vi.mocked(repo.getLatestSnapshot).mockResolvedValue(
       freshSnapshot({ fetchedAt: new Date('2020-01-01T00:00:00Z') }) as never,
@@ -138,6 +138,38 @@ describe('placing a bet', () => {
 
     expect(res.status).toBe(409);
     expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test('accepts a line a few hours old under the default freshness window', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(
+      freshSnapshot({ fetchedAt: new Date(Date.now() - 3 * 60 * 60 * 1000) }) as never,
+    );
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(201);
+    expect(repo.placeBet).toHaveBeenCalled();
+  });
+
+  test('honours a configured freshness window (ZEROPROOF_MAX_ODDS_AGE_MINUTES)', async () => {
+    const prev = process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES;
+    process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES = '30';
+    try {
+      vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+      vi.mocked(repo.getLatestSnapshot).mockResolvedValue(
+        freshSnapshot({ fetchedAt: new Date(Date.now() - 45 * 60 * 1000) }) as never,
+      );
+
+      const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+      expect(res.status).toBe(409);
+      expect(repo.placeBet).not.toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES;
+      else process.env.ZEROPROOF_MAX_ODDS_AGE_MINUTES = prev;
+    }
   });
 
   test('refuses to bet once the wallet is past its lock end', async () => {
