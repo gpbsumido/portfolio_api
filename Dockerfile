@@ -4,8 +4,12 @@ FROM node:22-bullseye
 # Enable corepack for pnpm
 RUN corepack enable
 
-# Install Python and required system dependencies
-RUN apt-get update && \
+# Install Python and required system dependencies.
+# Check-Valid-Until=false because bullseye's security-suite Release metadata
+# expires once the release is old, and apt then refuses the (still-served)
+# index. The packages themselves are current; we only need apt to stop treating
+# the stale timestamp as fatal.
+RUN apt-get -o Acquire::Check-Valid-Until=false update && \
     apt-get install -y \
     python3 \
     python3-pip \
