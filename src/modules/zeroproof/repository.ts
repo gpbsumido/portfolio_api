@@ -295,6 +295,16 @@ export async function getEventByProviderKey(providerKey: string): Promise<Zeropr
   return rows[0];
 }
 
+/** An event's provider key by our id — the league-binding gate needs it at placement. */
+export async function getEventById(eventId: string): Promise<{ providerKey: string } | undefined> {
+  const rows = await db
+    .select({ providerKey: zeroproofEvents.providerKey })
+    .from(zeroproofEvents)
+    .where(eq(zeroproofEvents.id, eventId))
+    .limit(1);
+  return rows[0];
+}
+
 /** The still-open bets on an event — what the settler grades. */
 export async function getOpenBetsForEvent(eventId: string): Promise<ZeroproofBet[]> {
   return db
@@ -653,6 +663,9 @@ interface CreateLeagueInput {
   winCondition: string;
   thresholdCents: number | null;
   endsAt: Date | null;
+  espnGame: string | null;
+  espnLeagueId: string | null;
+  espnSeason: string | null;
   walletLockEnd: Date;
   now: Date;
 }
@@ -672,6 +685,9 @@ export async function createLeague(input: CreateLeagueInput): Promise<ZeroproofL
         winCondition: input.winCondition,
         thresholdCents: input.thresholdCents,
         endsAt: input.endsAt,
+        espnGame: input.espnGame,
+        espnLeagueId: input.espnLeagueId,
+        espnSeason: input.espnSeason,
       })
       .returning();
 

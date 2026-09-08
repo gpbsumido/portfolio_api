@@ -4,6 +4,11 @@
 
 - **Add ESPN fantasy leagues without a redeploy.** The ESPN sync/settle crons read their league list from a new `zeroproof_espn_leagues` table (migration 040) unioned with the `ESPN_FANTASY_LEAGUES` env fallback, so a league can be registered as data instead of a config change. Admin-only endpoints manage it: `GET /api/zeroproof/espn-leagues`, `POST` (register — idempotent on game/league/season, optional label), and `DELETE /api/zeroproof/espn-leagues/:id`. Existing env config keeps working; the registry just adds to it. Endpoints and the union resolver are covered by tests (list/add/validation/remove, and dedup of a league that's in both the table and the env).
 
+## 2026-09-08 - version 5.12.0
+
+- **Bind a ZeroProof league to one ESPN league.** A league can now be created with an ESPN binding — `espnGame` + `espnLeagueId` + `espnSeason` (all three or none) on `POST /api/zeroproof/leagues`. When bound, its members may only bet that ESPN league's matchups: a bet from a bound league's wallet is checked at placement against the event's provider key, and anything that isn't that league's game/season/league is refused with a 403. Unbound leagues and season/challenge wallets bet exactly as before — the gate only fires for a bound `mode='league'` wallet. The binding is returned on the league DTO so the front end can show it and scope the board. Migration 039 adds the three nullable columns; the match logic is pure and unit-tested (right league passes, wrong game/season/league and non-ESPN events are refused), and the placement gate is covered end to end.
+>>>>>>> origin/develop
+
 ## 2026-09-08 - version 5.11.0
 
 - **Bet on ESPN fantasy matchups.** A new ESPN fantasy provider ingests a league's current-week head-to-head matchups as bettable events — team A vs team B, an `h2h` market on `sport='fantasy_ffl'` (or whatever game code) — through the same odds→snapshot→settle machinery the real-sports board uses. Configure it with `ESPN_FANTASY_LEAGUES` (comma-separated `game:leagueId:season` keys) and run the `zeroproof-espn-sync` / `zeroproof-espn-settle` crons; private leagues authenticate with `ESPN_SWID` + `ESPN_S2` cookies, public ones need none. Settlement grades by each matchup's actual weekly score (a tie settles as a push), matched to the events by a stable `espn:...` provider key.
