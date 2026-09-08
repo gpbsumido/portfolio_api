@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-08 - version 5.8.3
+
+- **Moved the Docker base off bullseye to fix the build for real.** Accepting bullseye's expired apt metadata (5.8.2) got past `apt-get update`, but the install then 404'd: the forced-stale security index points at package versions that have been rotated out of the pool, so `python3-pkg-resources` no longer existed at the URL apt asked for. Bullseye is simply too old to build against now. The image is on `node:22-bookworm`, whose indexes and pool are in step. Bookworm marks its system Python externally-managed (PEP 668), so the F1-scripts `pip3 install` now passes `--break-system-packages` — installing into system site-packages is exactly the intent in a single-purpose image. Requirements (fastf1 3.5.3, pandas, numpy, matplotlib) all run on bookworm's Python 3.11.
+
+## 2026-09-08 - version 5.8.2
+
+- **The Docker build stopped failing on expired apt metadata.** The image builds on `node:22-bullseye`, and bullseye is now old enough that its security-suite `Release` file reads as expired; apt treats that stale timestamp as fatal and the deploy died at `apt-get update` before installing Python or `postgresql-client`. The packages are still served and current, so the fix is to pass `Acquire::Check-Valid-Until=false` and let apt ignore the expiry. Staying on bullseye on purpose — bookworm would trip PEP 668 on the `pip3 install` step and just move the failure. Couldn't run the Railway build locally, so this targets the exact error line rather than a verified green build.
+
+## 2026-09-07 - version 5.8.1
+
+- **Bets stopped 409ing on a stale line.** The freshness gate refused any snapshot older than 60 minutes, but the odds-sync cron only refreshes every few hours to stay inside the vendor's credit budget — so for most of every gap the newest line I hold was already "stale" and every bet came back `This line is stale — refresh before betting`, with nothing the front end could do to fix it. The window now defaults to 12 hours, wide enough to clear the sync cadence, and is tunable per deployment with `ZEROPROOF_MAX_ODDS_AGE_MINUTES` (a missing, empty, or non-positive value falls back to the default rather than gating everything). Dollars are simulated, so a somewhat older line costs nothing real — an un-bettable board does. The gate logic is pure and unit-tested, and the placement endpoint is covered end to end: a three-hour-old line places, a configured 30-minute window rejects a 45-minute-old one.
+
 ## 2026-09-03 - version 5.8.0
 
 - **The profile can show your bet history now.** New authed `GET /api/zeroproof/bets` returns the caller's bets, newest first, as full DTOs — the selection and the odds locked at placement, the stake, the status, and the closing-line value the settler stamped on each graded bet. The rows already existed (the settler writes closing odds and CLV at settlement); this exposes them so the front end can render each decision next to how the market moved on it, which is the whole point of a no-loss book where the record is what you keep. Scoped to the caller's own wallets, ordered by placement, and returned through the same `toBetDto` the place-bet response uses. Tested with supertest against a mocked repository.

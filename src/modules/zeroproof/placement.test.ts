@@ -1,5 +1,12 @@
 import { describe, test, expect } from 'vitest';
-import { canAfford, isBettable, isStale, selectLine } from './placement.js';
+import {
+  canAfford,
+  DEFAULT_MAX_ODDS_AGE_MS,
+  isBettable,
+  isStale,
+  maxOddsAgeMsFromMinutes,
+  selectLine,
+} from './placement.js';
 
 describe('bet placement rules', () => {
   test('selectLine copies the price and handicap for the chosen outcome', () => {
@@ -20,10 +27,26 @@ describe('bet placement rules', () => {
     expect(() => selectLine([{ name: 'Draw', priceAmerican: 230 }], 'Arsenal')).toThrow();
   });
 
-  test('isStale gates on the 60-minute snapshot age', () => {
+  test('isStale gates on the freshness window, wide enough for the sync cadence by default', () => {
     const now = new Date('2026-09-02T20:00:00Z');
-    expect(isStale(new Date('2026-09-02T19:30:00Z'), now)).toBe(false); // 30 min
-    expect(isStale(new Date('2026-09-02T18:30:00Z'), now)).toBe(true); // 90 min
+    // The default window comfortably clears a few-hour sync gap, so a line a
+    // few hours old is still bettable.
+    expect(isStale(new Date('2026-09-02T17:00:00Z'), now)).toBe(false); // 3 h
+    expect(isStale(new Date('2026-09-02T06:00:00Z'), now)).toBe(true); // 14 h
+    // An explicit window overrides the default.
+    const hour = 60 * 60 * 1000;
+    expect(isStale(new Date('2026-09-02T19:30:00Z'), now, hour)).toBe(false); // 30 min
+    expect(isStale(new Date('2026-09-02T18:30:00Z'), now, hour)).toBe(true); // 90 min
+  });
+
+  test('maxOddsAgeMsFromMinutes reads a minutes budget, falling back to the default when unset or junk', () => {
+    expect(maxOddsAgeMsFromMinutes('30')).toBe(30 * 60 * 1000);
+    expect(maxOddsAgeMsFromMinutes('720')).toBe(DEFAULT_MAX_ODDS_AGE_MS);
+    expect(maxOddsAgeMsFromMinutes(undefined)).toBe(DEFAULT_MAX_ODDS_AGE_MS);
+    expect(maxOddsAgeMsFromMinutes('')).toBe(DEFAULT_MAX_ODDS_AGE_MS);
+    expect(maxOddsAgeMsFromMinutes('not-a-number')).toBe(DEFAULT_MAX_ODDS_AGE_MS);
+    expect(maxOddsAgeMsFromMinutes('0')).toBe(DEFAULT_MAX_ODDS_AGE_MS); // non-positive is misconfig, ignore it
+    expect(maxOddsAgeMsFromMinutes('-5')).toBe(DEFAULT_MAX_ODDS_AGE_MS);
   });
 
   test('isBettable is false once a wallet is busted or past its lock end', () => {

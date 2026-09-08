@@ -1,10 +1,13 @@
-# Base image with Node + Python
-FROM node:22-bullseye
+# Base image with Node + Python.
+# Bookworm, not bullseye: bullseye's apt metadata now reads as expired, and
+# forcing past that lands on rotated pool files that 404 mid-install. Bookworm is
+# current stable, so its indexes and pool stay in step and the build is stable.
+FROM node:22-bookworm
 
 # Enable corepack for pnpm
 RUN corepack enable
 
-# Install Python and required system dependencies
+# Install Python and required system dependencies.
 RUN apt-get update && \
     apt-get install -y \
     python3 \
@@ -22,9 +25,13 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Copy Python requirements & install them
+# Copy Python requirements & install them.
+# --break-system-packages: bookworm marks its system Python externally-managed
+# (PEP 668), so a plain pip3 install is refused. This image's Python exists only
+# to run the F1 data scripts, so installing into the system site-packages is what
+# we want — there is no other environment to protect.
 COPY requirements.txt ./
-RUN pip3 install -r requirements.txt
+RUN pip3 install --break-system-packages -r requirements.txt
 
 # Create cache directory for FastF1
 RUN mkdir -p cache/fastf1
