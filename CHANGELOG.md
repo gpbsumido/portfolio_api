@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-08 - version 5.14.0
+
+- **ESPN fantasy matchups get a real line, not a pick'em.** The provider now reads ESPN's `mMatchupScore` view, which carries a per-side win probability, and prices each side as fair American odds off it (no vig) — a real favourite and underdog instead of flat -110. A matchup ESPN hasn't priced yet still falls back to the pick'em. Verified against the live public league: 0.54/0.46 → -117/+117, and so on. The conversion is pure and unit-tested (favourite negative, underdog positive, even money -100, missing/out-of-range falls back, extremes clamped so a lopsided week can't post an absurd line). Results still settle on the weekly score exactly as before.
+
 ## 2026-09-08 - version 5.11.0
 
 - **Bet on ESPN fantasy matchups.** A new ESPN fantasy provider ingests a league's current-week head-to-head matchups as bettable events — team A vs team B, an `h2h` market on `sport='fantasy_ffl'` (or whatever game code) — through the same odds→snapshot→settle machinery the real-sports board uses. Configure it with `ESPN_FANTASY_LEAGUES` (comma-separated `game:leagueId:season` keys) and run the `zeroproof-espn-sync` / `zeroproof-espn-settle` crons; private leagues authenticate with `ESPN_SWID` + `ESPN_S2` cookies, public ones need none. Settlement grades by each matchup's actual weekly score (a tie settles as a push), matched to the events by a stable `espn:...` provider key.
