@@ -28,3 +28,33 @@ export const placeBetSchema = z.object({
 });
 
 export type PlaceBetInput = z.infer<typeof placeBetSchema>;
+
+/** How a league ends: first to a target, or highest balance at a deadline. */
+export const winConditionSchema = z.enum(['threshold', 'timeline']);
+
+/** Who can find and join a league. */
+export const visibilitySchema = z.enum(['public', 'invite']);
+
+/**
+ * POST /api/zeroproof/leagues. Cross-field rules (target above the bankroll, a
+ * future deadline, member bounds) are enforced in the service via
+ * `validateLeagueRules`, where every field is known. `endsAt` is an ISO string.
+ */
+export const createLeagueSchema = z.object({
+  name: z.string().min(1).max(80),
+  visibility: visibilitySchema,
+  startingBankrollCents: z.number().int().positive(),
+  maxMembers: z.number().int().positive(),
+  winCondition: winConditionSchema,
+  thresholdCents: z.number().int().positive().optional(),
+  endsAt: z.string().datetime().optional(),
+});
+
+export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
+
+/** POST /api/zeroproof/leagues/:id/join. A code is required only for invite leagues. */
+export const joinLeagueSchema = z.object({
+  joinCode: z.string().min(1).max(40).optional(),
+});
+
+export type JoinLeagueInput = z.infer<typeof joinLeagueSchema>;

@@ -5,9 +5,19 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
 import type { ZeroproofBet } from '../../config/drizzle/schema.js';
-import type { OpenWalletInput, PlaceBetInput } from './schemas.js';
+import type { CreateLeagueInput, JoinLeagueInput, OpenWalletInput, PlaceBetInput } from './schemas.js';
 import * as service from './service.js';
-import type { BetDto, EventDto, EventWithLines, WalletDto, WalletWithBalance } from './types.js';
+import type {
+  BetDto,
+  EventDto,
+  EventWithLines,
+  LeagueDto,
+  LeagueListItem,
+  LeagueStanding,
+  LeagueStandingDto,
+  WalletDto,
+  WalletWithBalance,
+} from './types.js';
 
 /** Postgres decimals come back as strings; parse to number (or keep null). */
 function toNumber(value: string | null): number | null {
@@ -37,6 +47,51 @@ function requireSub(req: Request): string {
   const sub = (req.auth?.payload as { sub?: string } | undefined)?.sub;
   if (!sub) throw new UnauthorizedError('Not signed in');
   return sub;
+}
+
+/** The caller's subject if the (optional) token carried one, else null. */
+function optionalSub(req: Request): string | null {
+  return (req.auth?.payload as { sub?: string } | undefined)?.sub ?? null;
+}
+
+/** A route param, narrowed to the single value Express may hand back as an array. */
+function param(val: string | string[]): string {
+  return Array.isArray(val) ? val[0] : val;
+}
+
+/** The join code is shared only with people already inside the league. */
+function toLeagueDto(item: LeagueListItem, includeCode: boolean): LeagueDto {
+  const l = item.league;
+  return {
+    id: l.id,
+    commissionerSub: l.commissionerSub,
+    name: l.name,
+    joinCode: includeCode ? l.joinCode : null,
+    visibility: l.visibility,
+    startingBankrollCents: l.startingBankrollCents,
+    maxMembers: l.maxMembers,
+    winCondition: l.winCondition,
+    thresholdCents: l.thresholdCents,
+    endsAt: l.endsAt ? l.endsAt.toISOString() : null,
+    status: l.status,
+    winnerSub: l.winnerSub,
+    createdAt: l.createdAt.toISOString(),
+    settledAt: l.settledAt ? l.settledAt.toISOString() : null,
+    memberCount: item.memberCount,
+  };
+}
+
+function toStandingDto(s: LeagueStanding): LeagueStandingDto {
+  return {
+    userSub: s.userSub,
+    balanceCents: s.balanceCents,
+    wins: s.wins,
+    losses: s.losses,
+    pushes: s.pushes,
+    betCount: s.betCount,
+    roiPct: s.roiPct,
+    rank: s.rank,
+  };
 }
 
 function toWalletDto(w: WalletWithBalance): WalletDto {
@@ -166,6 +221,68 @@ export class ZeroproofController {
     try {
       const bets = await service.getBets(requireSub(req));
       res.json({ bets: bets.map(toBetDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/leagues — create a league (commissioner). */
+  async createLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await service.createLeague(requireSub(req), req.body as CreateLeagueInput);
+      res.status(201).json({ league: toLeagueDto(item, true) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/leagues — discover public leagues (?q=) or resolve one (?code=). */
+  async listLeagues(req: Request, res: Response, next: NextFunction) {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const code = typeof req.query.code === 'string' ? req.query.code : undefined;
+      const items = await service.listLeagues({ q, code });
+      res.json({ leagues: items.map((i) => toLeagueDto(i, false)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/leagues/mine — the caller's leagues. */
+  async myLeagues(req: Request, res: Response, next: NextFunction) {
+    try {
+      const items = await service.getMyLeagues(requireSub(req));
+      res.json({ leagues: items.map((i) => toLeagueDto(i, true)) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/leagues/:id — a league's rules, board, and the caller's place. */
+  async leagueDetail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const detail = await service.getLeagueDetail(param(req.params.id), optionalSub(req));
+      res.json({
+        league: toLeagueDto(
+          { league: detail.league, memberCount: detail.memberCount },
+          detail.isMember || detail.isCommissioner,
+        ),
+        standings: detail.standings.map(toStandingDto),
+        callerWalletId: detail.callerWalletId,
+        isMember: detail.isMember,
+        isCommissioner: detail.isCommissioner,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/leagues/:id/join — join a league. */
+  async joinLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { joinCode } = req.body as JoinLeagueInput;
+      const result = await service.joinLeague(requireSub(req), param(req.params.id), joinCode);
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }
