@@ -102,3 +102,33 @@ export function rankStandings(entries: readonly StandingInput[]): Standing[] {
     .sort((a, b) => b.balanceCents - a.balanceCents || b.roiPct - a.roiPct)
     .map((entry, i) => ({ ...entry, rank: i + 1 }));
 }
+
+export interface EspnBinding {
+  game: string;
+  leagueId: string;
+  season: string;
+}
+
+/**
+ * A league's ESPN binding, or null when it isn't bound. The three columns are
+ * all-or-nothing; a partial binding is treated as unbound.
+ */
+export function espnBindingOf(league: {
+  espnGame: string | null;
+  espnLeagueId: string | null;
+  espnSeason: string | null;
+}): EspnBinding | null {
+  if (league.espnGame && league.espnLeagueId && league.espnSeason) {
+    return { game: league.espnGame, leagueId: league.espnLeagueId, season: league.espnSeason };
+  }
+  return null;
+}
+
+/**
+ * Whether an event belongs to the bound ESPN league — its matchup provider key
+ * names that game, season and league. This is the gate a bound league's bets
+ * pass through: anything else is off-limits.
+ */
+export function isEventInEspnLeague(eventProviderKey: string, binding: EspnBinding): boolean {
+  return eventProviderKey.startsWith(`espn:${binding.game}:${binding.season}:${binding.leagueId}:`);
+}
