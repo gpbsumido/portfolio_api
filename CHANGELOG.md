@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-08 - version 5.8.2
+
+- **The Docker build stopped failing on expired apt metadata.** The image builds on `node:22-bullseye`, and bullseye is now old enough that its security-suite `Release` file reads as expired; apt treats that stale timestamp as fatal and the deploy died at `apt-get update` before installing Python or `postgresql-client`. The packages are still served and current, so the fix is to pass `Acquire::Check-Valid-Until=false` and let apt ignore the expiry. Staying on bullseye on purpose — bookworm would trip PEP 668 on the `pip3 install` step and just move the failure. Couldn't run the Railway build locally, so this targets the exact error line rather than a verified green build.
+
 ## 2026-09-07 - version 5.8.1
 
 - **Bets stopped 409ing on a stale line.** The freshness gate refused any snapshot older than 60 minutes, but the odds-sync cron only refreshes every few hours to stay inside the vendor's credit budget — so for most of every gap the newest line I hold was already "stale" and every bet came back `This line is stale — refresh before betting`, with nothing the front end could do to fix it. The window now defaults to 12 hours, wide enough to clear the sync cadence, and is tunable per deployment with `ZEROPROOF_MAX_ODDS_AGE_MINUTES` (a missing, empty, or non-positive value falls back to the default rather than gating everything). Dollars are simulated, so a somewhat older line costs nothing real — an un-bettable board does. The gate logic is pure and unit-tested, and the placement endpoint is covered end to end: a three-hour-old line places, a configured 30-minute window rejects a 45-minute-old one.
