@@ -7,7 +7,7 @@ import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
 import { validateBody } from '../../middleware/validate.js';
 import { requireAdmin } from '../../shared/auth/adminEmail.js';
 import { ZeroproofController } from './controller.js';
-import { openWalletSchema, placeBetSchema } from './schemas.js';
+import { createLeagueSchema, joinLeagueSchema, openWalletSchema, placeBetSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new ZeroproofController();
@@ -42,6 +42,27 @@ router.post('/wallets', checkJwt, validateBody(openWalletSchema), (req, res, nex
 // POST /api/zeroproof/bets — place a bet
 router.post('/bets', checkJwt, validateBody(placeBetSchema), (req, res, next) =>
   ctrl.placeBet(req, res, next),
+);
+
+// GET /api/zeroproof/leagues — discover public leagues, or resolve one by ?code=
+// (public: the discovery list renders for signed-out visitors too)
+router.get('/leagues', optionalCheckJwt, (req, res, next) => ctrl.listLeagues(req, res, next));
+
+// GET /api/zeroproof/leagues/mine — the caller's leagues (before :id so it isn't
+// captured as a league id)
+router.get('/leagues/mine', checkJwt, (req, res, next) => ctrl.myLeagues(req, res, next));
+
+// GET /api/zeroproof/leagues/:id — a league's rules, board, and the caller's place
+router.get('/leagues/:id', optionalCheckJwt, (req, res, next) => ctrl.leagueDetail(req, res, next));
+
+// POST /api/zeroproof/leagues — create a league
+router.post('/leagues', checkJwt, validateBody(createLeagueSchema), (req, res, next) =>
+  ctrl.createLeague(req, res, next),
+);
+
+// POST /api/zeroproof/leagues/:id/join — join a league
+router.post('/leagues/:id/join', checkJwt, validateBody(joinLeagueSchema), (req, res, next) =>
+  ctrl.joinLeague(req, res, next),
 );
 
 export default router;

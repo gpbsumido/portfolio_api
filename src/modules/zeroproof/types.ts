@@ -2,10 +2,10 @@
 // ZeroProof wallets — types and DTOs
 // ---------------------------------------------------------------------------
 
-import type { ZeroproofWallet } from '../../config/drizzle/schema.js';
+import type { ZeroproofLeague, ZeroproofWallet } from '../../config/drizzle/schema.js';
 import type { ProfileStats } from './stats.js';
 
-export type WalletMode = 'season' | 'challenge';
+export type WalletMode = 'season' | 'challenge' | 'league';
 export type WalletStatus = 'active' | 'busted' | 'refunded';
 
 /** A wallet row plus its derived bettable balance. */
@@ -82,6 +82,65 @@ export interface BetDto {
   status: string;
   placedAt: string;
   settledAt: string | null;
+}
+
+/** A member's place on a league board, ranked by bankroll. */
+export interface LeagueStanding {
+  userSub: string;
+  balanceCents: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  betCount: number;
+  roiPct: number;
+  rank: number;
+}
+
+/** A league row plus its current member count — the shape lists and detail share. */
+export interface LeagueListItem {
+  league: ZeroproofLeague;
+  memberCount: number;
+}
+
+/** A league in full: rules, standings, and the caller's relationship to it. */
+export interface LeagueDetail {
+  league: ZeroproofLeague;
+  memberCount: number;
+  standings: LeagueStanding[];
+  /** The caller's league wallet id, for the betslip — null if they haven't joined. */
+  callerWalletId: string | null;
+  isMember: boolean;
+  isCommissioner: boolean;
+}
+
+export interface LeagueStandingDto {
+  userSub: string;
+  balanceCents: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  betCount: number;
+  roiPct: number;
+  rank: number;
+}
+
+export interface LeagueDto {
+  id: string;
+  commissionerSub: string;
+  name: string;
+  /** Present only when the caller may share it (a member or the commissioner). */
+  joinCode: string | null;
+  visibility: string;
+  startingBankrollCents: number;
+  maxMembers: number;
+  winCondition: string;
+  thresholdCents: number | null;
+  endsAt: string | null;
+  status: string;
+  winnerSub: string | null;
+  createdAt: string;
+  settledAt: string | null;
+  memberCount: number;
 }
 
 export interface WalletDto {

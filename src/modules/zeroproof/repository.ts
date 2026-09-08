@@ -2,15 +2,18 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type ZeroproofBet,
   type ZeroproofEvent,
+  type ZeroproofLeague,
   type ZeroproofWallet,
   zeroproofAccoladeAwards,
   zeroproofBets,
   zeroproofEvents,
+  zeroproofLeagueMembers,
+  zeroproofLeagues,
   zeroproofLedgerEntries,
   zeroproofOddsSnapshots,
   zeroproofReferralClicks,
@@ -28,7 +31,7 @@ import {
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
 import type { Grade } from './settlement.js';
-import type { EventWithLines, WalletMode, WalletWithBalance } from './types.js';
+import type { EventWithLines, LeagueListItem, WalletMode, WalletWithBalance } from './types.js';
 
 interface OpenWalletInput {
   userSub: string;
@@ -398,7 +401,14 @@ export async function getMaturedWallets(
       status: zeroproofWallets.status,
     })
     .from(zeroproofWallets)
-    .where(and(lte(zeroproofWallets.lockEnd, now), inArray(zeroproofWallets.status, ['active', 'busted'])));
+    .where(
+      and(
+        lte(zeroproofWallets.lockEnd, now),
+        inArray(zeroproofWallets.status, ['active', 'busted']),
+        // League wallets are simulated and never refund a principal.
+        inArray(zeroproofWallets.mode, ['season', 'challenge']),
+      ),
+    );
 }
 
 /** Refund the principal and close the wallet — the ledger pair and the status flip share one transaction. */
@@ -463,7 +473,14 @@ export async function getSettledBetsForUser(userSub: string): Promise<SettledBet
     })
     .from(zeroproofBets)
     .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
-    .where(and(eq(zeroproofWallets.userSub, userSub), inArray(zeroproofBets.status, SETTLED_STATUSES)));
+    .where(
+      and(
+        eq(zeroproofWallets.userSub, userSub),
+        inArray(zeroproofBets.status, SETTLED_STATUSES),
+        // The global record is season/challenge play; league bets stay in-league.
+        inArray(zeroproofWallets.mode, ['season', 'challenge']),
+      ),
+    );
 }
 
 /** Every user's settled bets, grouped — the leaderboard scans this. */
@@ -479,7 +496,13 @@ export async function getSettledBetsByUser(): Promise<{ userSub: string; bets: S
     })
     .from(zeroproofBets)
     .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
-    .where(inArray(zeroproofBets.status, SETTLED_STATUSES));
+    .where(
+      and(
+        inArray(zeroproofBets.status, SETTLED_STATUSES),
+        // The global leaderboard ranks season/challenge play, not league contests.
+        inArray(zeroproofWallets.mode, ['season', 'challenge']),
+      ),
+    );
 
   const byUser = new Map<string, SettledBetRow[]>();
   for (const { userSub, ...bet } of rows) {
@@ -565,4 +588,318 @@ export async function houseSummary(): Promise<HouseSummary> {
     yieldCents: Number(yieldRow.total),
     referralClicks: Number(clicks.count),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Leagues
+// ---------------------------------------------------------------------------
+
+/** The transaction handle drizzle hands to a `db.transaction` callback. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+interface MemberWalletInput {
+  leagueId: string;
+  userSub: string;
+  startingBankrollCents: number;
+  walletLockEnd: Date;
+  now: Date;
+}
+
+/**
+ * Create a member's league wallet in an open transaction: the wallet row (a
+ * simulated deposit, no locked principal), its opening deposit ledger pair, and
+ * the membership row that ties them together. Returns the new wallet id.
+ */
+async function createMemberWallet(tx: Tx, input: MemberWalletInput): Promise<string> {
+  const [wallet] = await tx
+    .insert(zeroproofWallets)
+    .values({
+      userSub: input.userSub,
+      mode: 'league',
+      leagueId: input.leagueId,
+      principalCents: input.startingBankrollCents,
+      lockStart: input.now,
+      lockEnd: input.walletLockEnd,
+    })
+    .returning();
+
+  await tx.insert(zeroproofLedgerEntries).values(
+    depositLines(input.startingBankrollCents).map((line) => ({
+      walletId: wallet.id,
+      kind: line.kind,
+      account: line.account,
+      amountCents: line.amountCents,
+    })),
+  );
+
+  await tx.insert(zeroproofLeagueMembers).values({
+    leagueId: input.leagueId,
+    userSub: input.userSub,
+    walletId: wallet.id,
+  });
+
+  return wallet.id;
+}
+
+interface CreateLeagueInput {
+  commissionerSub: string;
+  name: string;
+  joinCode: string;
+  visibility: string;
+  startingBankrollCents: number;
+  maxMembers: number;
+  winCondition: string;
+  thresholdCents: number | null;
+  endsAt: Date | null;
+  walletLockEnd: Date;
+  now: Date;
+}
+
+/** Create a league and auto-join the commissioner (their league wallet) in one transaction. */
+export async function createLeague(input: CreateLeagueInput): Promise<ZeroproofLeague> {
+  return db.transaction(async (tx) => {
+    const [league] = await tx
+      .insert(zeroproofLeagues)
+      .values({
+        commissionerSub: input.commissionerSub,
+        name: input.name,
+        joinCode: input.joinCode,
+        visibility: input.visibility,
+        startingBankrollCents: input.startingBankrollCents,
+        maxMembers: input.maxMembers,
+        winCondition: input.winCondition,
+        thresholdCents: input.thresholdCents,
+        endsAt: input.endsAt,
+      })
+      .returning();
+
+    await createMemberWallet(tx, {
+      leagueId: league.id,
+      userSub: input.commissionerSub,
+      startingBankrollCents: input.startingBankrollCents,
+      walletLockEnd: input.walletLockEnd,
+      now: input.now,
+    });
+
+    return league;
+  });
+}
+
+interface JoinLeagueInput {
+  leagueId: string;
+  userSub: string;
+  startingBankrollCents: number;
+  walletLockEnd: Date;
+  now: Date;
+}
+
+/**
+ * Join a league, idempotently: a caller already a member gets their existing
+ * wallet back and no second wallet is created. The `(league_id, user_sub)` unique
+ * index is the backstop against a concurrent double-join.
+ */
+export async function joinLeague(input: JoinLeagueInput): Promise<{ walletId: string; joined: boolean }> {
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ walletId: zeroproofLeagueMembers.walletId })
+      .from(zeroproofLeagueMembers)
+      .where(
+        and(
+          eq(zeroproofLeagueMembers.leagueId, input.leagueId),
+          eq(zeroproofLeagueMembers.userSub, input.userSub),
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) {
+      return { walletId: existing[0].walletId, joined: false };
+    }
+
+    const walletId = await createMemberWallet(tx, {
+      leagueId: input.leagueId,
+      userSub: input.userSub,
+      startingBankrollCents: input.startingBankrollCents,
+      walletLockEnd: input.walletLockEnd,
+      now: input.now,
+    });
+    return { walletId, joined: true };
+  });
+}
+
+/** A league by id, or undefined. */
+export async function getLeagueById(leagueId: string): Promise<ZeroproofLeague | undefined> {
+  const rows = await db.select().from(zeroproofLeagues).where(eq(zeroproofLeagues.id, leagueId)).limit(1);
+  return rows[0];
+}
+
+/** A league by its join code — how an invite-only league is found. */
+export async function getLeagueByJoinCode(joinCode: string): Promise<ZeroproofLeague | undefined> {
+  const rows = await db.select().from(zeroproofLeagues).where(eq(zeroproofLeagues.joinCode, joinCode)).limit(1);
+  return rows[0];
+}
+
+/** Member counts for a set of leagues, as a map. */
+async function memberCounts(leagueIds: string[]): Promise<Map<string, number>> {
+  if (leagueIds.length === 0) return new Map();
+  const rows = await db
+    .select({ leagueId: zeroproofLeagueMembers.leagueId, c: count() })
+    .from(zeroproofLeagueMembers)
+    .where(inArray(zeroproofLeagueMembers.leagueId, leagueIds))
+    .groupBy(zeroproofLeagueMembers.leagueId);
+  return new Map(rows.map((r) => [r.leagueId, Number(r.c)]));
+}
+
+/** How many members a single league has. */
+export async function countMembers(leagueId: string): Promise<number> {
+  const [row] = await db
+    .select({ c: count() })
+    .from(zeroproofLeagueMembers)
+    .where(eq(zeroproofLeagueMembers.leagueId, leagueId));
+  return Number(row.c);
+}
+
+/** The caller's membership in a league, or undefined. */
+export async function getMembership(
+  leagueId: string,
+  userSub: string,
+): Promise<{ walletId: string } | undefined> {
+  const rows = await db
+    .select({ walletId: zeroproofLeagueMembers.walletId })
+    .from(zeroproofLeagueMembers)
+    .where(and(eq(zeroproofLeagueMembers.leagueId, leagueId), eq(zeroproofLeagueMembers.userSub, userSub)))
+    .limit(1);
+  return rows[0];
+}
+
+/** Public, open leagues for discovery, newest first, optionally name-filtered. */
+export async function listPublicOpenLeagues(q?: string): Promise<LeagueListItem[]> {
+  const conditions = [eq(zeroproofLeagues.visibility, 'public'), eq(zeroproofLeagues.status, 'open')];
+  const trimmed = q?.trim();
+  if (trimmed) conditions.push(ilike(zeroproofLeagues.name, `%${trimmed}%`));
+
+  const leagues = await db
+    .select()
+    .from(zeroproofLeagues)
+    .where(and(...conditions))
+    .orderBy(desc(zeroproofLeagues.createdAt));
+  if (leagues.length === 0) return [];
+
+  const counts = await memberCounts(leagues.map((l) => l.id));
+  return leagues.map((league) => ({ league, memberCount: counts.get(league.id) ?? 0 }));
+}
+
+/** The leagues the caller belongs to, newest first, each with its member count. */
+export async function getMyLeagues(userSub: string): Promise<LeagueListItem[]> {
+  const memberRows = await db
+    .select({ leagueId: zeroproofLeagueMembers.leagueId })
+    .from(zeroproofLeagueMembers)
+    .where(eq(zeroproofLeagueMembers.userSub, userSub));
+  if (memberRows.length === 0) return [];
+
+  const leagueIds = memberRows.map((r) => r.leagueId);
+  const leagues = await db
+    .select()
+    .from(zeroproofLeagues)
+    .where(inArray(zeroproofLeagues.id, leagueIds))
+    .orderBy(desc(zeroproofLeagues.createdAt));
+  const counts = await memberCounts(leagueIds);
+  return leagues.map((league) => ({ league, memberCount: counts.get(league.id) ?? 0 }));
+}
+
+/** Per-member raw material for a league board: bankroll now, plus settled bets for stats. */
+export async function getLeagueStandingRows(
+  leagueId: string,
+): Promise<{ userSub: string; walletId: string; balanceCents: number; bets: SettledBetRow[] }[]> {
+  const members = await db
+    .select({ userSub: zeroproofLeagueMembers.userSub, walletId: zeroproofLeagueMembers.walletId })
+    .from(zeroproofLeagueMembers)
+    .where(eq(zeroproofLeagueMembers.leagueId, leagueId));
+  if (members.length === 0) return [];
+
+  const walletIds = members.map((m) => m.walletId);
+  const [entries, bets] = await Promise.all([
+    db
+      .select({
+        walletId: zeroproofLedgerEntries.walletId,
+        account: zeroproofLedgerEntries.account,
+        amountCents: zeroproofLedgerEntries.amountCents,
+      })
+      .from(zeroproofLedgerEntries)
+      .where(inArray(zeroproofLedgerEntries.walletId, walletIds)),
+    db
+      .select({
+        walletId: zeroproofBets.walletId,
+        status: zeroproofBets.status,
+        stakeCents: zeroproofBets.stakeCents,
+        oddsAmerican: zeroproofBets.oddsAmerican,
+        clv: zeroproofBets.clv,
+        settledAt: zeroproofBets.settledAt,
+      })
+      .from(zeroproofBets)
+      .where(and(inArray(zeroproofBets.walletId, walletIds), inArray(zeroproofBets.status, SETTLED_STATUSES))),
+  ]);
+
+  return members.map((m) => ({
+    userSub: m.userSub,
+    walletId: m.walletId,
+    balanceCents: deriveBalanceCents(entries.filter((e) => e.walletId === m.walletId)),
+    bets: bets.filter((b) => b.walletId === m.walletId),
+  }));
+}
+
+/** Open leagues with the fields settlement needs to decide whether they're done. */
+export async function getOpenLeagues(): Promise<
+  Pick<ZeroproofLeague, 'id' | 'winCondition' | 'thresholdCents' | 'endsAt'>[]
+> {
+  return db
+    .select({
+      id: zeroproofLeagues.id,
+      winCondition: zeroproofLeagues.winCondition,
+      thresholdCents: zeroproofLeagues.thresholdCents,
+      endsAt: zeroproofLeagues.endsAt,
+    })
+    .from(zeroproofLeagues)
+    .where(eq(zeroproofLeagues.status, 'open'));
+}
+
+interface SettleLeagueInput {
+  leagueId: string;
+  winnerSub: string | null;
+  rankings: { userSub: string; walletId: string; balanceCents: number; rank: number }[];
+  now: Date;
+}
+
+/**
+ * Settle a league in one transaction: stamp the winner and close it, freeze each
+ * member's final balance and rank, and archive the league wallets so betting
+ * stops. The `status='open'` guard on the league update makes a re-run a no-op.
+ */
+export async function settleLeague(input: SettleLeagueInput): Promise<void> {
+  await db.transaction(async (tx) => {
+    const closed = await tx
+      .update(zeroproofLeagues)
+      .set({ status: 'settled', winnerSub: input.winnerSub, settledAt: input.now })
+      .where(and(eq(zeroproofLeagues.id, input.leagueId), eq(zeroproofLeagues.status, 'open')))
+      .returning({ id: zeroproofLeagues.id });
+    if (closed.length === 0) return; // already settled by an earlier run
+
+    for (const r of input.rankings) {
+      await tx
+        .update(zeroproofLeagueMembers)
+        .set({ finalBalanceCents: r.balanceCents, rank: r.rank })
+        .where(
+          and(
+            eq(zeroproofLeagueMembers.leagueId, input.leagueId),
+            eq(zeroproofLeagueMembers.userSub, r.userSub),
+          ),
+        );
+    }
+
+    const walletIds = input.rankings.map((r) => r.walletId);
+    if (walletIds.length > 0) {
+      await tx
+        .update(zeroproofWallets)
+        .set({ status: 'settled' })
+        .where(and(inArray(zeroproofWallets.id, walletIds), eq(zeroproofWallets.mode, 'league')));
+    }
+  });
 }

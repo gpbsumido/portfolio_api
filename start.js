@@ -32,6 +32,16 @@ if (process.env.RUN_CRON === "true") {
     // Accrue a day's simulated yield on the held ZeroProof float.
     "zeroproof-yield": () =>
       require("./dist/jobs/zeroproofYield").zeroproofYield(),
+    // Settle finished ZeroProof leagues: threshold reached or timeline elapsed.
+    // Stamps the winner and final standings, archives the wallets. Idempotent.
+    "zeroproof-league-settle": () =>
+      require("./dist/jobs/zeroproofLeagueSettle").zeroproofLeagueSettle(),
+    // Ingest ESPN fantasy matchups (ESPN_FANTASY_LEAGUES) as pick'em events.
+    "zeroproof-espn-sync": () =>
+      require("./dist/jobs/zeroproofEspnSync").zeroproofEspnSync(),
+    // Settle finished ESPN fantasy matchups by their weekly scores.
+    "zeroproof-espn-settle": () =>
+      require("./dist/jobs/zeroproofEspnSettle").zeroproofEspnSettle(),
   };
 
   const run = jobs[job];
