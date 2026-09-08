@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-08 - version 5.8.3
+
+- **Moved the Docker base off bullseye to fix the build for real.** Accepting bullseye's expired apt metadata (5.8.2) got past `apt-get update`, but the install then 404'd: the forced-stale security index points at package versions that have been rotated out of the pool, so `python3-pkg-resources` no longer existed at the URL apt asked for. Bullseye is simply too old to build against now. The image is on `node:22-bookworm`, whose indexes and pool are in step. Bookworm marks its system Python externally-managed (PEP 668), so the F1-scripts `pip3 install` now passes `--break-system-packages` — installing into system site-packages is exactly the intent in a single-purpose image. Requirements (fastf1 3.5.3, pandas, numpy, matplotlib) all run on bookworm's Python 3.11.
+
 ## 2026-09-08 - version 5.8.2
 
 - **The Docker build stopped failing on expired apt metadata.** The image builds on `node:22-bullseye`, and bullseye is now old enough that its security-suite `Release` file reads as expired; apt treats that stale timestamp as fatal and the deploy died at `apt-get update` before installing Python or `postgresql-client`. The packages are still served and current, so the fix is to pass `Acquire::Check-Valid-Until=false` and let apt ignore the expiry. Staying on bullseye on purpose — bookworm would trip PEP 668 on the `pip3 install` step and just move the failure. Couldn't run the Railway build locally, so this targets the exact error line rather than a verified green build.
