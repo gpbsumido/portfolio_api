@@ -444,6 +444,8 @@ export const zeroproofWallets = pgTable("zeroproof_wallets", {
   id: uuid("id").primaryKey().defaultRandom(),
   userSub: text("user_sub").notNull(),
   mode: text("mode").notNull(),
+  // Set only on a league wallet (mode='league'); scopes bets to that league.
+  leagueId: uuid("league_id"),
   principalCents: integer("principal_cents").notNull(),
   lockStart: timestamp("lock_start", { withTimezone: true }).notNull(),
   lockEnd: timestamp("lock_end", { withTimezone: true }).notNull(),
@@ -553,3 +555,49 @@ export const zeroproofAccoladeAwards = pgTable("zeroproof_accolade_awards", {
 
 export type ZeroproofAccoladeAward = InferSelectModel<typeof zeroproofAccoladeAwards>;
 export type NewZeroproofAccoladeAward = InferInsertModel<typeof zeroproofAccoladeAwards>;
+
+// ── zeroproof_leagues ────────────────────────────────────────────────────────
+// A user-run contest: a commissioner sets the rules, players join, and each
+// member bets from a league-scoped wallet. Simulated bankrolls only — no locked
+// deposit, no refund. `win_condition` picks how it ends: 'threshold' (first to
+// `threshold_cents`) or 'timeline' (highest balance at `ends_at`).
+export const zeroproofLeagues = pgTable("zeroproof_leagues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  commissionerSub: text("commissioner_sub").notNull(),
+  name: text("name").notNull(),
+  // Shared to join an invite-only league; opaque and unique.
+  joinCode: text("join_code").notNull().unique(),
+  // 'public' | 'invite'
+  visibility: text("visibility").notNull(),
+  startingBankrollCents: integer("starting_bankroll_cents").notNull(),
+  maxMembers: integer("max_members").notNull(),
+  // 'threshold' | 'timeline'
+  winCondition: text("win_condition").notNull(),
+  thresholdCents: bigint("threshold_cents", { mode: "number" }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  // 'open' | 'settled'
+  status: text("status").notNull().default("open"),
+  winnerSub: text("winner_sub"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+});
+
+export type ZeroproofLeague = InferSelectModel<typeof zeroproofLeagues>;
+export type NewZeroproofLeague = InferInsertModel<typeof zeroproofLeagues>;
+
+// ── zeroproof_league_members ─────────────────────────────────────────────────
+// One player in one league, with their league-scoped wallet. A unique
+// (league_id, user_sub) makes joining idempotent. `final_balance_cents`/`rank`
+// are stamped when the league settles.
+export const zeroproofLeagueMembers = pgTable("zeroproof_league_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leagueId: uuid("league_id").notNull(),
+  userSub: text("user_sub").notNull(),
+  walletId: uuid("wallet_id").notNull(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+  finalBalanceCents: bigint("final_balance_cents", { mode: "number" }),
+  rank: integer("rank"),
+});
+
+export type ZeroproofLeagueMember = InferSelectModel<typeof zeroproofLeagueMembers>;
+export type NewZeroproofLeagueMember = InferInsertModel<typeof zeroproofLeagueMembers>;
