@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-08 - version 5.10.0
+
+- **Leagues crown a winner now.** A `zeroproof-league-settle` cron closes every league that's finished: a `threshold` league once a member's bankroll reaches the target, a `timeline` league once its deadline passes. It stamps the winner (the leader — highest balance, ROI breaking ties), freezes each member's final balance and rank, and archives the league wallets so betting stops. Idempotent — only open leagues are scanned and the close is guarded, so a re-run settles nothing twice.
+- **Threshold winner is the leader at detection.** For a threshold league the winner is whoever's ahead the moment a crossing is first seen, rather than strictly the first to cross — a deliberate simplification that keeps settlement a decoupled sweep instead of a hook wired into every bet's settlement. The ranking is the same pure, unit-tested code the live board uses. Wire the cron on whatever cadence suits; the sweep is cheap at this scale.
+
 ## 2026-09-08 - version 5.9.0
 
 - **You can run your own league now.** A commissioner creates one with `POST /api/zeroproof/leagues` and sets the rules — starting bankroll, size cap, and how it's won (`threshold`: first to a target, or `timeline`: highest balance at a deadline) — and is auto-joined. Players find public leagues with `GET /api/zeroproof/leagues?q=` or resolve an invite by `?code=`, join with `POST /api/zeroproof/leagues/:id/join` (an invite league needs the code), and see their own with `GET /api/zeroproof/leagues/mine`. `GET /api/zeroproof/leagues/:id` returns the rules plus a board ranked by bankroll, and hands back the join code only to people already inside.
