@@ -16,6 +16,7 @@ import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { TheOddsApiProvider } from './providers/theOddsApi.js';
 import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
+import type { EspnCookies } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
 import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
 import * as repo from './repository.js';
@@ -551,4 +552,23 @@ export function resolveSportKeys(): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * The ESPN fantasy leagues to ingest, from env: a comma-separated list of
+ * `game:leagueId:season` keys (e.g. `ffl:1241838:2022`). Empty when unset, so
+ * the ESPN crons no-op until a league is configured.
+ */
+export function resolveEspnLeagues(): string[] {
+  const raw = process.env.ESPN_FANTASY_LEAGUES;
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** ESPN auth cookies for private leagues, from env — both undefined for public leagues. */
+export function resolveEspnCookies(): EspnCookies {
+  return { swid: process.env.ESPN_SWID, espnS2: process.env.ESPN_S2 };
 }
