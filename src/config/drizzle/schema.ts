@@ -621,3 +621,19 @@ export const zeroproofEspnLeagues = pgTable("zeroproof_espn_leagues", {
 
 export type ZeroproofEspnLeague = InferSelectModel<typeof zeroproofEspnLeagues>;
 export type NewZeroproofEspnLeague = InferInsertModel<typeof zeroproofEspnLeagues>;
+
+// ── zeroproof_league_espn_leagues ────────────────────────────────────────────
+// The ESPN fantasy leagues a ZeroProof league's commissioner added for members
+// to bet. Additive — the keys feed ingestion; it does not restrict the league.
+export const zeroproofLeagueEspnLeagues = pgTable("zeroproof_league_espn_leagues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leagueId: uuid("league_id").notNull(),
+  game: text("game").notNull(),
+  espnLeagueId: text("espn_league_id").notNull(),
+  season: text("season").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofLeagueEspnLeague = InferSelectModel<typeof zeroproofLeagueEspnLeagues>;
+export type NewZeroproofLeagueEspnLeague = InferInsertModel<typeof zeroproofLeagueEspnLeagues>;

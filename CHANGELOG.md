@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-08 - version 5.15.0
+
+- **A league commissioner adds public ESPN leagues their members can bet — additive, not restrictive.** This replaces the old bind, where a bound league could *only* bet its one ESPN league. A commissioner now adds one or more public ESPN leagues to their ZeroProof league (`POST /api/zeroproof/leagues/:id/espn-leagues`, `DELETE .../:espnId`, both commissioner-gated), each held in a new `zeroproof_league_espn_leagues` table (migration 041). The added leagues' matchups start ingesting for the board — their keys are unioned into `resolveEspnLeagueKeys` alongside the admin registry and the env fallback — and members bet them plus everything else. The league detail returns its `espnLeagues`.
+- **Removed the placement restriction.** A `mode='league'` wallet is no longer refused a bet outside a bound ESPN league — the 403 gate in `placeBet` is gone, so league play is additive. The legacy single-bind columns (039) are left in place but unused; creating a league with an ESPN league now seeds the additive list instead. Covered by tests: the placement is no longer gated, the resolver unions per-league additions (deduped), and the commissioner endpoints add/remove with a 403 for anyone else and a 404 for a missing league.
+
 ## 2026-09-08 - version 5.14.0
 
 - **ESPN fantasy matchups get a real line, not a pick'em.** The provider now reads ESPN's `mMatchupScore` view, which carries a per-side win probability, and prices each side as fair American odds off it (no vig) — a real favourite and underdog instead of flat -110. A matchup ESPN hasn't priced yet still falls back to the pick'em. Verified against the live public league: 0.54/0.46 → -117/+117, and so on. The conversion is pure and unit-tested (favourite negative, underdog positive, even money -100, missing/out-of-range falls back, extremes clamped so a lopsided week can't post an absurd line). Results still settle on the weekly score exactly as before.

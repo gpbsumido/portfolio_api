@@ -27,6 +27,9 @@ vi.mock('./repository.js', () => ({
   listPublicOpenLeagues: vi.fn(),
   getMyLeagues: vi.fn(),
   getLeagueStandingRows: vi.fn(),
+  listLeagueEspnLeagues: vi.fn(),
+  addLeagueEspnLeague: vi.fn(),
+  removeLeagueEspnLeague: vi.fn(),
 }));
 
 import { errorHandler } from '../../middleware/errorHandler.js';
@@ -69,6 +72,7 @@ const standingRow = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   claims = { sub: 'auth0|me' };
+  vi.mocked(repo.listLeagueEspnLeagues).mockResolvedValue([] as never);
 });
 
 describe('creating a league', () => {
@@ -104,16 +108,22 @@ describe('creating a league', () => {
     expect(repo.createLeague).not.toHaveBeenCalled();
   });
 
-  test('creates a league bound to an ESPN league', async () => {
+  test('creates a league with an ESPN league, seeding it into the additive list', async () => {
     vi.mocked(repo.createLeague).mockResolvedValue(league() as never);
+    vi.mocked(repo.addLeagueEspnLeague).mockResolvedValue({ id: 'le-1' } as never);
 
     const res = await request(makeApp())
       .post('/api/zeroproof/leagues')
       .send({ ...body, espnGame: 'ffl', espnLeagueId: '836777691', espnSeason: '2026' });
 
     expect(res.status).toBe(201);
-    expect(repo.createLeague).toHaveBeenCalledWith(
-      expect.objectContaining({ espnGame: 'ffl', espnLeagueId: '836777691', espnSeason: '2026' }),
+    expect(repo.addLeagueEspnLeague).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leagueId: 'lg-1',
+        game: 'ffl',
+        espnLeagueId: '836777691',
+        season: '2026',
+      }),
     );
   });
 
@@ -255,6 +265,119 @@ describe('league detail and standings', () => {
     expect(res.body.league.joinCode).toBe('SECRET7');
     expect(res.body.isMember).toBe(true);
     expect(res.body.callerWalletId).toBe('w-me');
+  });
+
+  test('returns the ESPN leagues the commissioner added', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(league() as never);
+    vi.mocked(repo.getLeagueStandingRows).mockResolvedValue([standingRow()] as never);
+    vi.mocked(repo.getMembership).mockResolvedValue(undefined as never);
+    vi.mocked(repo.listLeagueEspnLeagues).mockResolvedValue([
+      {
+        id: 'le-1',
+        leagueId: 'lg-1',
+        game: 'ffl',
+        espnLeagueId: '836777691',
+        season: '2026',
+        label: 'The office league',
+        createdAt: new Date('2026-09-08T00:00:00Z'),
+      },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/leagues/lg-1');
+
+    expect(res.status).toBe(200);
+    expect(res.body.espnLeagues).toEqual([
+      {
+        id: 'le-1',
+        game: 'ffl',
+        leagueId: '836777691',
+        season: '2026',
+        label: 'The office league',
+        createdAt: '2026-09-08T00:00:00.000Z',
+      },
+    ]);
+  });
+});
+
+describe('commissioner-managed ESPN leagues', () => {
+  test('the commissioner adds an ESPN league and gets 201', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(league() as never);
+    vi.mocked(repo.addLeagueEspnLeague).mockResolvedValue({
+      id: 'le-1',
+      leagueId: 'lg-1',
+      game: 'ffl',
+      espnLeagueId: '836777691',
+      season: '2026',
+      label: null,
+      createdAt: new Date('2026-09-08T00:00:00Z'),
+    } as never);
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues/lg-1/espn-leagues')
+      .send({ game: 'ffl', leagueId: '836777691', season: '2026' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.espnLeague).toMatchObject({ game: 'ffl', leagueId: '836777691', season: '2026' });
+    expect(repo.addLeagueEspnLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueId: 'lg-1', game: 'ffl', espnLeagueId: '836777691', season: '2026' }),
+    );
+  });
+
+  test('a non-commissioner is refused with 403', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(
+      league({ commissionerSub: 'auth0|someone-else' }) as never,
+    );
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues/lg-1/espn-leagues')
+      .send({ game: 'ffl', leagueId: '836777691', season: '2026' });
+
+    expect(res.status).toBe(403);
+    expect(repo.addLeagueEspnLeague).not.toHaveBeenCalled();
+  });
+
+  test('adding to a league that does not exist is 404', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(undefined as never);
+
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues/lg-1/espn-leagues')
+      .send({ game: 'ffl', leagueId: '836777691', season: '2026' });
+
+    expect(res.status).toBe(404);
+  });
+
+  test('a malformed season is refused with 400 before any repo call', async () => {
+    const res = await request(makeApp())
+      .post('/api/zeroproof/leagues/lg-1/espn-leagues')
+      .send({ game: 'ffl', leagueId: '836777691', season: 'twenty' });
+
+    expect(res.status).toBe(400);
+    expect(repo.addLeagueEspnLeague).not.toHaveBeenCalled();
+  });
+
+  test('the commissioner removes an ESPN league and gets 204', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(league() as never);
+    vi.mocked(repo.removeLeagueEspnLeague).mockResolvedValue(undefined as never);
+
+    const res = await request(makeApp()).delete(
+      '/api/zeroproof/leagues/lg-1/espn-leagues/le-1',
+    );
+
+    expect(res.status).toBe(204);
+    expect(repo.removeLeagueEspnLeague).toHaveBeenCalledWith('lg-1', 'le-1');
+  });
+
+  test('a non-commissioner cannot remove — 403', async () => {
+    vi.mocked(repo.getLeagueById).mockResolvedValue(
+      league({ commissionerSub: 'auth0|someone-else' }) as never,
+    );
+
+    const res = await request(makeApp()).delete(
+      '/api/zeroproof/leagues/lg-1/espn-leagues/le-1',
+    );
+
+    expect(res.status).toBe(403);
+    expect(repo.removeLeagueEspnLeague).not.toHaveBeenCalled();
   });
 });
 

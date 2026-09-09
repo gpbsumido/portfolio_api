@@ -11,8 +11,10 @@ import {
   type ZeroproofWallet,
   zeroproofAccoladeAwards,
   type ZeroproofEspnLeague,
+  type ZeroproofLeagueEspnLeague,
   zeroproofBets,
   zeroproofEspnLeagues,
+  zeroproofLeagueEspnLeagues,
   zeroproofEvents,
   zeroproofLeagueMembers,
   zeroproofLeagues,
@@ -963,4 +965,87 @@ export async function addEspnLeague(input: AddEspnLeagueInput): Promise<Zeroproo
 /** Remove a registered league by id. */
 export async function removeEspnLeague(id: string): Promise<void> {
   await db.delete(zeroproofEspnLeagues).where(eq(zeroproofEspnLeagues.id, id));
+}
+
+// ---------------------------------------------------------------------------
+// Per-league ESPN leagues (commissioner-added, additive)
+// ---------------------------------------------------------------------------
+
+/** The ESPN leagues a ZeroProof league's commissioner has added, newest first. */
+export async function listLeagueEspnLeagues(
+  leagueId: string,
+): Promise<ZeroproofLeagueEspnLeague[]> {
+  return db
+    .select()
+    .from(zeroproofLeagueEspnLeagues)
+    .where(eq(zeroproofLeagueEspnLeagues.leagueId, leagueId))
+    .orderBy(desc(zeroproofLeagueEspnLeagues.createdAt));
+}
+
+/** The distinct `game:leagueId:season` keys added across every league, for ingestion. */
+export async function listAllLeagueEspnLeagueKeys(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({
+      game: zeroproofLeagueEspnLeagues.game,
+      leagueId: zeroproofLeagueEspnLeagues.espnLeagueId,
+      season: zeroproofLeagueEspnLeagues.season,
+    })
+    .from(zeroproofLeagueEspnLeagues);
+  return rows.map((r) => `${r.game}:${r.leagueId}:${r.season}`);
+}
+
+interface AddLeagueEspnLeagueInput {
+  leagueId: string;
+  game: string;
+  espnLeagueId: string;
+  season: string;
+  label: string | null;
+}
+
+/** Add an ESPN league to a ZeroProof league, idempotent on its key. Returns the row. */
+export async function addLeagueEspnLeague(
+  input: AddLeagueEspnLeagueInput,
+): Promise<ZeroproofLeagueEspnLeague> {
+  await db
+    .insert(zeroproofLeagueEspnLeagues)
+    .values({
+      leagueId: input.leagueId,
+      game: input.game,
+      espnLeagueId: input.espnLeagueId,
+      season: input.season,
+      label: input.label,
+    })
+    .onConflictDoNothing({
+      target: [
+        zeroproofLeagueEspnLeagues.leagueId,
+        zeroproofLeagueEspnLeagues.game,
+        zeroproofLeagueEspnLeagues.espnLeagueId,
+        zeroproofLeagueEspnLeagues.season,
+      ],
+    });
+  const [row] = await db
+    .select()
+    .from(zeroproofLeagueEspnLeagues)
+    .where(
+      and(
+        eq(zeroproofLeagueEspnLeagues.leagueId, input.leagueId),
+        eq(zeroproofLeagueEspnLeagues.game, input.game),
+        eq(zeroproofLeagueEspnLeagues.espnLeagueId, input.espnLeagueId),
+        eq(zeroproofLeagueEspnLeagues.season, input.season),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
+/** Remove an ESPN league from a ZeroProof league, scoped to that league. */
+export async function removeLeagueEspnLeague(leagueId: string, id: string): Promise<void> {
+  await db
+    .delete(zeroproofLeagueEspnLeagues)
+    .where(
+      and(
+        eq(zeroproofLeagueEspnLeagues.id, id),
+        eq(zeroproofLeagueEspnLeagues.leagueId, leagueId),
+      ),
+    );
 }
