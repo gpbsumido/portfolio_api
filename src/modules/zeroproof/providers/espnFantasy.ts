@@ -3,12 +3,13 @@
 // ---------------------------------------------------------------------------
 //
 // A fantasy matchup (team A vs team B in a given week) becomes a bettable event
-// with a single h2h market. ESPN publishes no betting line — only projected and
-// actual scores — so v1 prices every matchup as a pick'em (both sides -110); a
-// projected-score moneyline is a later refinement. ESPN also gives no kickoff
-// timestamp, so the commence time is synthesised from the sync moment (see
-// `normalizeMatchups`) — betting stays open until the matchup settles, which is
-// the v1 tradeoff for not knowing the real lock time.
+// with a single h2h market. ESPN publishes no odds, but its mMatchupScore view
+// carries a per-side win probability, so each side is priced as fair American
+// odds off that probability (no vig); a matchup with no probability yet falls
+// back to a pick'em (both -110). ESPN also gives no kickoff timestamp, so the
+// commence time is synthesised from the sync moment (see `normalizeMatchups`) —
+// betting stays open until the matchup settles, the tradeoff for not knowing
+// the real lock time.
 //
 // Private leagues (like most personal leagues) need SWID + espn_s2 cookies;
 // public ones need none. Both are handled by the same client.
@@ -22,8 +23,24 @@ import type {
 
 const HOST = 'https://lm-api-reads.fantasy.espn.com';
 
-/** ESPN publishes no line, so a matchup ships as a pick'em: both sides -110. */
+/** When ESPN gives no win probability yet, a matchup ships as a pick'em: both sides -110. */
 export const PICK_EM_PRICE_AMERICAN = -110;
+
+/** Probabilities are clamped to this range so a lopsided matchup can't make an absurd line. */
+const MIN_WIN_PROBABILITY = 0.05;
+const MAX_WIN_PROBABILITY = 0.95;
+
+/**
+ * Fair American odds for a side, from its win probability (no vig): a favourite
+ * (p ≥ 0.5) is negative, an underdog positive, and the implied probability equals
+ * p. A missing or non-finite probability falls back to the pick'em price.
+ */
+export function priceFromWinProbability(p: number | undefined): number {
+  if (p == null || !Number.isFinite(p) || p <= 0 || p >= 1) return PICK_EM_PRICE_AMERICAN;
+  const clamped = Math.min(MAX_WIN_PROBABILITY, Math.max(MIN_WIN_PROBABILITY, p));
+  if (clamped >= 0.5) return -Math.round((100 * clamped) / (1 - clamped));
+  return Math.round((100 * (1 - clamped)) / clamped);
+}
 
 /** How far ahead the synthetic commence time sits, so the current week reads as upcoming. */
 export const MATCHUP_LOCK_LEAD_MS = 48 * 60 * 60 * 1000;
@@ -56,6 +73,9 @@ export interface EspnTeam {
 export interface EspnSide {
   teamId: number;
   totalPoints: number;
+  /** ESPN's own pre-game win probability for this side (0–1), from mMatchupScore. */
+  winProbability?: number;
+  totalProjectedPoints?: number;
 }
 export interface EspnMatchup {
   id: number;
@@ -116,11 +136,13 @@ export function normalizeMatchups(
   return league.schedule
     .filter((m) => m.matchupPeriodId === week && m.home && m.away)
     .map((m) => {
-      const home = teamName(league.teams, (m.home as EspnSide).teamId);
-      const away = teamName(league.teams, (m.away as EspnSide).teamId);
+      const homeSide = m.home as EspnSide;
+      const awaySide = m.away as EspnSide;
+      const home = teamName(league.teams, homeSide.teamId);
+      const away = teamName(league.teams, awaySide.teamId);
       const outcomes: NormalizedOutcome[] = [
-        { name: home, priceAmerican: PICK_EM_PRICE_AMERICAN },
-        { name: away, priceAmerican: PICK_EM_PRICE_AMERICAN },
+        { name: home, priceAmerican: priceFromWinProbability(homeSide.winProbability) },
+        { name: away, priceAmerican: priceFromWinProbability(awaySide.winProbability) },
       ];
       return {
         providerKey: matchupProviderKey(spec, m),
@@ -155,11 +177,12 @@ export function normalizeResults(league: EspnLeague, spec: LeagueSpec): Normaliz
     });
 }
 
-/** The URL for a league's matchup + team data (public or private). */
+/** The URL for a league's matchup + team data (public or private). mMatchupScore
+ * is a superset of mMatchup that also carries each side's win probability. */
 export function leagueUrl(spec: LeagueSpec): string {
   return (
     `${HOST}/apis/v3/games/${spec.game}/seasons/${spec.season}` +
-    `/segments/0/leagues/${spec.leagueId}?view=mMatchup&view=mTeam`
+    `/segments/0/leagues/${spec.leagueId}?view=mMatchupScore&view=mTeam`
   );
 }
 
