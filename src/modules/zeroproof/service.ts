@@ -605,6 +605,40 @@ export function resolveEspnLeagues(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * The ESPN league keys the crons actually sync: the ones registered in the DB
+ * (added without a redeploy) unioned with the env fallback, deduped.
+ */
+export async function resolveEspnLeagueKeys(): Promise<string[]> {
+  const fromDb = (await repo.listEspnLeagues()).map((l) => `${l.game}:${l.leagueId}:${l.season}`);
+  return [...new Set([...fromDb, ...resolveEspnLeagues()])];
+}
+
+export interface AddEspnLeagueRequest {
+  game: string;
+  leagueId: string;
+  season: string;
+  label?: string;
+}
+
+/** Register an ESPN league for ingestion (admin). Idempotent on game/league/season. */
+export function addEspnLeague(req: AddEspnLeagueRequest) {
+  return repo.addEspnLeague({
+    game: req.game,
+    leagueId: req.leagueId,
+    season: req.season,
+    label: req.label?.trim() || null,
+  });
+}
+
+export function listEspnLeagues() {
+  return repo.listEspnLeagues();
+}
+
+export function removeEspnLeague(id: string) {
+  return repo.removeEspnLeague(id);
+}
+
 /** ESPN auth cookies for private leagues, from env — both undefined for public leagues. */
 export function resolveEspnCookies(): EspnCookies {
   return { swid: process.env.ESPN_SWID, espnS2: process.env.ESPN_S2 };
