@@ -10,8 +10,16 @@
 // ---------------------------------------------------------------------------
 
 import { pool } from '../config/database.js';
-import { EspnFantasyProvider } from '../modules/zeroproof/providers/espnFantasy.js';
-import { resolveEspnCookies, resolveEspnLeagueKeys, syncOdds } from '../modules/zeroproof/service.js';
+import {
+  EspnFantasyProvider,
+  type EspnLeagueOutcome,
+} from '../modules/zeroproof/providers/espnFantasy.js';
+import {
+  recordEspnLeagueHealth,
+  resolveEspnCookies,
+  resolveEspnLeagueKeys,
+  syncOdds,
+} from '../modules/zeroproof/service.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
 
 const log = createModuleLogger('zeroproof-espn-sync');
@@ -22,12 +30,16 @@ export async function zeroproofEspnSync(): Promise<void> {
     log.info('no ESPN leagues configured (registry or ESPN_FANTASY_LEAGUES), skipping');
     return;
   }
-  const provider = new EspnFantasyProvider(resolveEspnCookies());
+  // Observe each league's resolution as the sync fetches it, then persist the
+  // health so a league page can show which of its ESPN leagues can't be reached.
+  const outcomes: EspnLeagueOutcome[] = [];
+  const provider = new EspnFantasyProvider(resolveEspnCookies(), (o) => outcomes.push(o));
   log.info({ leagues }, 'syncing ESPN fantasy matchups');
 
   const summary = await syncOdds(provider, leagues);
+  await recordEspnLeagueHealth(outcomes, new Date());
 
-  log.info(summary, 'ESPN fantasy sync complete');
+  log.info({ ...summary, checked: outcomes.length }, 'ESPN fantasy sync complete');
 }
 
 // Allow `node dist/jobs/zeroproofEspnSync.js` as a standalone cron invocation.

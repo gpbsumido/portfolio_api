@@ -219,22 +219,31 @@ export async function fetchEspnLeague(spec: LeagueSpec, cookies: EspnCookies): P
   return (await res.json()) as EspnLeague;
 }
 
+/** The outcome of trying to resolve one ESPN league key: the error, or null if it resolved. */
+export type EspnLeagueOutcome = { key: string; error: string | null };
+
 /**
  * Fetch one league for a batch, or null if it can't be reached. A single
  * private, misconfigured, or momentarily-down league must not sink a whole sync
  * or settle — it's logged and skipped, and the idempotent run picks it up on the
  * next pass once it's reachable. A malformed key is skipped the same way.
+ *
+ * `onOutcome` observes each attempt (resolved or not) so the sync cron can record
+ * health without the fetch being decided by the DB, or run twice.
  */
 export async function fetchLeagueOrSkip(
   sportKey: string,
   cookies: EspnCookies,
+  onOutcome?: (outcome: EspnLeagueOutcome) => void,
 ): Promise<{ spec: LeagueSpec; league: EspnLeague } | null> {
   try {
     const spec = parseLeagueSpec(sportKey);
     const league = await fetchEspnLeague(spec, cookies);
+    onOutcome?.({ key: sportKey, error: null });
     return { spec, league };
   } catch (err) {
     log.warn({ err, league: sportKey }, 'skipping ESPN league that failed to fetch');
+    onOutcome?.({ key: sportKey, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -242,13 +251,16 @@ export async function fetchLeagueOrSkip(
 export class EspnFantasyProvider implements OddsProvider {
   readonly name = 'espn-fantasy';
 
-  constructor(private readonly cookies: EspnCookies = {}) {}
+  constructor(
+    private readonly cookies: EspnCookies = {},
+    private readonly onOutcome?: (outcome: EspnLeagueOutcome) => void,
+  ) {}
 
   async getOdds(sportKeys: string[]): Promise<NormalizedEvent[]> {
     const now = new Date();
     const all: NormalizedEvent[] = [];
     for (const sportKey of sportKeys) {
-      const fetched = await fetchLeagueOrSkip(sportKey, this.cookies);
+      const fetched = await fetchLeagueOrSkip(sportKey, this.cookies, this.onOutcome);
       if (!fetched) continue;
       all.push(...normalizeMatchups(fetched.league, fetched.spec, now));
     }

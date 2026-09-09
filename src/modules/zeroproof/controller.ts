@@ -23,6 +23,7 @@ import type {
   EventWithLines,
   LeagueDto,
   LeagueEspnLeagueDto,
+  LeagueEspnLeagueRow,
   LeagueListItem,
   LeagueStanding,
   LeagueStandingDto,
@@ -108,7 +109,12 @@ function toStandingDto(s: LeagueStanding): LeagueStandingDto {
   };
 }
 
-function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeagueDto {
+// Accepts a plain row (freshly added — no health yet) or one enriched with
+// health from the detail query; a row with no health reads as "not checked yet".
+function toLeagueEspnLeagueDto(
+  row: ZeroproofLeagueEspnLeague &
+    Partial<Pick<LeagueEspnLeagueRow, 'lastCheckedAt' | 'lastOkAt' | 'lastError'>>,
+): LeagueEspnLeagueDto {
   return {
     id: row.id,
     game: row.game,
@@ -116,6 +122,9 @@ function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeague
     season: row.season,
     label: row.label,
     createdAt: row.createdAt.toISOString(),
+    lastCheckedAt: row.lastCheckedAt ? row.lastCheckedAt.toISOString() : null,
+    lastOkAt: row.lastOkAt ? row.lastOkAt.toISOString() : null,
+    lastError: row.lastError ?? null,
   };
 }
 

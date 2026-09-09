@@ -106,13 +106,20 @@ export interface LeagueListItem {
   memberCount: number;
 }
 
+/** A commissioner-added ESPN league row plus its last resolution health. */
+export type LeagueEspnLeagueRow = ZeroproofLeagueEspnLeague & {
+  lastCheckedAt: Date | null;
+  lastOkAt: Date | null;
+  lastError: string | null;
+};
+
 /** A league in full: rules, standings, and the caller's relationship to it. */
 export interface LeagueDetail {
   league: ZeroproofLeague;
   memberCount: number;
   standings: LeagueStanding[];
-  /** ESPN leagues the commissioner added for members to bet (additive). */
-  espnLeagues: ZeroproofLeagueEspnLeague[];
+  /** ESPN leagues the commissioner added for members to bet (additive), with health. */
+  espnLeagues: LeagueEspnLeagueRow[];
   /** The caller's league wallet id, for the betslip — null if they haven't joined. */
   callerWalletId: string | null;
   isMember: boolean;
@@ -127,6 +134,12 @@ export interface LeagueEspnLeagueDto {
   season: string;
   label: string | null;
   createdAt: string;
+  /** When the sync cron last tried to resolve it — null if never synced yet. */
+  lastCheckedAt: string | null;
+  /** When it last resolved successfully — null if it has never resolved. */
+  lastOkAt: string | null;
+  /** The most recent resolution error, or null when it's currently reachable. */
+  lastError: string | null;
 }
 
 export interface LeagueStandingDto {

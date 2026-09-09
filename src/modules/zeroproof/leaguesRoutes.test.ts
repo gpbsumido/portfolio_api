@@ -267,7 +267,7 @@ describe('league detail and standings', () => {
     expect(res.body.callerWalletId).toBe('w-me');
   });
 
-  test('returns the ESPN leagues the commissioner added', async () => {
+  test('returns the ESPN leagues the commissioner added, with resolution health', async () => {
     vi.mocked(repo.getLeagueById).mockResolvedValue(league() as never);
     vi.mocked(repo.getLeagueStandingRows).mockResolvedValue([standingRow()] as never);
     vi.mocked(repo.getMembership).mockResolvedValue(undefined as never);
@@ -280,6 +280,9 @@ describe('league detail and standings', () => {
         season: '2026',
         label: 'The office league',
         createdAt: new Date('2026-09-08T00:00:00Z'),
+        lastCheckedAt: new Date('2026-09-09T00:00:00Z'),
+        lastOkAt: null,
+        lastError: 'ESPN fantasy returned 401 for ffl:836777691:2026',
       },
     ] as never);
 
@@ -294,6 +297,9 @@ describe('league detail and standings', () => {
         season: '2026',
         label: 'The office league',
         createdAt: '2026-09-08T00:00:00.000Z',
+        lastCheckedAt: '2026-09-09T00:00:00.000Z',
+        lastOkAt: null,
+        lastError: 'ESPN fantasy returned 401 for ffl:836777691:2026',
       },
     ]);
   });
