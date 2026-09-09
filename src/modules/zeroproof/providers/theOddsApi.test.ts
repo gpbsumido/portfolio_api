@@ -60,9 +60,22 @@ describe('The Odds API provider', () => {
     expect(() => new TheOddsApiProvider('')).toThrow();
   });
 
-  test('surfaces a non-200 from the vendor as an error, not an empty slate', async () => {
+  test('a sport whose fetch fails is skipped, not thrown (sync survives)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('quota', { status: 429 }));
     const provider = new TheOddsApiProvider('test-key');
-    await expect(provider.getOdds(['baseball_mlb'])).rejects.toThrow();
+    // A quota/transient error on one sport must not sink the whole odds sync.
+    await expect(provider.getOdds(['baseball_mlb'])).resolves.toEqual([]);
+  });
+
+  test('one bad sport does not drop the others', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(V4_PAYLOAD), { status: 200 }))
+      .mockResolvedValueOnce(new Response('quota', { status: 429 }));
+    const events = await new TheOddsApiProvider('test-key').getOdds([
+      'baseball_mlb',
+      'basketball_nba',
+    ]);
+    // The reachable sport still produces events; the failing one is skipped.
+    expect(events.length).toBeGreaterThan(0);
   });
 });

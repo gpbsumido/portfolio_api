@@ -7,6 +7,9 @@
 // later fallback and lives behind the same interface, matched by team + time.)
 
 import type { NormalizedResult, ResultsProvider } from './types.js';
+import { createModuleLogger } from '../../../shared/utils/logger.js';
+
+const log = createModuleLogger('the-odds-api-results');
 
 const BASE = 'https://api.the-odds-api.com/v4';
 
@@ -35,15 +38,22 @@ export class TheOddsApiResultsProvider implements ResultsProvider {
   async getResults(sportKeys: string[]): Promise<NormalizedResult[]> {
     const all: NormalizedResult[] = [];
     for (const sportKey of sportKeys) {
-      const url = `${BASE}/sports/${sportKey}/scores?apiKey=${this.apiKey}&daysFrom=${this.daysFrom}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`The Odds API scores returned ${res.status} for ${sportKey}`);
-      }
-      const events = (await res.json()) as V4ScoreEvent[];
-      for (const event of events) {
-        const normalized = normalize(event);
-        if (normalized) all.push(normalized);
+      // One sport's fetch failing (a quota blip, a transient 5xx) must not sink
+      // the whole settle — skip it, log it, and let the reachable sports grade.
+      // The settle is idempotent, so the skipped sport is picked up next run.
+      try {
+        const url = `${BASE}/sports/${sportKey}/scores?apiKey=${this.apiKey}&daysFrom=${this.daysFrom}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`The Odds API scores returned ${res.status} for ${sportKey}`);
+        }
+        const events = (await res.json()) as V4ScoreEvent[];
+        for (const event of events) {
+          const normalized = normalize(event);
+          if (normalized) all.push(normalized);
+        }
+      } catch (err) {
+        log.warn({ err, sport: sportKey }, 'skipping sport whose scores failed to fetch');
       }
     }
     return all;
