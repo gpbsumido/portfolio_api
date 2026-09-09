@@ -97,4 +97,10 @@ router.delete('/espn-leagues/:id', checkJwt, requireAdmin, (req, res, next) =>
   ctrl.removeEspnLeague(req, res, next),
 );
 
+// GET /api/zeroproof/ingest-health — ops view of which sports / ESPN leagues are
+// (not) resolving on the sync and settle crons. Admin only.
+router.get('/ingest-health', checkJwt, requireAdmin, (req, res, next) =>
+  ctrl.ingestHealth(req, res, next),
+);
+
 export default router;
