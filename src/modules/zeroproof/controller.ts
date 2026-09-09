@@ -4,14 +4,25 @@
 
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
-import type { ZeroproofBet } from '../../config/drizzle/schema.js';
-import type { CreateLeagueInput, JoinLeagueInput, OpenWalletInput, PlaceBetInput } from './schemas.js';
+import type {
+  ZeroproofBet,
+  ZeroproofLeagueEspnLeague,
+} from '../../config/drizzle/schema.js';
+import type {
+  AddEspnLeagueInput,
+  AddLeagueEspnLeagueInput,
+  CreateLeagueInput,
+  JoinLeagueInput,
+  OpenWalletInput,
+  PlaceBetInput,
+} from './schemas.js';
 import * as service from './service.js';
 import type {
   BetDto,
   EventDto,
   EventWithLines,
   LeagueDto,
+  LeagueEspnLeagueDto,
   LeagueListItem,
   LeagueStanding,
   LeagueStandingDto,
@@ -75,6 +86,9 @@ function toLeagueDto(item: LeagueListItem, includeCode: boolean): LeagueDto {
     endsAt: l.endsAt ? l.endsAt.toISOString() : null,
     status: l.status,
     winnerSub: l.winnerSub,
+    espnGame: l.espnGame,
+    espnLeagueId: l.espnLeagueId,
+    espnSeason: l.espnSeason,
     createdAt: l.createdAt.toISOString(),
     settledAt: l.settledAt ? l.settledAt.toISOString() : null,
     memberCount: item.memberCount,
@@ -91,6 +105,17 @@ function toStandingDto(s: LeagueStanding): LeagueStandingDto {
     betCount: s.betCount,
     roiPct: s.roiPct,
     rank: s.rank,
+  };
+}
+
+function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeagueDto {
+  return {
+    id: row.id,
+    game: row.game,
+    leagueId: row.espnLeagueId,
+    season: row.season,
+    label: row.label,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -268,10 +293,36 @@ export class ZeroproofController {
           detail.isMember || detail.isCommissioner,
         ),
         standings: detail.standings.map(toStandingDto),
+        espnLeagues: detail.espnLeagues.map(toLeagueEspnLeagueDto),
         callerWalletId: detail.callerWalletId,
         isMember: detail.isMember,
         isCommissioner: detail.isCommissioner,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/leagues/:id/espn-leagues — commissioner adds an ESPN league. */
+  async addLeagueEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body as AddLeagueEspnLeagueInput;
+      const row = await service.addLeagueEspnLeague(requireSub(req), param(req.params.id), body);
+      res.status(201).json({ espnLeague: toLeagueEspnLeagueDto(row) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /api/zeroproof/leagues/:id/espn-leagues/:espnId — commissioner removes one. */
+  async removeLeagueEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      await service.removeLeagueEspnLeague(
+        requireSub(req),
+        param(req.params.id),
+        param(req.params.espnId),
+      );
+      res.status(204).send();
     } catch (err) {
       next(err);
     }
@@ -283,6 +334,35 @@ export class ZeroproofController {
       const { joinCode } = req.body as JoinLeagueInput;
       const result = await service.joinLeague(requireSub(req), param(req.params.id), joinCode);
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/espn-leagues — the registered ESPN leagues (admin). */
+  async listEspnLeagues(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ leagues: await service.listEspnLeagues() });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/espn-leagues — register a league for ingestion (admin). */
+  async addEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const league = await service.addEspnLeague(req.body as AddEspnLeagueInput);
+      res.status(201).json({ league });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /api/zeroproof/espn-leagues/:id — unregister a league (admin). */
+  async removeEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      await service.removeEspnLeague(param(req.params.id));
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

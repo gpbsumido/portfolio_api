@@ -2,7 +2,11 @@
 // ZeroProof wallets — types and DTOs
 // ---------------------------------------------------------------------------
 
-import type { ZeroproofLeague, ZeroproofWallet } from '../../config/drizzle/schema.js';
+import type {
+  ZeroproofLeague,
+  ZeroproofLeagueEspnLeague,
+  ZeroproofWallet,
+} from '../../config/drizzle/schema.js';
 import type { ProfileStats } from './stats.js';
 
 export type WalletMode = 'season' | 'challenge' | 'league';
@@ -107,10 +111,22 @@ export interface LeagueDetail {
   league: ZeroproofLeague;
   memberCount: number;
   standings: LeagueStanding[];
+  /** ESPN leagues the commissioner added for members to bet (additive). */
+  espnLeagues: ZeroproofLeagueEspnLeague[];
   /** The caller's league wallet id, for the betslip — null if they haven't joined. */
   callerWalletId: string | null;
   isMember: boolean;
   isCommissioner: boolean;
+}
+
+/** An ESPN league added to a ZeroProof league, as the API returns it. */
+export interface LeagueEspnLeagueDto {
+  id: string;
+  game: string;
+  leagueId: string;
+  season: string;
+  label: string | null;
+  createdAt: string;
 }
 
 export interface LeagueStandingDto {
@@ -138,6 +154,10 @@ export interface LeagueDto {
   endsAt: string | null;
   status: string;
   winnerSub: string | null;
+  /** The bound ESPN league, or null — when set, members only bet its matchups. */
+  espnGame: string | null;
+  espnLeagueId: string | null;
+  espnSeason: string | null;
   createdAt: string;
   settledAt: string | null;
   memberCount: number;

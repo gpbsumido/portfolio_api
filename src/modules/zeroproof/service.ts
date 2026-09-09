@@ -5,6 +5,7 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import {
+  type EspnBinding,
   isJoinable,
   type LeagueWinCondition,
   leagueWalletLockEnd,
@@ -365,6 +366,24 @@ export interface CreateLeagueRequest {
   winCondition: LeagueWinCondition;
   thresholdCents?: number;
   endsAt?: string;
+  espnGame?: string;
+  espnLeagueId?: string;
+  espnSeason?: string;
+}
+
+/** The ESPN binding from a create request — all three or nothing, else a 400. */
+function espnBindingFromRequest(req: CreateLeagueRequest): EspnBinding | null {
+  const parts = [req.espnGame, req.espnLeagueId, req.espnSeason];
+  const set = parts.filter(Boolean).length;
+  if (set === 0) return null;
+  if (set !== 3) {
+    throw new ValidationError('An ESPN binding needs game, league id and season together');
+  }
+  return {
+    game: req.espnGame as string,
+    leagueId: req.espnLeagueId as string,
+    season: req.espnSeason as string,
+  };
 }
 
 /**
@@ -389,6 +408,7 @@ export async function createLeague(
     },
     now,
   );
+  const espn = espnBindingFromRequest(req);
 
   const league = await repo.createLeague({
     commissionerSub,
@@ -400,9 +420,23 @@ export async function createLeague(
     winCondition: req.winCondition,
     thresholdCents,
     endsAt,
+    espnGame: null,
+    espnLeagueId: null,
+    espnSeason: null,
     walletLockEnd: leagueWalletLockEnd(req.winCondition, endsAt),
     now,
   });
+  // A league created with an ESPN league seeds it into the additive per-league
+  // list rather than the legacy single-bind columns.
+  if (espn) {
+    await repo.addLeagueEspnLeague({
+      leagueId: league.id,
+      game: espn.game,
+      espnLeagueId: espn.leagueId,
+      season: espn.season,
+      label: null,
+    });
+  }
   return { league, memberCount: 1 };
 }
 
@@ -480,10 +514,12 @@ export async function getLeagueDetail(leagueId: string, callerSub: string | null
   );
 
   const membership = callerSub ? await repo.getMembership(leagueId, callerSub) : undefined;
+  const espnLeagues = await repo.listLeagueEspnLeagues(leagueId);
   return {
     league,
     memberCount: rows.length,
     standings,
+    espnLeagues,
     callerWalletId: membership?.walletId ?? null,
     isMember: !!membership,
     isCommissioner: callerSub != null && callerSub === league.commissionerSub,
@@ -566,6 +602,85 @@ export function resolveEspnLeagues(): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/**
+ * The ESPN league keys the crons actually sync: the ones registered in the DB
+ * (added without a redeploy) unioned with the env fallback, deduped.
+ */
+export async function resolveEspnLeagueKeys(): Promise<string[]> {
+  const fromRegistry = (await repo.listEspnLeagues()).map(
+    (l) => `${l.game}:${l.leagueId}:${l.season}`,
+  );
+  const fromLeagues = await repo.listAllLeagueEspnLeagueKeys();
+  return [...new Set([...fromRegistry, ...fromLeagues, ...resolveEspnLeagues()])];
+}
+
+export interface AddEspnLeagueRequest {
+  game: string;
+  leagueId: string;
+  season: string;
+  label?: string;
+}
+
+/** Register an ESPN league for ingestion (admin). Idempotent on game/league/season. */
+export function addEspnLeague(req: AddEspnLeagueRequest) {
+  return repo.addEspnLeague({
+    game: req.game,
+    leagueId: req.leagueId,
+    season: req.season,
+    label: req.label?.trim() || null,
+  });
+}
+
+export function listEspnLeagues() {
+  return repo.listEspnLeagues();
+}
+
+export function removeEspnLeague(id: string) {
+  return repo.removeEspnLeague(id);
+}
+
+export interface AddLeagueEspnLeagueRequest {
+  game: string;
+  leagueId: string;
+  season: string;
+  label?: string;
+}
+
+/** Only the commissioner of a league may manage its ESPN leagues. */
+async function assertCommissioner(leagueId: string, callerSub: string) {
+  const league = await repo.getLeagueById(leagueId);
+  if (!league) throw new NotFoundError('League not found');
+  if (league.commissionerSub !== callerSub) {
+    throw new ForbiddenError('Only the commissioner can manage this league');
+  }
+}
+
+/**
+ * Add a public ESPN league to a ZeroProof league (commissioner only). Additive:
+ * its matchups start ingesting for the board, and members can bet them — but the
+ * league stays free to bet everything else. Idempotent on the league's key.
+ */
+export async function addLeagueEspnLeague(
+  callerSub: string,
+  leagueId: string,
+  req: AddLeagueEspnLeagueRequest,
+) {
+  await assertCommissioner(leagueId, callerSub);
+  return repo.addLeagueEspnLeague({
+    leagueId,
+    game: req.game,
+    espnLeagueId: req.leagueId,
+    season: req.season,
+    label: req.label ?? null,
+  });
+}
+
+/** Remove an ESPN league from a ZeroProof league (commissioner only). */
+export async function removeLeagueEspnLeague(callerSub: string, leagueId: string, id: string) {
+  await assertCommissioner(leagueId, callerSub);
+  return repo.removeLeagueEspnLeague(leagueId, id);
 }
 
 /** ESPN auth cookies for private leagues, from env — both undefined for public leagues. */

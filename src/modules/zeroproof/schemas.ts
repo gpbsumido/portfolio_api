@@ -48,6 +48,11 @@ export const createLeagueSchema = z.object({
   winCondition: winConditionSchema,
   thresholdCents: z.number().int().positive().optional(),
   endsAt: z.string().datetime().optional(),
+  // Optional ESPN binding — set all three to restrict the league to one ESPN
+  // fantasy league's matchups. The service enforces all-or-nothing.
+  espnGame: z.string().min(1).max(8).optional(),
+  espnLeagueId: z.string().min(1).max(40).optional(),
+  espnSeason: z.string().regex(/^\d{4}$/).optional(),
 });
 
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
@@ -58,3 +63,19 @@ export const joinLeagueSchema = z.object({
 });
 
 export type JoinLeagueInput = z.infer<typeof joinLeagueSchema>;
+
+/** POST /api/zeroproof/espn-leagues (admin) — register a league for ingestion. */
+export const addEspnLeagueSchema = z.object({
+  // ESPN game code: ffl (football), fba (basketball), flb (baseball), fhl (hockey).
+  game: z.string().regex(/^[a-z]{3}$/),
+  leagueId: z.string().min(1).max(40),
+  season: z.string().regex(/^\d{4}$/),
+  label: z.string().max(80).optional(),
+});
+
+export type AddEspnLeagueInput = z.infer<typeof addEspnLeagueSchema>;
+
+/** POST /api/zeroproof/leagues/:id/espn-leagues (commissioner) — add an ESPN league. */
+export const addLeagueEspnLeagueSchema = addEspnLeagueSchema;
+
+export type AddLeagueEspnLeagueInput = z.infer<typeof addLeagueEspnLeagueSchema>;

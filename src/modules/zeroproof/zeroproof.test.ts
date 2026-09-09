@@ -24,6 +24,8 @@ vi.mock('./repository.js', () => ({
   upsertEvent: vi.fn(),
   insertSnapshot: vi.fn(),
   getWalletById: vi.fn(),
+  getLeagueById: vi.fn(),
+  getEventById: vi.fn(),
   getLatestSnapshot: vi.fn(),
   placeBet: vi.fn(),
   getBetsForUser: vi.fn(),
@@ -113,6 +115,62 @@ describe('placing a bet', () => {
     expect(repo.placeBet).toHaveBeenCalledWith(
       expect.objectContaining({ oddsAmerican: 122, lineValue: null, stakeCents: 2500 }),
     );
+  });
+
+  const boundLeague = {
+    espnGame: 'ffl',
+    espnLeagueId: '836777691',
+    espnSeason: '2026',
+  };
+
+  test('a league wallet bets outside its featured ESPN league — additive, not gated', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(
+      wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
+    );
+    vi.mocked(repo.getLeagueById).mockResolvedValue(boundLeague as never);
+    vi.mocked(repo.getEventById).mockResolvedValue({ providerKey: 'baseball_mlb:evt-9' } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(201);
+    expect(repo.placeBet).toHaveBeenCalled();
+  });
+
+  test('a bound league wallet can bet its own ESPN matchup', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(
+      wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
+    );
+    vi.mocked(repo.getLeagueById).mockResolvedValue(boundLeague as never);
+    vi.mocked(repo.getEventById).mockResolvedValue({
+      providerKey: 'espn:ffl:2026:836777691:1:5-4',
+    } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(201);
+    expect(repo.placeBet).toHaveBeenCalled();
+  });
+
+  test('an unbound league wallet bets anything, no ESPN gate', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(
+      wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
+    );
+    vi.mocked(repo.getLeagueById).mockResolvedValue({
+      espnGame: null,
+      espnLeagueId: null,
+      espnSeason: null,
+    } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+    vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(201);
+    expect(repo.getEventById).not.toHaveBeenCalled();
   });
 
   test('rejects a stake the wallet cannot afford with 402', async () => {
