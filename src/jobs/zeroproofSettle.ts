@@ -10,19 +10,29 @@
 // ---------------------------------------------------------------------------
 
 import { pool } from '../config/database.js';
-import { resolveResultsProvider, resolveSportKeys, settle } from '../modules/zeroproof/service.js';
+import type { IngestOutcome } from '../modules/zeroproof/providers/theOddsApi.js';
+import {
+  recordIngestHealth,
+  resolveResultsProvider,
+  resolveSportKeys,
+  settle,
+} from '../modules/zeroproof/service.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
 
 const log = createModuleLogger('zeroproof-settle');
 
 export async function zeroproofSettle(): Promise<void> {
-  const provider = resolveResultsProvider();
+  // Observe each sport's scores fetch so the ops page can show which sports
+  // aren't settling. Fixtures never emits; only the-odds-api provider does.
+  const outcomes: IngestOutcome[] = [];
+  const provider = resolveResultsProvider((o) => outcomes.push(o));
   const sportKeys = resolveSportKeys();
   log.info({ provider: provider.name, sportKeys }, 'settling ZeroProof events');
 
   const summary = await settle(provider, sportKeys);
+  await recordIngestHealth(outcomes, 'results', new Date());
 
-  log.info(summary, 'ZeroProof settle complete');
+  log.info({ ...summary, checked: outcomes.length }, 'ZeroProof settle complete');
 }
 
 // Allow `node dist/jobs/zeroproofSettle.js` as a standalone cron invocation.

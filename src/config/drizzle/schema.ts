@@ -657,3 +657,22 @@ export const zeroproofEspnLeagueHealth = pgTable(
 
 export type ZeroproofEspnLeagueHealth = InferSelectModel<typeof zeroproofEspnLeagueHealth>;
 export type NewZeroproofEspnLeagueHealth = InferInsertModel<typeof zeroproofEspnLeagueHealth>;
+
+// ── zeroproof_ingest_health ──────────────────────────────────────────────────
+// Real-sports ingestion health per (source, stage): a sport key and whether it's
+// the 'odds' sync or the 'results' settle. Written by the crons, read by the ops
+// admin page.
+export const zeroproofIngestHealth = pgTable(
+  "zeroproof_ingest_health",
+  {
+    source: text("source").notNull(),
+    stage: text("stage").notNull(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+    lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+    lastError: text("last_error"),
+  },
+  (t) => [primaryKey({ columns: [t.source, t.stage] })],
+);
+
+export type ZeroproofIngestHealth = InferSelectModel<typeof zeroproofIngestHealth>;
+export type NewZeroproofIngestHealth = InferInsertModel<typeof zeroproofIngestHealth>;

@@ -78,4 +78,19 @@ describe('The Odds API provider', () => {
     // The reachable sport still produces events; the failing one is skipped.
     expect(events.length).toBeGreaterThan(0);
   });
+
+  test('reports each sport outcome to onOutcome — null when ok, the error when not', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(V4_PAYLOAD), { status: 200 }))
+      .mockResolvedValueOnce(new Response('quota', { status: 429 }));
+    const outcomes: { key: string; error: string | null }[] = [];
+    await new TheOddsApiProvider('test-key', 'us', (o) => outcomes.push(o)).getOdds([
+      'baseball_mlb',
+      'basketball_nba',
+    ]);
+    expect(outcomes).toEqual([
+      { key: 'baseball_mlb', error: null },
+      { key: 'basketball_nba', error: expect.stringContaining('429') },
+    ]);
+  });
 });

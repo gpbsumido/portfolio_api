@@ -7,6 +7,7 @@
 // later fallback and lives behind the same interface, matched by team + time.)
 
 import type { NormalizedResult, ResultsProvider } from './types.js';
+import type { IngestOutcome } from './theOddsApi.js';
 import { createModuleLogger } from '../../../shared/utils/logger.js';
 
 const log = createModuleLogger('the-odds-api-results');
@@ -31,6 +32,7 @@ export class TheOddsApiResultsProvider implements ResultsProvider {
   constructor(
     private readonly apiKey: string,
     private readonly daysFrom = 1,
+    private readonly onOutcome?: (outcome: IngestOutcome) => void,
   ) {
     if (!apiKey) throw new Error('TheOddsApiResultsProvider requires an API key');
   }
@@ -52,8 +54,10 @@ export class TheOddsApiResultsProvider implements ResultsProvider {
           const normalized = normalize(event);
           if (normalized) all.push(normalized);
         }
+        this.onOutcome?.({ key: sportKey, error: null });
       } catch (err) {
         log.warn({ err, sport: sportKey }, 'skipping sport whose scores failed to fetch');
+        this.onOutcome?.({ key: sportKey, error: err instanceof Error ? err.message : String(err) });
       }
     }
     return all;

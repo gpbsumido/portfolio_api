@@ -21,6 +21,7 @@ import type {
   BetDto,
   EventDto,
   EventWithLines,
+  IngestHealthDto,
   LeagueDto,
   LeagueEspnLeagueDto,
   LeagueEspnLeagueRow,
@@ -372,6 +373,33 @@ export class ZeroproofController {
     try {
       await service.removeEspnLeague(param(req.params.id));
       res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/ingest-health — which sports/ESPN leagues are (not) resolving (admin). */
+  async ingestHealth(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const { sports, espnLeagues } = await service.getIngestHealth();
+      const dto: IngestHealthDto = {
+        sports: sports.map((r) => ({
+          source: r.source,
+          stage: r.stage,
+          lastCheckedAt: r.lastCheckedAt.toISOString(),
+          lastOkAt: r.lastOkAt ? r.lastOkAt.toISOString() : null,
+          lastError: r.lastError,
+        })),
+        espnLeagues: espnLeagues.map((r) => ({
+          game: r.game,
+          leagueId: r.leagueId,
+          season: r.season,
+          lastCheckedAt: r.lastCheckedAt.toISOString(),
+          lastOkAt: r.lastOkAt ? r.lastOkAt.toISOString() : null,
+          lastError: r.lastError,
+        })),
+      };
+      res.json(dto);
     } catch (err) {
       next(err);
     }

@@ -39,12 +39,16 @@ interface V4Event {
   bookmakers: V4Bookmaker[];
 }
 
+/** The outcome of trying to fetch one sport: the error, or null if it resolved. */
+export type IngestOutcome = { key: string; error: string | null };
+
 export class TheOddsApiProvider implements OddsProvider {
   readonly name = 'the-odds-api';
 
   constructor(
     private readonly apiKey: string,
     private readonly regions = 'us',
+    private readonly onOutcome?: (outcome: IngestOutcome) => void,
   ) {
     // Fail loud at construction rather than degrade to an empty slate later.
     if (!apiKey) throw new Error('TheOddsApiProvider requires an API key');
@@ -66,8 +70,10 @@ export class TheOddsApiProvider implements OddsProvider {
         }
         const events = (await res.json()) as V4Event[];
         for (const event of events) all.push(normalize(event));
+        this.onOutcome?.({ key: sportKey, error: null });
       } catch (err) {
         log.warn({ err, sport: sportKey }, 'skipping sport whose odds failed to fetch');
+        this.onOutcome?.({ key: sportKey, error: err instanceof Error ? err.message : String(err) });
       }
     }
     return all;
