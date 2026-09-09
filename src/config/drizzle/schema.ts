@@ -578,6 +578,11 @@ export const zeroproofLeagues = pgTable("zeroproof_leagues", {
   // 'open' | 'settled'
   status: text("status").notNull().default("open"),
   winnerSub: text("winner_sub"),
+  // Set together to bind the league to one ESPN fantasy league: its members then
+  // only bet that league's matchups. All null on an unbound league.
+  espnGame: text("espn_game"),
+  espnLeagueId: text("espn_league_id"),
+  espnSeason: text("espn_season"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   settledAt: timestamp("settled_at", { withTimezone: true }),
 });

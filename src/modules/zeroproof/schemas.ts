@@ -48,6 +48,11 @@ export const createLeagueSchema = z.object({
   winCondition: winConditionSchema,
   thresholdCents: z.number().int().positive().optional(),
   endsAt: z.string().datetime().optional(),
+  // Optional ESPN binding — set all three to restrict the league to one ESPN
+  // fantasy league's matchups. The service enforces all-or-nothing.
+  espnGame: z.string().min(1).max(8).optional(),
+  espnLeagueId: z.string().min(1).max(40).optional(),
+  espnSeason: z.string().regex(/^\d{4}$/).optional(),
 });
 
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
