@@ -9,6 +9,7 @@ import {
   normalizeResults,
   parseLeagueSpec,
   PICK_EM_PRICE_AMERICAN,
+  priceFromWinProbability,
   teamName,
 } from './espnFantasy.js';
 import { EspnFantasyResultsProvider } from './espnFantasyResults.js';
@@ -27,7 +28,7 @@ const LEAGUE: EspnLeague = {
   ],
   schedule: [
     { id: 1, matchupPeriodId: 1, winner: 'HOME', home: { teamId: 1, totalPoints: 125.0 }, away: { teamId: 2, totalPoints: 86.1 } },
-    { id: 2, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0 }, away: { teamId: 3, totalPoints: 0 } },
+    { id: 2, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0, winProbability: 0.6 }, away: { teamId: 3, totalPoints: 0, winProbability: 0.4 } },
     { id: 3, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 2, totalPoints: 0 }, away: { teamId: 4, totalPoints: 0 } },
     { id: 4, matchupPeriodId: 3, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0 }, away: { teamId: 4, totalPoints: 0 } },
   ],
@@ -54,7 +55,17 @@ describe('ESPN fantasy — pure normalization', () => {
     expect(currentBettableWeek({ ...LEAGUE, schedule: LEAGUE.schedule.slice(0, 1) })).toBeNull();
   });
 
-  test('normalizeMatchups yields the current week as pick’em h2h events', () => {
+  test('priceFromWinProbability gives fair odds, and pick’em when it’s missing', () => {
+    expect(priceFromWinProbability(0.6)).toBe(-150); // favourite
+    expect(priceFromWinProbability(0.4)).toBe(150); // underdog
+    expect(priceFromWinProbability(0.5)).toBe(-100); // even
+    expect(priceFromWinProbability(undefined)).toBe(PICK_EM_PRICE_AMERICAN);
+    expect(priceFromWinProbability(0)).toBe(PICK_EM_PRICE_AMERICAN);
+    expect(priceFromWinProbability(1)).toBe(PICK_EM_PRICE_AMERICAN);
+    expect(priceFromWinProbability(0.999)).toBe(priceFromWinProbability(0.95)); // clamped
+  });
+
+  test('normalizeMatchups prices each side off ESPN’s win probability, pick’em as fallback', () => {
     const events = normalizeMatchups(LEAGUE, SPEC, NOW);
     expect(events).toHaveLength(2);
     const first = events[0];
@@ -63,14 +74,20 @@ describe('ESPN fantasy — pure normalization', () => {
     expect(first.home).toBe('Team Binish');
     expect(first.away).toBe('RAW');
     expect(first.commenceTime.getTime()).toBe(NOW.getTime() + 48 * 60 * 60 * 1000);
+    // matchup 2 has a 0.6/0.4 win probability → -150 / +150
     expect(first.markets).toEqual([
       {
         market: 'h2h',
         outcomes: [
-          { name: 'Team Binish', priceAmerican: PICK_EM_PRICE_AMERICAN },
-          { name: 'RAW', priceAmerican: PICK_EM_PRICE_AMERICAN },
+          { name: 'Team Binish', priceAmerican: -150 },
+          { name: 'RAW', priceAmerican: 150 },
         ],
       },
+    ]);
+    // matchup 3 has no win probability → pick'em on both sides
+    expect(events[1].markets[0].outcomes.map((o) => o.priceAmerican)).toEqual([
+      PICK_EM_PRICE_AMERICAN,
+      PICK_EM_PRICE_AMERICAN,
     ]);
   });
 
