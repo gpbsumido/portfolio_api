@@ -11,10 +11,13 @@ import {
   type ZeroproofWallet,
   zeroproofAccoladeAwards,
   type ZeroproofEspnLeague,
+  type ZeroproofEspnLeagueHealth,
+  type ZeroproofIngestHealth,
   type ZeroproofLeagueEspnLeague,
   zeroproofBets,
   zeroproofEspnLeagues,
   zeroproofEspnLeagueHealth,
+  zeroproofIngestHealth,
   zeroproofLeagueEspnLeagues,
   zeroproofEvents,
   zeroproofLeagueMembers,
@@ -1046,6 +1049,54 @@ export async function recordEspnLeagueHealth(
         });
     }
   });
+}
+
+/**
+ * Record the outcome of resolving each real-sports key this run, per stage
+ * ('odds' or 'results'). Same success/failure semantics as the ESPN health.
+ */
+export async function recordIngestHealth(
+  outcomes: { key: string; error: string | null }[],
+  stage: string,
+  now: Date,
+): Promise<void> {
+  if (outcomes.length === 0) return;
+  await db.transaction(async (tx) => {
+    for (const { key, error } of outcomes) {
+      await tx
+        .insert(zeroproofIngestHealth)
+        .values({
+          source: key,
+          stage,
+          lastCheckedAt: now,
+          lastOkAt: error === null ? now : null,
+          lastError: error,
+        })
+        .onConflictDoUpdate({
+          target: [zeroproofIngestHealth.source, zeroproofIngestHealth.stage],
+          set:
+            error === null
+              ? { lastCheckedAt: now, lastOkAt: now, lastError: null }
+              : { lastCheckedAt: now, lastError: error },
+        });
+    }
+  });
+}
+
+/** Every real-sports ingest-health row, for the ops admin page. */
+export async function listIngestHealth(): Promise<ZeroproofIngestHealth[]> {
+  return db
+    .select()
+    .from(zeroproofIngestHealth)
+    .orderBy(asc(zeroproofIngestHealth.source), asc(zeroproofIngestHealth.stage));
+}
+
+/** Every ESPN league health row, for the ops admin page (the league page reads per-league). */
+export async function listEspnLeagueHealth(): Promise<ZeroproofEspnLeagueHealth[]> {
+  return db
+    .select()
+    .from(zeroproofEspnLeagueHealth)
+    .orderBy(desc(zeroproofEspnLeagueHealth.lastCheckedAt));
 }
 
 /** The distinct `game:leagueId:season` keys added across every league, for ingestion. */

@@ -22,6 +22,8 @@ vi.mock('./repository.js', () => ({
   addEspnLeague: vi.fn(),
   removeEspnLeague: vi.fn(),
   listAllLeagueEspnLeagueKeys: vi.fn(),
+  listIngestHealth: vi.fn(),
+  listEspnLeagueHealth: vi.fn(),
 }));
 
 import zeroproofRouter from './routes.js';
@@ -88,6 +90,44 @@ describe('the ESPN league registry endpoints', () => {
     const res = await request(makeApp()).delete('/api/zeroproof/espn-leagues/reg-1');
     expect(res.status).toBe(204);
     expect(repo.removeEspnLeague).toHaveBeenCalledWith('reg-1');
+  });
+
+  test('GET ingest-health returns real-sports and ESPN resolution health', async () => {
+    vi.mocked(repo.listIngestHealth).mockResolvedValue([
+      {
+        source: 'basketball_nba',
+        stage: 'results',
+        lastCheckedAt: new Date('2026-09-09T00:00:00Z'),
+        lastOkAt: null,
+        lastError: 'The Odds API scores returned 429 for basketball_nba',
+      },
+    ] as never);
+    vi.mocked(repo.listEspnLeagueHealth).mockResolvedValue([
+      {
+        game: 'fba',
+        leagueId: '449389534',
+        season: '2027',
+        lastCheckedAt: new Date('2026-09-09T00:00:00Z'),
+        lastOkAt: new Date('2026-09-08T00:00:00Z'),
+        lastError: null,
+      },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/ingest-health');
+
+    expect(res.status).toBe(200);
+    expect(res.body.sports[0]).toMatchObject({
+      source: 'basketball_nba',
+      stage: 'results',
+      lastError: 'The Odds API scores returned 429 for basketball_nba',
+      lastOkAt: null,
+    });
+    expect(res.body.espnLeagues[0]).toMatchObject({
+      game: 'fba',
+      leagueId: '449389534',
+      season: '2027',
+      lastError: null,
+    });
   });
 });
 

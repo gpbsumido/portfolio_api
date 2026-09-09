@@ -113,6 +113,25 @@ export type LeagueEspnLeagueRow = ZeroproofLeagueEspnLeague & {
   lastError: string | null;
 };
 
+/** Ops view of ingestion health — real-sports per stage, plus ESPN leagues. */
+export interface IngestHealthDto {
+  sports: {
+    source: string;
+    stage: string;
+    lastCheckedAt: string;
+    lastOkAt: string | null;
+    lastError: string | null;
+  }[];
+  espnLeagues: {
+    game: string;
+    leagueId: string;
+    season: string;
+    lastCheckedAt: string;
+    lastOkAt: string | null;
+    lastError: string | null;
+  }[];
+}
+
 /** A league in full: rules, standings, and the caller's relationship to it. */
 export interface LeagueDetail {
   league: ZeroproofLeague;
