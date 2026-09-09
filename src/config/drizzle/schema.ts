@@ -11,6 +11,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -637,3 +638,22 @@ export const zeroproofLeagueEspnLeagues = pgTable("zeroproof_league_espn_leagues
 
 export type ZeroproofLeagueEspnLeague = InferSelectModel<typeof zeroproofLeagueEspnLeagues>;
 export type NewZeroproofLeagueEspnLeague = InferInsertModel<typeof zeroproofLeagueEspnLeagues>;
+
+// ── zeroproof_espn_league_health ─────────────────────────────────────────────
+// Resolution health per ESPN key (game:leagueId:season), recorded by the sync
+// cron, so a league page can show that an added ESPN league can't be reached.
+export const zeroproofEspnLeagueHealth = pgTable(
+  "zeroproof_espn_league_health",
+  {
+    game: text("game").notNull(),
+    leagueId: text("league_id").notNull(),
+    season: text("season").notNull(),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+    lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+    lastError: text("last_error"),
+  },
+  (t) => [primaryKey({ columns: [t.game, t.leagueId, t.season] })],
+);
+
+export type ZeroproofEspnLeagueHealth = InferSelectModel<typeof zeroproofEspnLeagueHealth>;
+export type NewZeroproofEspnLeagueHealth = InferInsertModel<typeof zeroproofEspnLeagueHealth>;

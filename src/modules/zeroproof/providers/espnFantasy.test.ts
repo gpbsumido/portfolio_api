@@ -165,4 +165,23 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
     await new EspnFantasyProvider({ swid: '{abc}', espnS2: 'xyz' }).getOdds(['ffl:1241838:2022']);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Cookie: 'SWID={abc}; espn_s2=xyz' } });
   });
+
+  test('reports each league resolution to onOutcome — null when ok, the error when not', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => LEAGUE } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 401 } as Response),
+    );
+    const outcomes: { key: string; error: string | null }[] = [];
+    await new EspnFantasyProvider({}, (o) => outcomes.push(o)).getOdds([
+      'ffl:1241838:2022',
+      'fba:999999:2027',
+    ]);
+    expect(outcomes).toEqual([
+      { key: 'ffl:1241838:2022', error: null },
+      { key: 'fba:999999:2027', error: expect.stringContaining('401') },
+    ]);
+  });
 });

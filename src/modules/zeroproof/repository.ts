@@ -14,6 +14,7 @@ import {
   type ZeroproofLeagueEspnLeague,
   zeroproofBets,
   zeroproofEspnLeagues,
+  zeroproofEspnLeagueHealth,
   zeroproofLeagueEspnLeagues,
   zeroproofEvents,
   zeroproofLeagueMembers,
@@ -35,7 +36,13 @@ import {
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
 import type { Grade } from './settlement.js';
-import type { EventWithLines, LeagueListItem, WalletMode, WalletWithBalance } from './types.js';
+import type {
+  EventWithLines,
+  LeagueEspnLeagueRow,
+  LeagueListItem,
+  WalletMode,
+  WalletWithBalance,
+} from './types.js';
 
 interface OpenWalletInput {
   userSub: string;
@@ -971,15 +978,74 @@ export async function removeEspnLeague(id: string): Promise<void> {
 // Per-league ESPN leagues (commissioner-added, additive)
 // ---------------------------------------------------------------------------
 
-/** The ESPN leagues a ZeroProof league's commissioner has added, newest first. */
+/** The ESPN leagues a ZeroProof league's commissioner has added, newest first, with health. */
 export async function listLeagueEspnLeagues(
   leagueId: string,
-): Promise<ZeroproofLeagueEspnLeague[]> {
+): Promise<LeagueEspnLeagueRow[]> {
   return db
-    .select()
+    .select({
+      id: zeroproofLeagueEspnLeagues.id,
+      leagueId: zeroproofLeagueEspnLeagues.leagueId,
+      game: zeroproofLeagueEspnLeagues.game,
+      espnLeagueId: zeroproofLeagueEspnLeagues.espnLeagueId,
+      season: zeroproofLeagueEspnLeagues.season,
+      label: zeroproofLeagueEspnLeagues.label,
+      createdAt: zeroproofLeagueEspnLeagues.createdAt,
+      lastCheckedAt: zeroproofEspnLeagueHealth.lastCheckedAt,
+      lastOkAt: zeroproofEspnLeagueHealth.lastOkAt,
+      lastError: zeroproofEspnLeagueHealth.lastError,
+    })
     .from(zeroproofLeagueEspnLeagues)
+    .leftJoin(
+      zeroproofEspnLeagueHealth,
+      and(
+        eq(zeroproofEspnLeagueHealth.game, zeroproofLeagueEspnLeagues.game),
+        eq(zeroproofEspnLeagueHealth.leagueId, zeroproofLeagueEspnLeagues.espnLeagueId),
+        eq(zeroproofEspnLeagueHealth.season, zeroproofLeagueEspnLeagues.season),
+      ),
+    )
     .where(eq(zeroproofLeagueEspnLeagues.leagueId, leagueId))
     .orderBy(desc(zeroproofLeagueEspnLeagues.createdAt));
+}
+
+/**
+ * Record the outcome of resolving each ESPN key this sync. Keyed by the ESPN key
+ * (game:leagueId:season) so the same league's health is stored once wherever it's
+ * referenced. A success stamps last_ok_at and clears the error; a failure stamps
+ * last_checked_at and the error but leaves last_ok_at as the last time it worked.
+ */
+export async function recordEspnLeagueHealth(
+  outcomes: { key: string; error: string | null }[],
+  now: Date,
+): Promise<void> {
+  if (outcomes.length === 0) return;
+  await db.transaction(async (tx) => {
+    for (const { key, error } of outcomes) {
+      const [game, leagueId, season] = key.split(':');
+      if (!game || !leagueId || !season) continue;
+      await tx
+        .insert(zeroproofEspnLeagueHealth)
+        .values({
+          game,
+          leagueId,
+          season,
+          lastCheckedAt: now,
+          lastOkAt: error === null ? now : null,
+          lastError: error,
+        })
+        .onConflictDoUpdate({
+          target: [
+            zeroproofEspnLeagueHealth.game,
+            zeroproofEspnLeagueHealth.leagueId,
+            zeroproofEspnLeagueHealth.season,
+          ],
+          set:
+            error === null
+              ? { lastCheckedAt: now, lastOkAt: now, lastError: null }
+              : { lastCheckedAt: now, lastError: error },
+        });
+    }
+  });
 }
 
 /** The distinct `game:leagueId:season` keys added across every league, for ingestion. */

@@ -687,3 +687,11 @@ export async function removeLeagueEspnLeague(callerSub: string, leagueId: string
 export function resolveEspnCookies(): EspnCookies {
   return { swid: process.env.ESPN_SWID, espnS2: process.env.ESPN_S2 };
 }
+
+/** Persist each ESPN key's resolution outcome from a sync run (health for the league page). */
+export function recordEspnLeagueHealth(
+  outcomes: { key: string; error: string | null }[],
+  now: Date,
+) {
+  return repo.recordEspnLeagueHealth(outcomes, now);
+}
