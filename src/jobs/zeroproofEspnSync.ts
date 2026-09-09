@@ -11,15 +11,15 @@
 
 import { pool } from '../config/database.js';
 import { EspnFantasyProvider } from '../modules/zeroproof/providers/espnFantasy.js';
-import { resolveEspnCookies, resolveEspnLeagues, syncOdds } from '../modules/zeroproof/service.js';
+import { resolveEspnCookies, resolveEspnLeagueKeys, syncOdds } from '../modules/zeroproof/service.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
 
 const log = createModuleLogger('zeroproof-espn-sync');
 
 export async function zeroproofEspnSync(): Promise<void> {
-  const leagues = resolveEspnLeagues();
+  const leagues = await resolveEspnLeagueKeys();
   if (leagues.length === 0) {
-    log.info('no ESPN_FANTASY_LEAGUES configured, skipping');
+    log.info('no ESPN leagues configured (registry or ESPN_FANTASY_LEAGUES), skipping');
     return;
   }
   const provider = new EspnFantasyProvider(resolveEspnCookies());

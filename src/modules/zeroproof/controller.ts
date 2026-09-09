@@ -5,7 +5,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
 import type { ZeroproofBet } from '../../config/drizzle/schema.js';
-import type { CreateLeagueInput, JoinLeagueInput, OpenWalletInput, PlaceBetInput } from './schemas.js';
+import type {
+  AddEspnLeagueInput,
+  CreateLeagueInput,
+  JoinLeagueInput,
+  OpenWalletInput,
+  PlaceBetInput,
+} from './schemas.js';
 import * as service from './service.js';
 import type {
   BetDto,
@@ -286,6 +292,35 @@ export class ZeroproofController {
       const { joinCode } = req.body as JoinLeagueInput;
       const result = await service.joinLeague(requireSub(req), param(req.params.id), joinCode);
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/espn-leagues — the registered ESPN leagues (admin). */
+  async listEspnLeagues(_req: Request, res: Response, next: NextFunction) {
+    try {
+      res.json({ leagues: await service.listEspnLeagues() });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/zeroproof/espn-leagues — register a league for ingestion (admin). */
+  async addEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      const league = await service.addEspnLeague(req.body as AddEspnLeagueInput);
+      res.status(201).json({ league });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /api/zeroproof/espn-leagues/:id — unregister a league (admin). */
+  async removeEspnLeague(req: Request, res: Response, next: NextFunction) {
+    try {
+      await service.removeEspnLeague(param(req.params.id));
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

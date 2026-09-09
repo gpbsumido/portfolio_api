@@ -606,3 +606,18 @@ export const zeroproofLeagueMembers = pgTable("zeroproof_league_members", {
 
 export type ZeroproofLeagueMember = InferSelectModel<typeof zeroproofLeagueMembers>;
 export type NewZeroproofLeagueMember = InferInsertModel<typeof zeroproofLeagueMembers>;
+
+// ── zeroproof_espn_leagues ───────────────────────────────────────────────────
+// The ESPN fantasy leagues to ingest, as data — so a league is added without a
+// redeploy. The sync/settle crons read this unioned with the env fallback.
+export const zeroproofEspnLeagues = pgTable("zeroproof_espn_leagues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  game: text("game").notNull(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ZeroproofEspnLeague = InferSelectModel<typeof zeroproofEspnLeagues>;
+export type NewZeroproofEspnLeague = InferInsertModel<typeof zeroproofEspnLeagues>;
