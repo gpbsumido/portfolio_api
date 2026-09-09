@@ -20,6 +20,9 @@ import type {
   NormalizedResult,
   OddsProvider,
 } from './types.js';
+import { createModuleLogger } from '../../../shared/utils/logger.js';
+
+const log = createModuleLogger('espn-fantasy-provider');
 
 const HOST = 'https://lm-api-reads.fantasy.espn.com';
 
@@ -201,8 +204,9 @@ export function cookieHeader(cookies: EspnCookies): string | undefined {
 
 /**
  * Fetch one league's matchup + team data. A private league without cookies is
- * 401 AUTH_LEAGUE_NOT_VISIBLE; a wrong game/season is 404. Either way the caller
- * must see the error, not a silently empty slate.
+ * 401 AUTH_LEAGUE_NOT_VISIBLE; a wrong game/season is 404. It throws on a
+ * non-2xx; the batch loop (`fetchLeagueOrSkip`) decides whether one league's
+ * failure should sink the rest — it doesn't.
  */
 export async function fetchEspnLeague(spec: LeagueSpec, cookies: EspnCookies): Promise<EspnLeague> {
   const cookie = cookieHeader(cookies);
@@ -215,6 +219,26 @@ export async function fetchEspnLeague(spec: LeagueSpec, cookies: EspnCookies): P
   return (await res.json()) as EspnLeague;
 }
 
+/**
+ * Fetch one league for a batch, or null if it can't be reached. A single
+ * private, misconfigured, or momentarily-down league must not sink a whole sync
+ * or settle — it's logged and skipped, and the idempotent run picks it up on the
+ * next pass once it's reachable. A malformed key is skipped the same way.
+ */
+export async function fetchLeagueOrSkip(
+  sportKey: string,
+  cookies: EspnCookies,
+): Promise<{ spec: LeagueSpec; league: EspnLeague } | null> {
+  try {
+    const spec = parseLeagueSpec(sportKey);
+    const league = await fetchEspnLeague(spec, cookies);
+    return { spec, league };
+  } catch (err) {
+    log.warn({ err, league: sportKey }, 'skipping ESPN league that failed to fetch');
+    return null;
+  }
+}
+
 export class EspnFantasyProvider implements OddsProvider {
   readonly name = 'espn-fantasy';
 
@@ -224,9 +248,9 @@ export class EspnFantasyProvider implements OddsProvider {
     const now = new Date();
     const all: NormalizedEvent[] = [];
     for (const sportKey of sportKeys) {
-      const spec = parseLeagueSpec(sportKey);
-      const league = await fetchEspnLeague(spec, this.cookies);
-      all.push(...normalizeMatchups(league, spec, now));
+      const fetched = await fetchLeagueOrSkip(sportKey, this.cookies);
+      if (!fetched) continue;
+      all.push(...normalizeMatchups(fetched.league, fetched.spec, now));
     }
     return all;
   }

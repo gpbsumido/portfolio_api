@@ -8,7 +8,7 @@
 // side wrote — settlement matches on both.
 
 import type { NormalizedResult, ResultsProvider } from './types.js';
-import { type EspnCookies, fetchEspnLeague, normalizeResults, parseLeagueSpec } from './espnFantasy.js';
+import { type EspnCookies, fetchLeagueOrSkip, normalizeResults } from './espnFantasy.js';
 
 export class EspnFantasyResultsProvider implements ResultsProvider {
   readonly name = 'espn-fantasy';
@@ -18,9 +18,9 @@ export class EspnFantasyResultsProvider implements ResultsProvider {
   async getResults(sportKeys: string[]): Promise<NormalizedResult[]> {
     const all: NormalizedResult[] = [];
     for (const sportKey of sportKeys) {
-      const spec = parseLeagueSpec(sportKey);
-      const league = await fetchEspnLeague(spec, this.cookies);
-      all.push(...normalizeResults(league, spec));
+      const fetched = await fetchLeagueOrSkip(sportKey, this.cookies);
+      if (!fetched) continue;
+      all.push(...normalizeResults(fetched.league, fetched.spec));
     }
     return all;
   }
