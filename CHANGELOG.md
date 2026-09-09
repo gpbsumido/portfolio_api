@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-09 - version 5.17.0
+
+- **Ops visibility into real-sports ingestion failures.** After the per-sport resilience fix, a sport that can't sync odds or fetch scores is skipped silently (just a log line). Now the sync and settle crons record each sport's outcome per stage in a new `zeroproof_ingest_health` table (migration 043, keyed by `(source, stage)` — `stage` is 'odds' or 'results', because a sport can post lines but fail to return scores), via the same observer pattern as the ESPN health. A new admin endpoint `GET /api/zeroproof/ingest-health` returns the real-sports health alongside the ESPN league health, so an operator has one consolidated view of what isn't resolving and why. Covered by tests: the odds provider reports each sport's outcome to the observer, and the endpoint returns both real-sports and ESPN health.
+
 ## 2026-09-09 - version 5.16.1
 
 - **One failing sport no longer sinks the whole real-sports sync or settle.** Same defect the ESPN providers had: The Odds API odds and `/scores` providers looped their sports and let a single sport's non-2xx (a quota blip, a transient 5xx) throw and abort the batch — so one bad sport failed the entire `zeroproof-odds-sync` / `zeroproof-settle` cron and no bets graded. Each sport is now isolated: a failed fetch is logged and skipped, the reachable sports still post lines and settle, and the idempotent run picks the skipped one up next pass. Served-from-DB reads keep the last good slate meanwhile. Covered by tests on both providers: a non-2xx sport resolves to empty rather than throwing, and one bad sport among several doesn't drop the others.
