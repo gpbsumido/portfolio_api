@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-09 - version 5.15.1
+
+- **One bad ESPN league no longer sinks the whole sync/settle.** The ESPN odds and results providers looped their configured leagues and let a single league's fetch error abort the batch — so one private, misconfigured, or momentarily-down league (e.g. a `401 AUTH_LEAGUE_NOT_VISIBLE` or an off-season `404`) failed the entire `zeroproof-espn-settle` / `zeroproof-espn-sync` cron, and no league settled. A new `fetchLeagueOrSkip` helper catches a per-league failure, logs a warning naming the league, and skips it — the reachable leagues still sync and settle, and the idempotent run picks the skipped one up once it's fixed. Covered by tests: a non-2xx league resolves to empty rather than throwing, and one bad league among several doesn't drop the others.
+
 ## 2026-09-08 - version 5.15.0
 
 - **A league commissioner adds public ESPN leagues their members can bet — additive, not restrictive.** This replaces the old bind, where a bound league could *only* bet its one ESPN league. A commissioner now adds one or more public ESPN leagues to their ZeroProof league (`POST /api/zeroproof/leagues/:id/espn-leagues`, `DELETE .../:espnId`, both commissioner-gated), each held in a new `zeroproof_league_espn_leagues` table (migration 041). The added leagues' matchups start ingesting for the board — their keys are unioned into `resolveEspnLeagueKeys` alongside the admin registry and the env fallback — and members bet them plus everything else. The league detail returns its `espnLeagues`.
