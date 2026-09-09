@@ -21,8 +21,10 @@ import type {
   BetDto,
   EventDto,
   EventWithLines,
+  IngestHealthDto,
   LeagueDto,
   LeagueEspnLeagueDto,
+  LeagueEspnLeagueRow,
   LeagueListItem,
   LeagueStanding,
   LeagueStandingDto,
@@ -108,7 +110,12 @@ function toStandingDto(s: LeagueStanding): LeagueStandingDto {
   };
 }
 
-function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeagueDto {
+// Accepts a plain row (freshly added — no health yet) or one enriched with
+// health from the detail query; a row with no health reads as "not checked yet".
+function toLeagueEspnLeagueDto(
+  row: ZeroproofLeagueEspnLeague &
+    Partial<Pick<LeagueEspnLeagueRow, 'lastCheckedAt' | 'lastOkAt' | 'lastError'>>,
+): LeagueEspnLeagueDto {
   return {
     id: row.id,
     game: row.game,
@@ -116,6 +123,9 @@ function toLeagueEspnLeagueDto(row: ZeroproofLeagueEspnLeague): LeagueEspnLeague
     season: row.season,
     label: row.label,
     createdAt: row.createdAt.toISOString(),
+    lastCheckedAt: row.lastCheckedAt ? row.lastCheckedAt.toISOString() : null,
+    lastOkAt: row.lastOkAt ? row.lastOkAt.toISOString() : null,
+    lastError: row.lastError ?? null,
   };
 }
 
@@ -363,6 +373,33 @@ export class ZeroproofController {
     try {
       await service.removeEspnLeague(param(req.params.id));
       res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/ingest-health — which sports/ESPN leagues are (not) resolving (admin). */
+  async ingestHealth(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const { sports, espnLeagues } = await service.getIngestHealth();
+      const dto: IngestHealthDto = {
+        sports: sports.map((r) => ({
+          source: r.source,
+          stage: r.stage,
+          lastCheckedAt: r.lastCheckedAt.toISOString(),
+          lastOkAt: r.lastOkAt ? r.lastOkAt.toISOString() : null,
+          lastError: r.lastError,
+        })),
+        espnLeagues: espnLeagues.map((r) => ({
+          game: r.game,
+          leagueId: r.leagueId,
+          season: r.season,
+          lastCheckedAt: r.lastCheckedAt.toISOString(),
+          lastOkAt: r.lastOkAt ? r.lastOkAt.toISOString() : null,
+          lastError: r.lastError,
+        })),
+      };
+      res.json(dto);
     } catch (err) {
       next(err);
     }

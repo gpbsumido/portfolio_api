@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-09 - version 5.17.0
+
+- **Ops visibility into real-sports ingestion failures.** After the per-sport resilience fix, a sport that can't sync odds or fetch scores is skipped silently (just a log line). Now the sync and settle crons record each sport's outcome per stage in a new `zeroproof_ingest_health` table (migration 043, keyed by `(source, stage)` — `stage` is 'odds' or 'results', because a sport can post lines but fail to return scores), via the same observer pattern as the ESPN health. A new admin endpoint `GET /api/zeroproof/ingest-health` returns the real-sports health alongside the ESPN league health, so an operator has one consolidated view of what isn't resolving and why. Covered by tests: the odds provider reports each sport's outcome to the observer, and the endpoint returns both real-sports and ESPN health.
+
+## 2026-09-09 - version 5.16.1
+
+- **One failing sport no longer sinks the whole real-sports sync or settle.** Same defect the ESPN providers had: The Odds API odds and `/scores` providers looped their sports and let a single sport's non-2xx (a quota blip, a transient 5xx) throw and abort the batch — so one bad sport failed the entire `zeroproof-odds-sync` / `zeroproof-settle` cron and no bets graded. Each sport is now isolated: a failed fetch is logged and skipped, the reachable sports still post lines and settle, and the idempotent run picks the skipped one up next pass. Served-from-DB reads keep the last good slate meanwhile. Covered by tests on both providers: a non-2xx sport resolves to empty rather than throwing, and one bad sport among several doesn't drop the others.
+
+## 2026-09-09 - version 5.16.0
+
+- **A league can see when one of its ESPN leagues can't be resolved.** After the resilience fix, a commissioner's misconfigured ESPN league (private, wrong id/season, ESPN down) just silently never appeared. Now the ESPN sync cron records each key's resolution outcome in a new `zeroproof_espn_league_health` table (migration 042) — keyed by the ESPN key `game:leagueId:season`, so health is stored once wherever the key is referenced — via an observer threaded through the fetch, so it costs no extra call. The league detail left-joins it and returns `lastCheckedAt` / `lastOkAt` / `lastError` on each added ESPN league (null = not synced yet), so the page can show which one is failing and why. Covered by tests: the provider reports each resolution to the observer (null when ok, the error when not), and the detail surfaces the health on the DTO.
+
+## 2026-09-09 - version 5.15.1
+
+- **One bad ESPN league no longer sinks the whole sync/settle.** The ESPN odds and results providers looped their configured leagues and let a single league's fetch error abort the batch — so one private, misconfigured, or momentarily-down league (e.g. a `401 AUTH_LEAGUE_NOT_VISIBLE` or an off-season `404`) failed the entire `zeroproof-espn-settle` / `zeroproof-espn-sync` cron, and no league settled. A new `fetchLeagueOrSkip` helper catches a per-league failure, logs a warning naming the league, and skips it — the reachable leagues still sync and settle, and the idempotent run picks the skipped one up once it's fixed. Covered by tests: a non-2xx league resolves to empty rather than throwing, and one bad league among several doesn't drop the others.
+
 ## 2026-09-08 - version 5.15.0
 
 - **A league commissioner adds public ESPN leagues their members can bet — additive, not restrictive.** This replaces the old bind, where a bound league could *only* bet its one ESPN league. A commissioner now adds one or more public ESPN leagues to their ZeroProof league (`POST /api/zeroproof/leagues/:id/espn-leagues`, `DELETE .../:espnId`, both commissioner-gated), each held in a new `zeroproof_league_espn_leagues` table (migration 041). The added leagues' matchups start ingesting for the board — their keys are unioned into `resolveEspnLeagueKeys` alongside the admin registry and the env fallback — and members bet them plus everything else. The league detail returns its `espnLeagues`.

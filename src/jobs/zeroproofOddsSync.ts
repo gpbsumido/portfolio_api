@@ -12,7 +12,9 @@
 // ---------------------------------------------------------------------------
 
 import { pool } from '../config/database.js';
+import type { IngestOutcome } from '../modules/zeroproof/providers/theOddsApi.js';
 import {
+  recordIngestHealth,
   resolveOddsProvider,
   resolveSportKeys,
   syncOdds,
@@ -22,13 +24,17 @@ import { createModuleLogger } from '../shared/utils/logger.js';
 const log = createModuleLogger('zeroproof-odds-sync');
 
 export async function zeroproofOddsSync(): Promise<void> {
-  const provider = resolveOddsProvider();
+  // Observe each sport's odds fetch so the ops page can show which sports aren't
+  // getting lines. Fixtures never emits; only the-odds-api provider does.
+  const outcomes: IngestOutcome[] = [];
+  const provider = resolveOddsProvider((o) => outcomes.push(o));
   const sportKeys = resolveSportKeys();
   log.info({ provider: provider.name, sportKeys }, 'syncing ZeroProof odds');
 
   const summary = await syncOdds(provider, sportKeys);
+  await recordIngestHealth(outcomes, 'odds', new Date());
 
-  log.info(summary, 'ZeroProof odds sync complete');
+  log.info({ ...summary, checked: outcomes.length }, 'ZeroProof odds sync complete');
 }
 
 // Allow `node dist/jobs/zeroproofOddsSync.js` as a standalone cron invocation.

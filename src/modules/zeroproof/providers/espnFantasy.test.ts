@@ -134,9 +134,29 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
     expect(results[0].completed).toBe(true);
   });
 
-  test('a non-2xx (private league without cookies, or bad season) throws', async () => {
+  test('a league that fails to fetch is skipped, not thrown (cron survives)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 } as Response));
-    await expect(new EspnFantasyProvider().getOdds(['ffl:1241838:2022'])).rejects.toThrow(/401/);
+    // A private/misconfigured league returning non-2xx must not sink the run.
+    await expect(
+      new EspnFantasyProvider().getOdds(['ffl:1241838:2022']),
+    ).resolves.toEqual([]);
+  });
+
+  test('one bad league does not sink the others', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => LEAGUE } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 500 } as Response),
+    );
+    const results = await new EspnFantasyResultsProvider().getResults([
+      'ffl:1241838:2022',
+      'fba:999999:2027',
+    ]);
+    // The good league still settles; the failing one is skipped.
+    expect(results).toHaveLength(1);
+    expect(results[0].completed).toBe(true);
   });
 
   test('the private-league cookies reach the request as a Cookie header', async () => {
@@ -144,5 +164,24 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
     vi.stubGlobal('fetch', fetchMock);
     await new EspnFantasyProvider({ swid: '{abc}', espnS2: 'xyz' }).getOdds(['ffl:1241838:2022']);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Cookie: 'SWID={abc}; espn_s2=xyz' } });
+  });
+
+  test('reports each league resolution to onOutcome — null when ok, the error when not', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => LEAGUE } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 401 } as Response),
+    );
+    const outcomes: { key: string; error: string | null }[] = [];
+    await new EspnFantasyProvider({}, (o) => outcomes.push(o)).getOdds([
+      'ffl:1241838:2022',
+      'fba:999999:2027',
+    ]);
+    expect(outcomes).toEqual([
+      { key: 'ffl:1241838:2022', error: null },
+      { key: 'fba:999999:2027', error: expect.stringContaining('401') },
+    ]);
   });
 });

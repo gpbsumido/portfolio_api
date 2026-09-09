@@ -3,6 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import type { MarketKey, NormalizedEvent, NormalizedMarket, OddsProvider } from './types.js';
+import { createModuleLogger } from '../../../shared/utils/logger.js';
+
+const log = createModuleLogger('the-odds-api');
 
 const BASE = 'https://api.the-odds-api.com/v4';
 const MARKETS_PARAM = 'h2h,spreads,totals';
@@ -36,12 +39,16 @@ interface V4Event {
   bookmakers: V4Bookmaker[];
 }
 
+/** The outcome of trying to fetch one sport: the error, or null if it resolved. */
+export type IngestOutcome = { key: string; error: string | null };
+
 export class TheOddsApiProvider implements OddsProvider {
   readonly name = 'the-odds-api';
 
   constructor(
     private readonly apiKey: string,
     private readonly regions = 'us',
+    private readonly onOutcome?: (outcome: IngestOutcome) => void,
   ) {
     // Fail loud at construction rather than degrade to an empty slate later.
     if (!apiKey) throw new Error('TheOddsApiProvider requires an API key');
@@ -50,17 +57,24 @@ export class TheOddsApiProvider implements OddsProvider {
   async getOdds(sportKeys: string[]): Promise<NormalizedEvent[]> {
     const all: NormalizedEvent[] = [];
     for (const sportKey of sportKeys) {
-      const url =
-        `${BASE}/sports/${sportKey}/odds` +
-        `?apiKey=${this.apiKey}&regions=${this.regions}&markets=${MARKETS_PARAM}&oddsFormat=american`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        // A dead vendor or exhausted quota is an error the caller must see, not
-        // a silently empty slate that reads as "no games today".
-        throw new Error(`The Odds API returned ${res.status} for ${sportKey}`);
+      // One sport failing (a dead vendor, an exhausted quota, a transient 5xx)
+      // must not sink the whole sync — skip it, log it, and let the reachable
+      // sports post their lines. Served-from-DB reads keep the last good slate.
+      try {
+        const url =
+          `${BASE}/sports/${sportKey}/odds` +
+          `?apiKey=${this.apiKey}&regions=${this.regions}&markets=${MARKETS_PARAM}&oddsFormat=american`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`The Odds API returned ${res.status} for ${sportKey}`);
+        }
+        const events = (await res.json()) as V4Event[];
+        for (const event of events) all.push(normalize(event));
+        this.onOutcome?.({ key: sportKey, error: null });
+      } catch (err) {
+        log.warn({ err, sport: sportKey }, 'skipping sport whose odds failed to fetch');
+        this.onOutcome?.({ key: sportKey, error: err instanceof Error ? err.message : String(err) });
       }
-      const events = (await res.json()) as V4Event[];
-      for (const event of events) all.push(normalize(event));
     }
     return all;
   }

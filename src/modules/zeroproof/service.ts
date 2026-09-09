@@ -15,7 +15,7 @@ import {
 import { isBettable, isStale, maxOddsAgeMsFromMinutes, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
-import { TheOddsApiProvider } from './providers/theOddsApi.js';
+import { type IngestOutcome, TheOddsApiProvider } from './providers/theOddsApi.js';
 import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
 import type { EspnCookies } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
@@ -217,7 +217,7 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
  * would quietly turn a missing key into an empty slate. Defaults to fixtures
  * (zero credits), and the job logs which provider actually ran.
  */
-export function resolveOddsProvider(): OddsProvider {
+export function resolveOddsProvider(onOutcome?: (outcome: IngestOutcome) => void): OddsProvider {
   const choice = process.env.ZEROPROOF_ODDS_PROVIDER ?? 'fixtures';
   if (choice === 'fixtures') return fixturesProvider;
   if (choice === 'the-odds-api') {
@@ -225,7 +225,7 @@ export function resolveOddsProvider(): OddsProvider {
     if (!key) {
       throw new Error('ZEROPROOF_ODDS_PROVIDER=the-odds-api but ODDS_API_KEY is unset');
     }
-    return new TheOddsApiProvider(key);
+    return new TheOddsApiProvider(key, undefined, onOutcome);
   }
   throw new Error(`Unknown ZEROPROOF_ODDS_PROVIDER: ${choice}`);
 }
@@ -290,7 +290,9 @@ export async function bustEmptyChallengeWallets(): Promise<number> {
 }
 
 /** Choose the results provider from env — fixtures by default, never a silent swap. */
-export function resolveResultsProvider(): ResultsProvider {
+export function resolveResultsProvider(
+  onOutcome?: (outcome: IngestOutcome) => void,
+): ResultsProvider {
   const choice = process.env.ZEROPROOF_RESULTS_PROVIDER ?? 'fixtures';
   if (choice === 'fixtures') return fixturesResultsProvider;
   if (choice === 'the-odds-api') {
@@ -298,7 +300,7 @@ export function resolveResultsProvider(): ResultsProvider {
     if (!key) {
       throw new Error('ZEROPROOF_RESULTS_PROVIDER=the-odds-api but ODDS_API_KEY is unset');
     }
-    return new TheOddsApiResultsProvider(key);
+    return new TheOddsApiResultsProvider(key, undefined, onOutcome);
   }
   throw new Error(`Unknown ZEROPROOF_RESULTS_PROVIDER: ${choice}`);
 }
@@ -686,4 +688,30 @@ export async function removeLeagueEspnLeague(callerSub: string, leagueId: string
 /** ESPN auth cookies for private leagues, from env — both undefined for public leagues. */
 export function resolveEspnCookies(): EspnCookies {
   return { swid: process.env.ESPN_SWID, espnS2: process.env.ESPN_S2 };
+}
+
+/** Persist each ESPN key's resolution outcome from a sync run (health for the league page). */
+export function recordEspnLeagueHealth(
+  outcomes: { key: string; error: string | null }[],
+  now: Date,
+) {
+  return repo.recordEspnLeagueHealth(outcomes, now);
+}
+
+/** Persist each real-sports key's outcome from a sync/settle run, per stage. */
+export function recordIngestHealth(
+  outcomes: { key: string; error: string | null }[],
+  stage: 'odds' | 'results',
+  now: Date,
+) {
+  return repo.recordIngestHealth(outcomes, stage, now);
+}
+
+/** The ops view: real-sports ingest health plus ESPN league health, for the admin page. */
+export async function getIngestHealth() {
+  const [sports, espnLeagues] = await Promise.all([
+    repo.listIngestHealth(),
+    repo.listEspnLeagueHealth(),
+  ]);
+  return { sports, espnLeagues };
 }
