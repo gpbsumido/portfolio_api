@@ -56,6 +56,18 @@ export function isBettable(wallet: { status: string; lockEnd: Date }, now: Date)
   return wallet.status === 'active' && now < wallet.lockEnd;
 }
 
+/**
+ * An event takes bets only before its game is under way. The rule is uniform
+ * across sports: it must still be 'upcoming' and its start time must be in the
+ * future. Real fixtures carry a real `commenceTime`, so that check closes them.
+ * ESPN fantasy matchups carry a synthetic commence time that always sits in the
+ * future, so the sync flips their status to 'started' the moment points are
+ * scored — and that's what closes them here.
+ */
+export function isEventBettable(event: { status: string; commenceTime: Date }, now: Date): boolean {
+  return event.status === 'upcoming' && now < event.commenceTime;
+}
+
 /** The available-balance floor: a stake can't exceed what the wallet can cover. */
 export function canAfford(availableCents: number, stakeCents: number): boolean {
   return stakeCents <= availableCents;

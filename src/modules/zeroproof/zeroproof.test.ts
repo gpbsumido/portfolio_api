@@ -94,6 +94,14 @@ const bet = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const bettableEvent = (overrides: Record<string, unknown> = {}) => ({
+  providerKey: 'baseball_mlb:evt-1',
+  sport: 'baseball_mlb',
+  status: 'upcoming',
+  commenceTime: new Date('2099-01-01T00:00:00Z'),
+  ...overrides,
+});
+
 describe('placing a bet', () => {
   const body = {
     walletId: 'wallet-1',
@@ -102,6 +110,11 @@ describe('placing a bet', () => {
     selection: 'Boston Red Sox',
     stakeCents: 2500,
   };
+
+  beforeEach(() => {
+    // Default: the event is open. Tests about a started game override this.
+    vi.mocked(repo.getEventById).mockResolvedValue(bettableEvent() as never);
+  });
 
   test('places a bet at the current line and copies the odds onto it', async () => {
     vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
@@ -161,7 +174,9 @@ describe('placing a bet', () => {
       wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
     );
     vi.mocked(repo.getLeagueById).mockResolvedValue(boundLeague as never);
-    vi.mocked(repo.getEventById).mockResolvedValue({ providerKey: 'baseball_mlb:evt-9' } as never);
+    vi.mocked(repo.getEventById).mockResolvedValue(
+      bettableEvent({ providerKey: 'baseball_mlb:evt-9' }) as never,
+    );
     vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
     vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
 
@@ -176,9 +191,9 @@ describe('placing a bet', () => {
       wallet({ mode: 'league', leagueId: 'lg-1' }) as never,
     );
     vi.mocked(repo.getLeagueById).mockResolvedValue(boundLeague as never);
-    vi.mocked(repo.getEventById).mockResolvedValue({
-      providerKey: 'espn:ffl:2026:836777691:1:5-4',
-    } as never);
+    vi.mocked(repo.getEventById).mockResolvedValue(
+      bettableEvent({ providerKey: 'espn:ffl:2026:836777691:1:5-4', sport: 'fantasy_ffl' }) as never,
+    );
     vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
     vi.mocked(repo.placeBet).mockResolvedValue({ ok: true, bet: bet() } as never);
 
@@ -203,7 +218,7 @@ describe('placing a bet', () => {
     const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
 
     expect(res.status).toBe(201);
-    expect(repo.getEventById).not.toHaveBeenCalled();
+    expect(repo.placeBet).toHaveBeenCalled();
   });
 
   test('rejects a stake the wallet cannot afford with 402', async () => {

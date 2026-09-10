@@ -147,6 +147,9 @@ export function normalizeMatchups(
         { name: home, priceAmerican: priceFromWinProbability(homeSide.winProbability) },
         { name: away, priceAmerican: priceFromWinProbability(awaySide.winProbability) },
       ];
+      // Points on the board mean the week's games have started — no more betting
+      // it, even though the synthetic commence time still reads as upcoming.
+      const started = homeSide.totalPoints > 0 || awaySide.totalPoints > 0;
       return {
         providerKey: matchupProviderKey(spec, m),
         sport: `fantasy_${spec.game}`,
@@ -154,6 +157,7 @@ export function normalizeMatchups(
         away,
         commenceTime,
         markets: [{ market: 'h2h', outcomes }],
+        started,
       };
     });
 }
