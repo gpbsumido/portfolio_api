@@ -34,7 +34,7 @@ function param(val: string | string[]): string {
 /** The authenticated user's sub, or a 401 if the token somehow lacks one. */
 function requireSub(req: Request): string {
   const sub = (req as { auth?: { payload?: { sub?: string } } }).auth?.payload?.sub;
-  if (!sub) throw new UnauthorizedError('Missing user.');
+  if (!sub) throw new UnauthorizedError();
   return sub;
 }
 

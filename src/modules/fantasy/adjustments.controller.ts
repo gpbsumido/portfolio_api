@@ -37,7 +37,7 @@ export class AdjustmentsController {
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
       const { status } = req.body as PatchStatusBody;
       const row = await repo.setStatus(id, status);
-      if (!row) throw new NotFoundError('adjustment not found');
+      if (!row) throw new NotFoundError('Adjustment not found');
       res.json({ adjustment: toDto(row) });
     } catch (err) {
       next(err);

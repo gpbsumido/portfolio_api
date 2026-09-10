@@ -74,7 +74,7 @@ export function flagWriteAuth(
       // A wrong secret is a forgery attempt, not a signed-out visitor: say so
       // rather than falling through to the JWT path and reporting the wrong
       // thing.
-      res.status(401).json({ error: 'invalid flags service token' });
+      res.status(401).json({ error: 'Invalid flags service token' });
       return;
     }
 

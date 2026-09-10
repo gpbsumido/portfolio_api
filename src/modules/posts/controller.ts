@@ -81,7 +81,9 @@ export class PostsController {
       if (err.code === 'LIMIT_FILE_COUNT') {
         throw new ValidationError(`Maximum ${VIDEO_UPLOAD_LIMITS.files} files allowed`);
       }
-      throw new ValidationError(err.message);
+      throw new ValidationError(
+        'Your upload could not be read. Please check the file and try again.',
+      );
     }
 
     // Zod validation (after multer so req.body is populated)
@@ -91,7 +93,13 @@ export class PostsController {
         field: e.path.join('.'),
         message: e.message,
       }));
-      throw new ValidationError('Validation failed', details);
+      const first = details[0];
+      const summary = first
+        ? first.field
+          ? `${first.field}: ${first.message}`
+          : first.message
+        : 'Some of the post details are not valid';
+      throw new ValidationError(summary, details);
     }
     const validated = parseResult.data;
 

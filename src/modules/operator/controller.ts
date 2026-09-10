@@ -239,7 +239,7 @@ export class OperatorController {
   async getStore(req: Request, res: Response, next: NextFunction) {
     try {
       const store = await repo.getStore(param(req.params.storeId));
-      if (!store) throw new NotFoundError('store not found');
+      if (!store) throw new NotFoundError('Store not found');
       res.json({ store: toStoreDto(store) });
     } catch (err) {
       next(err);
@@ -272,7 +272,7 @@ export class OperatorController {
       const { itemIds } = req.body as RestockInput;
 
       const store = await repo.getStore(storeId);
-      if (!store) throw new NotFoundError('store not found');
+      if (!store) throw new NotFoundError('Store not found');
 
       const inventory = await repo.listInventory(storeId);
       const wanted = new Set(itemIds);
@@ -291,7 +291,7 @@ export class OperatorController {
       }
 
       const applied = await repo.completeSession(session.id, QUICK_FILL_NOTE);
-      if (!applied) throw new NotFoundError('restock session not found');
+      if (!applied) throw new NotFoundError('Restock session not found');
 
       res.json({
         items: applied.items.map(toInventoryDto),
@@ -307,7 +307,7 @@ export class OperatorController {
     try {
       const storeId = param(req.params.storeId);
       const store = await repo.getStore(storeId);
-      if (!store) throw new NotFoundError('store not found');
+      if (!store) throw new NotFoundError('Store not found');
 
       const session = await repo.openSession(storeId, actorOf(req));
       res.status(201).json({ session: toSessionDto(session) });
@@ -331,7 +331,7 @@ export class OperatorController {
     try {
       const sessionId = param(req.params.sessionId);
       const session = await repo.getSession(sessionId);
-      if (!session) throw new NotFoundError('restock session not found');
+      if (!session) throw new NotFoundError('Restock session not found');
 
       const lines = await repo.listSessionLines(sessionId);
       res.json({
@@ -348,9 +348,9 @@ export class OperatorController {
     try {
       const sessionId = param(req.params.sessionId);
       const session = await repo.getSession(sessionId);
-      if (!session) throw new NotFoundError('restock session not found');
+      if (!session) throw new NotFoundError('Restock session not found');
       if (session.completedAt) {
-        throw new ConflictError('restock session is already complete');
+        throw new ConflictError('Restock session is already complete');
       }
 
       const body = req.body as RestockLineInputBody;
@@ -383,14 +383,14 @@ export class OperatorController {
     try {
       const sessionId = param(req.params.sessionId);
       const session = await repo.getSession(sessionId);
-      if (!session) throw new NotFoundError('restock session not found');
+      if (!session) throw new NotFoundError('Restock session not found');
       if (session.completedAt) {
-        throw new ConflictError('restock session is already complete');
+        throw new ConflictError('Restock session is already complete');
       }
 
       const { notes } = req.body as CompleteSessionInput;
       const applied = await repo.completeSession(sessionId, notes);
-      if (!applied) throw new NotFoundError('restock session not found');
+      if (!applied) throw new NotFoundError('Restock session not found');
 
       res.json({
         session: toSessionDto(applied.session),
@@ -427,7 +427,7 @@ export class OperatorController {
   async dismissAlert(req: Request, res: Response, next: NextFunction) {
     try {
       const alert = await repo.dismissAlert(param(req.params.alertId));
-      if (!alert) throw new NotFoundError('alert not found');
+      if (!alert) throw new NotFoundError('Alert not found');
       res.json({ alert: toAlertDto(alert) });
     } catch (err) {
       next(err);
@@ -466,7 +466,7 @@ export class OperatorController {
     try {
       const storeId = param(req.params.storeId);
       const store = await repo.getStore(storeId);
-      if (!store) throw new NotFoundError('store not found');
+      if (!store) throw new NotFoundError('Store not found');
 
       const body = req.body as PromotionInput;
       const promotion = await repo.insertPromotion({
@@ -500,7 +500,7 @@ export class OperatorController {
       const now = new Date();
       // Ended, not deleted: the history is the point of persisting these.
       const ended = await repo.endPromotion(param(req.params.promotionId), now);
-      if (!ended) throw new NotFoundError('promotion not found');
+      if (!ended) throw new NotFoundError('Promotion not found');
 
       res.json({ promotion: toPromotionDto(ended, now) });
     } catch (err) {
@@ -517,7 +517,7 @@ export class OperatorController {
   async promotionPerformance(req: Request, res: Response, next: NextFunction) {
     try {
       const promotion = await repo.getPromotion(param(req.params.promotionId));
-      if (!promotion) throw new NotFoundError('promotion not found');
+      if (!promotion) throw new NotFoundError('Promotion not found');
 
       const now = new Date();
       const window = measurementWindow(

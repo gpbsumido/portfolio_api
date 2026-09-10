@@ -85,7 +85,7 @@ export class FeatureFlagsController {
 
       if (enabled !== undefined) {
         updated = await repo.setEnabled(key, environment, enabled);
-        if (!updated) throw new NotFoundError('flag not found');
+        if (!updated) throw new NotFoundError('Flag not found');
         await repo.recordAudit({
           flagKey: key,
           environment,
@@ -97,7 +97,7 @@ export class FeatureFlagsController {
 
       if (fallthrough !== undefined) {
         updated = await repo.setFallthrough(key, environment, fallthrough);
-        if (!updated) throw new NotFoundError('flag not found');
+        if (!updated) throw new NotFoundError('Flag not found');
         const onSlice = fallthrough.find((w) => w.variation === 'on');
         const summary = onSlice
           ? `${environment} rollout set to ${onSlice.weight}% on`
@@ -111,7 +111,7 @@ export class FeatureFlagsController {
         });
       }
 
-      if (!updated) throw new NotFoundError('flag not found');
+      if (!updated) throw new NotFoundError('Flag not found');
 
       log.info({ flagKey: key, environment, actor }, 'flag updated');
       res.json(toFlagDto(updated));

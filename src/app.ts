@@ -123,7 +123,13 @@ app.use('/api', forumRoutes);
 // ── Error handling ────────────────────────────────────────────────────────
 
 app.use((_req, res) => {
-  res.status(404).json({ error: 'Not Found' });
+  const message = 'That endpoint does not exist. Check the URL and try again.';
+  res.status(404).json({
+    error: message,
+    message,
+    code: 'NotFoundError',
+    statusCode: 404,
+  });
 });
 
 app.use(errorHandler);

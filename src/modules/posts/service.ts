@@ -104,9 +104,13 @@ export async function createPhotoPost(
             '../../shared/utils/mediaProcessor.js'
           );
           processed = await processImage(fileBuffer);
-        } catch (imgErr: any) {
+        } catch (imgErr) {
           await client.query('ROLLBACK');
-          throw new ValidationError(imgErr.message);
+          // Don't surface Sharp's internals to the user; log the real cause.
+          log.error({ err: imgErr }, 'image processing failed');
+          throw new ValidationError(
+            "Couldn't process that image. Please try a different file.",
+          );
         }
 
         const { fullBuffer, thumbBuffer, blurDataUrl, width, height } =

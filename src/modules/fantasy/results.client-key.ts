@@ -24,6 +24,6 @@ export function requireClientKey(): RequestHandler {
       next();
       return;
     }
-    res.status(400).json({ error: `missing or malformed ${CLIENT_KEY_HEADER} (expected a UUID)` });
+    res.status(400).json({ error: `Missing or malformed ${CLIENT_KEY_HEADER} (expected a UUID)` });
   };
 }

@@ -107,7 +107,8 @@ describe('Profiles endpoints', () => {
       const res = await request(app).get('/api/profiles/me');
 
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe('NotFoundError');
+      expect(res.body.error).toBe('Profile not set up yet');
+      expect(res.body.code).toBe('NotFoundError');
     });
   });
 

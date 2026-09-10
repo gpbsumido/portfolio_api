@@ -89,7 +89,9 @@ describe('Vitals endpoints', () => {
         .send({ metric: 'LCP' });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe('Validation failed');
+      expect(res.body.code).toBe('ValidationError');
+      expect(typeof res.body.error).toBe('string');
+      expect(res.body.error.length).toBeGreaterThan(0);
       expect(res.body.details).toBeDefined();
     });
 
