@@ -58,7 +58,7 @@ export class ReferralsController {
 
       if (custom) {
         const existing = await repo.findBySlug(custom);
-        if (existing) throw new ConflictError('slug already taken');
+        if (existing) throw new ConflictError('Slug already taken');
       }
       const slug = custom ?? (await this.generateUniqueSlug());
 
@@ -71,7 +71,7 @@ export class ReferralsController {
         });
       } catch (err) {
         // lost a race on a taken slug, surface it as a conflict
-        if (isUniqueViolation(err)) throw new ConflictError('slug already taken');
+        if (isUniqueViolation(err)) throw new ConflictError('Slug already taken');
         throw err;
       }
 
@@ -87,7 +87,7 @@ export class ReferralsController {
     try {
       const slug = param(req.params.slug);
       const row = await repo.findBySlug(slug);
-      if (!row) throw new NotFoundError('referral not found');
+      if (!row) throw new NotFoundError('Referral not found');
       const clicks = await repo.countClicks(row.id);
       res.json(toDto(row, clicks));
     } catch (err) {
@@ -100,7 +100,7 @@ export class ReferralsController {
     try {
       const slug = param(req.params.slug);
       const row = await repo.findBySlug(slug);
-      if (!row) throw new NotFoundError('referral not found');
+      if (!row) throw new NotFoundError('Referral not found');
       await repo.recordClick(row.id, hashUserAgent(req.get('user-agent')));
       const clicks = await repo.countClicks(row.id);
       res.json({ slug: row.slug, targetPath: row.targetPath, clicks });
@@ -114,7 +114,7 @@ export class ReferralsController {
     try {
       const slug = param(req.params.slug);
       const row = await repo.findBySlug(slug);
-      if (!row) throw new NotFoundError('referral not found');
+      if (!row) throw new NotFoundError('Referral not found');
       const [clicks, recent] = await Promise.all([
         repo.countClicks(row.id),
         repo.recentClicks(row.id),

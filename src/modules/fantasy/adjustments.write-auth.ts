@@ -15,7 +15,7 @@ export function adjWriteAuth(expected: string | undefined): RequestHandler {
   const secret = expected?.trim();
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!secret) {
-      res.status(503).json({ error: 'adjustment writes are disabled (no service token configured)' });
+      res.status(503).json({ error: 'Adjustment writes are disabled (no service token configured)' });
       return;
     }
     const provided = req.get(ADJ_TOKEN_HEADER);
@@ -23,6 +23,6 @@ export function adjWriteAuth(expected: string | undefined): RequestHandler {
       next();
       return;
     }
-    res.status(401).json({ error: 'invalid or missing draft-adjustments service token' });
+    res.status(401).json({ error: 'Invalid or missing draft-adjustments service token' });
   };
 }

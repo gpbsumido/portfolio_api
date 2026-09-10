@@ -55,7 +55,7 @@ export function requireServiceToken(expected: string | undefined) {
 
     const provided = req.get(OPERATOR_TOKEN_HEADER);
     if (!provided || !constantTimeEqual(provided, secret)) {
-      next(new UnauthorizedError('operator service token required'));
+      next(new UnauthorizedError('Operator service token required'));
       return;
     }
     next();
