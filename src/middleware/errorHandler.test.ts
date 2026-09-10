@@ -21,14 +21,17 @@ const req = {} as Request;
 const next = vi.fn() as NextFunction;
 
 describe('errorHandler', () => {
-  test('handles AppError with correct status and body', () => {
+  test('puts the human message in error, and the class name in code', () => {
     const res = createMockRes();
     errorHandler(new NotFoundError('User not found'), req, res, next);
     expect(res.status).toHaveBeenCalledWith(404);
+    // The frontend reads `error`, so the sentence has to land there — not the
+    // class name, which used to strand every message and show "NotFoundError".
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: 'NotFoundError',
+        error: 'User not found',
         message: 'User not found',
+        code: 'NotFoundError',
         statusCode: 404,
       }),
     );
@@ -40,6 +43,8 @@ describe('errorHandler', () => {
     errorHandler(err, req, res, next);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
+        error: 'Bad input',
+        code: 'ValidationError',
         details: { field: 'email' },
       }),
     );
@@ -49,9 +54,15 @@ describe('errorHandler', () => {
     const res = createMockRes();
     errorHandler(new ForbiddenError(), req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: "You don't have permission to do that.",
+        code: 'ForbiddenError',
+      }),
+    );
   });
 
-  test('handles ZodError as 400', () => {
+  test('summarizes a ZodError into a readable message', () => {
     const res = createMockRes();
     const zodErr = new ZodError([
       {
@@ -64,9 +75,13 @@ describe('errorHandler', () => {
     ]);
     errorHandler(zodErr, req, res, next);
     expect(res.status).toHaveBeenCalledWith(400);
+    // The top-level line names the field, rather than a content-free
+    // "Request validation failed" with the useful part buried in details.
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: 'ValidationError',
+        error: 'name: Expected string, received number',
+        message: 'name: Expected string, received number',
+        code: 'ValidationError',
         statusCode: 400,
         details: [{ path: 'name', message: 'Expected string, received number' }],
       }),
@@ -82,32 +97,33 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: 'UnauthorizedError',
-        message: 'Invalid or missing token',
+        error: 'Your session has expired or the sign-in token is invalid. Please sign in again.',
+        code: 'UnauthorizedError',
       }),
     );
   });
 
-  test('handles unknown errors as 500', () => {
+  test('handles unknown errors as 500 with a friendly message', () => {
     const res = createMockRes();
     errorHandler(new Error('something broke'), req, res, next);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        error: 'InternalServerError',
+        code: 'InternalServerError',
         statusCode: 500,
       }),
     );
   });
 
-  test('hides error message in production', () => {
+  test('does not leak internal error text to the client in production', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     const res = createMockRes();
     errorHandler(new Error('secret details'), req, res, next);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'An unexpected error occurred',
+        error: 'Something went wrong on our end. Please try again.',
+        message: 'Something went wrong on our end. Please try again.',
       }),
     );
     process.env.NODE_ENV = originalEnv;

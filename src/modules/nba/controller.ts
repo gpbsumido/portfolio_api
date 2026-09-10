@@ -123,7 +123,9 @@ export class NbaController {
       const season = parseSeason(req.params.season);
       const secret = env.PLAYOFFS_ADMIN_SECRET;
       if (!bearerMatches(req.headers.authorization, secret)) {
-        throw new UnauthorizedError();
+        throw new UnauthorizedError(
+          'A valid admin token is required to save results',
+        );
       }
       const { picks } = req.body;
       if (!isPlainObject(picks)) {

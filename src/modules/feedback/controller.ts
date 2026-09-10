@@ -18,7 +18,7 @@ export class FeedbackController {
       const { page = '1', limit = '10', rotation, searchTerm } = req.query as Record<string, string>;
       const userSub = (req as any).auth.payload.sub as string;
       if (!userSub) {
-        throw new UnauthorizedError('Unauthorized: No user sub found');
+        throw new UnauthorizedError();
       }
       const { feedback, totalCount } = await repo.findWithPagination(
         Number(page),
@@ -59,7 +59,7 @@ export class FeedbackController {
       res.status(200).json({ success: true, feedback });
     } catch (error: any) {
       if (error.message === 'Feedback not found or unauthorized') {
-        return next(new NotFoundError('Feedback not found or unauthorized'));
+        return next(new NotFoundError("We couldn't find that feedback."));
       }
       next(error);
     }
@@ -70,11 +70,11 @@ export class FeedbackController {
       const id = param(req.params.id);
       const userSub = (req as any).auth?.payload?.sub as string | undefined;
       if (!userSub) {
-        throw new UnauthorizedError('Missing user identity');
+        throw new UnauthorizedError();
       }
       const deleted = await repo.delete(id, userSub);
       if (!deleted) {
-        throw new NotFoundError('Feedback not found');
+        throw new NotFoundError("We couldn't find that feedback.");
       }
       res.status(200).json({ success: true });
     } catch (error) {
