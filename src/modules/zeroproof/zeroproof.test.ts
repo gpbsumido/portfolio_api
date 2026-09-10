@@ -117,6 +117,39 @@ describe('placing a bet', () => {
     );
   });
 
+  test('refuses a bet on a real fixture once its start time has passed', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getEventById).mockResolvedValue({
+      providerKey: 'baseball_mlb:evt-1',
+      sport: 'baseball_mlb',
+      status: 'upcoming',
+      commenceTime: new Date('2000-01-01T00:00:00Z'),
+    } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(409);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
+  test('refuses a bet on an ESPN matchup that has started scoring', async () => {
+    vi.mocked(repo.getWalletById).mockResolvedValue(wallet() as never);
+    vi.mocked(repo.getEventById).mockResolvedValue({
+      providerKey: 'espn:ffl:2026:836777691:2:5-4',
+      sport: 'fantasy_ffl',
+      status: 'started',
+      // Synthetic commence still sits in the future; the started status is the gate.
+      commenceTime: new Date('2099-01-01T00:00:00Z'),
+    } as never);
+    vi.mocked(repo.getLatestSnapshot).mockResolvedValue(freshSnapshot() as never);
+
+    const res = await request(makeApp()).post('/api/zeroproof/bets').send(body);
+
+    expect(res.status).toBe(409);
+    expect(repo.placeBet).not.toHaveBeenCalled();
+  });
+
   const boundLeague = {
     espnGame: 'ffl',
     espnLeagueId: '836777691',
