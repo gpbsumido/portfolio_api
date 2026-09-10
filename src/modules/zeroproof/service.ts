@@ -12,7 +12,7 @@ import {
   rankStandings,
   validateLeagueRules,
 } from './leagues.js';
-import { isBettable, isStale, maxOddsAgeMsFromMinutes, selectLine } from './placement.js';
+import { isBettable, isEventBettable, isStale, maxOddsAgeMsFromMinutes, selectLine } from './placement.js';
 import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { type IngestOutcome, TheOddsApiProvider } from './providers/theOddsApi.js';
@@ -155,6 +155,7 @@ export async function syncOdds(
       home: event.home,
       away: event.away,
       commenceTime: event.commenceTime,
+      started: event.started,
     });
     for (const market of event.markets) {
       await repo.insertSnapshot({ eventId, market: market.market, outcomes: market.outcomes });
@@ -190,6 +191,14 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
   }
   if (!isBettable(wallet, now)) {
     throw new ConflictError('This wallet is not open for betting');
+  }
+
+  const event = await repo.getEventById(req.eventId);
+  if (!event) {
+    throw new NotFoundError('Event not found');
+  }
+  if (!isEventBettable(event, now)) {
+    throw new ConflictError('Betting is closed — this game has already started');
   }
 
   const snapshot = await repo.getLatestSnapshot(req.eventId, req.market);

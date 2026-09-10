@@ -3,6 +3,7 @@ import {
   canAfford,
   DEFAULT_MAX_ODDS_AGE_MS,
   isBettable,
+  isEventBettable,
   isStale,
   maxOddsAgeMsFromMinutes,
   selectLine,
@@ -25,6 +26,36 @@ describe('bet placement rules', () => {
 
   test('selectLine rejects a selection the market does not offer', () => {
     expect(() => selectLine([{ name: 'Draw', priceAmerican: 230 }], 'Arsenal')).toThrow();
+  });
+
+  test('isEventBettable — open while upcoming and before the start time', () => {
+    const now = new Date('2026-09-08T12:00:00Z');
+    expect(
+      isEventBettable({ status: 'upcoming', commenceTime: new Date('2026-09-08T18:00:00Z') }, now),
+    ).toBe(true);
+  });
+
+  test('isEventBettable — a real fixture locks the moment its start time passes', () => {
+    const now = new Date('2026-09-08T18:30:00Z');
+    expect(
+      isEventBettable({ status: 'upcoming', commenceTime: new Date('2026-09-08T18:00:00Z') }, now),
+    ).toBe(false);
+  });
+
+  test('isEventBettable — a started ESPN matchup is locked even with a future synthetic commence', () => {
+    // Fantasy matchups carry a synthetic commence time that always sits in the
+    // future, so the started status is what closes them once points are scored.
+    const now = new Date('2026-09-08T12:00:00Z');
+    expect(
+      isEventBettable({ status: 'started', commenceTime: new Date('2026-09-10T00:00:00Z') }, now),
+    ).toBe(false);
+  });
+
+  test('isEventBettable — a final event is not bettable', () => {
+    const now = new Date('2026-09-08T12:00:00Z');
+    expect(
+      isEventBettable({ status: 'final', commenceTime: new Date('2026-09-10T00:00:00Z') }, now),
+    ).toBe(false);
   });
 
   test('isStale gates on the freshness window, wide enough for the sync cadence by default', () => {
