@@ -55,7 +55,10 @@ describe('errorHandler', () => {
     errorHandler(new ForbiddenError(), req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'Forbidden', code: 'ForbiddenError' }),
+      expect.objectContaining({
+        error: "You don't have permission to do that.",
+        code: 'ForbiddenError',
+      }),
     );
   });
 
