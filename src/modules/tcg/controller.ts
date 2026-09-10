@@ -14,7 +14,7 @@ import type { CollectionCard } from './types.js';
 /** The Auth0 subject of the caller, or a 401 if the token carried none. */
 function requireSub(req: Request): string {
   const sub = (req.auth?.payload as { sub?: string } | undefined)?.sub;
-  if (!sub) throw new UnauthorizedError('Not signed in');
+  if (!sub) throw new UnauthorizedError();
   return sub;
 }
 
