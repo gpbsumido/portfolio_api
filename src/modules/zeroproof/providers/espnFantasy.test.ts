@@ -65,6 +65,23 @@ describe('ESPN fantasy — pure normalization', () => {
     expect(priceFromWinProbability(0.999)).toBe(priceFromWinProbability(0.95)); // clamped
   });
 
+  test('normalizeMatchups flags a matchup that already has points as started', () => {
+    const league: EspnLeague = {
+      ...LEAGUE,
+      schedule: [
+        { id: 1, matchupPeriodId: 1, winner: 'HOME', home: { teamId: 1, totalPoints: 125 }, away: { teamId: 2, totalPoints: 86 } },
+        // Week 2: one matchup is underway (points on the board), one hasn't started.
+        { id: 2, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 34.5, winProbability: 0.6 }, away: { teamId: 3, totalPoints: 12, winProbability: 0.4 } },
+        { id: 3, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 2, totalPoints: 0 }, away: { teamId: 4, totalPoints: 0 } },
+      ],
+    };
+    const events = normalizeMatchups(league, SPEC, NOW);
+    const underway = events.find((e) => e.providerKey.endsWith(':2:1-3'));
+    const notStarted = events.find((e) => e.providerKey.endsWith(':2:2-4'));
+    expect(underway?.started).toBe(true);
+    expect(notStarted?.started).toBe(false);
+  });
+
   test('normalizeMatchups prices each side off ESPN’s win probability, pick’em as fallback', () => {
     const events = normalizeMatchups(LEAGUE, SPEC, NOW);
     expect(events).toHaveLength(2);

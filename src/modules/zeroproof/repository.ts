@@ -132,10 +132,23 @@ interface UpsertEventInput {
   home: string;
   away: string;
   commenceTime: Date;
+  /** The game is already under way — persist it as 'started' so it stops taking bets. */
+  started?: boolean;
 }
 
 /** Insert an event or refresh a known one (matched on provider_key). Returns our id. */
 export async function upsertEvent(input: UpsertEventInput): Promise<string> {
+  // Only ever push status forward to 'started' — never write 'upcoming' on
+  // update, which would reopen a matchup that has already started or (worse)
+  // undo a 'final' set by settlement.
+  const set: Record<string, unknown> = {
+    home: input.home,
+    away: input.away,
+    commenceTime: input.commenceTime,
+    updatedAt: new Date(),
+  };
+  if (input.started) set.status = 'started';
+
   const [row] = await db
     .insert(zeroproofEvents)
     .values({
@@ -144,15 +157,11 @@ export async function upsertEvent(input: UpsertEventInput): Promise<string> {
       home: input.home,
       away: input.away,
       commenceTime: input.commenceTime,
+      status: input.started ? 'started' : 'upcoming',
     })
     .onConflictDoUpdate({
       target: zeroproofEvents.providerKey,
-      set: {
-        home: input.home,
-        away: input.away,
-        commenceTime: input.commenceTime,
-        updatedAt: new Date(),
-      },
+      set,
     })
     .returning({ id: zeroproofEvents.id });
   return row.id;
@@ -308,9 +317,16 @@ export async function getEventByProviderKey(providerKey: string): Promise<Zeropr
 }
 
 /** An event's provider key by our id — the league-binding gate needs it at placement. */
-export async function getEventById(eventId: string): Promise<{ providerKey: string } | undefined> {
+export async function getEventById(
+  eventId: string,
+): Promise<{ providerKey: string; sport: string; status: string; commenceTime: Date } | undefined> {
   const rows = await db
-    .select({ providerKey: zeroproofEvents.providerKey })
+    .select({
+      providerKey: zeroproofEvents.providerKey,
+      sport: zeroproofEvents.sport,
+      status: zeroproofEvents.status,
+      commenceTime: zeroproofEvents.commenceTime,
+    })
     .from(zeroproofEvents)
     .where(eq(zeroproofEvents.id, eventId))
     .limit(1);

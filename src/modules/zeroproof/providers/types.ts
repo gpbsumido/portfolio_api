@@ -28,6 +28,12 @@ export interface NormalizedEvent {
   away: string;
   commenceTime: Date;
   markets: NormalizedMarket[];
+  /**
+   * The game is already under way, so it should no longer take bets. Set by
+   * providers that can tell — ESPN fantasy flips it on once a matchup has points.
+   * Absent means the fixture's `commenceTime` is the authoritative start signal.
+   */
+  started?: boolean;
 }
 
 export interface OddsProvider {
