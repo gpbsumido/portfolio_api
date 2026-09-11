@@ -14,6 +14,22 @@ const log = createModuleLogger('the-odds-api-results');
 
 const BASE = 'https://api.the-odds-api.com/v4';
 
+/** The Odds API /scores window, in days. */
+const DEFAULT_RESULTS_DAYS_FROM = 3;
+
+/**
+ * How many days back to fetch completed scores, from env or the default. The
+ * Odds API caps /scores at 3 days, so we clamp to 1-3 and default to the max —
+ * a game that finished up to 3 days ago still gets a result and settles. A too
+ * small window was leaving bets on finished games stuck "open", because the
+ * result was never fetched. A missing, empty, or non-numeric value uses 3.
+ */
+export function resultsDaysFromEnv(raw: string | undefined): number {
+  const n = Number(raw);
+  if (!raw || !Number.isFinite(n)) return DEFAULT_RESULTS_DAYS_FROM;
+  return Math.min(3, Math.max(1, Math.trunc(n)));
+}
+
 interface V4Score {
   name: string;
   score: string;
@@ -31,7 +47,7 @@ export class TheOddsApiResultsProvider implements ResultsProvider {
 
   constructor(
     private readonly apiKey: string,
-    private readonly daysFrom = 1,
+    private readonly daysFrom = DEFAULT_RESULTS_DAYS_FROM,
     private readonly onOutcome?: (outcome: IngestOutcome) => void,
   ) {
     if (!apiKey) throw new Error('TheOddsApiResultsProvider requires an API key');
