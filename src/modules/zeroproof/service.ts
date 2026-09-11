@@ -16,7 +16,10 @@ import { isBettable, isEventBettable, isStale, maxOddsAgeMsFromMinutes, selectLi
 import { fixturesProvider } from './providers/fixtures.js';
 import { fixturesResultsProvider } from './providers/fixturesResults.js';
 import { type IngestOutcome, TheOddsApiProvider } from './providers/theOddsApi.js';
-import { TheOddsApiResultsProvider } from './providers/theOddsApiResults.js';
+import {
+  TheOddsApiResultsProvider,
+  resultsDaysFromEnv,
+} from './providers/theOddsApiResults.js';
 import type { EspnCookies } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
 import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
@@ -309,7 +312,11 @@ export function resolveResultsProvider(
     if (!key) {
       throw new Error('ZEROPROOF_RESULTS_PROVIDER=the-odds-api but ODDS_API_KEY is unset');
     }
-    return new TheOddsApiResultsProvider(key, undefined, onOutcome);
+    return new TheOddsApiResultsProvider(
+      key,
+      resultsDaysFromEnv(process.env.ZEROPROOF_RESULTS_DAYS_FROM),
+      onOutcome,
+    );
   }
   throw new Error(`Unknown ZEROPROOF_RESULTS_PROVIDER: ${choice}`);
 }
