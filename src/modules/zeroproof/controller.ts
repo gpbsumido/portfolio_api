@@ -17,7 +17,9 @@ import type {
   PlaceBetInput,
 } from './schemas.js';
 import * as service from './service.js';
+import type { AdminBetRow } from './repository.js';
 import type {
+  AdminBetDto,
   BetDto,
   EventDto,
   EventWithLines,
@@ -52,6 +54,17 @@ function toBetDto(bet: ZeroproofBet): BetDto {
     status: bet.status,
     placedAt: bet.placedAt.toISOString(),
     settledAt: bet.settledAt ? bet.settledAt.toISOString() : null,
+  };
+}
+
+/** A bet plus who placed it, for the admin god's view. Handle prefers the display name. */
+function toAdminBetDto(row: AdminBetRow): AdminBetDto {
+  return {
+    ...toBetDto(row),
+    userSub: row.userSub,
+    email: row.email,
+    handle: row.displayName ?? row.username ?? null,
+    mode: row.mode,
   };
 }
 
@@ -256,6 +269,17 @@ export class ZeroproofController {
     try {
       const bets = await service.getBets(requireSub(req));
       res.json({ bets: bets.map(toBetDto) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/zeroproof/admin/bets — every user's bets with identity, searchable (admin). */
+  async adminAllBets(req: Request, res: Response, next: NextFunction) {
+    try {
+      const search = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const bets = await service.getAllBets(search);
+      res.json({ bets: bets.map(toAdminBetDto) });
     } catch (err) {
       next(err);
     }

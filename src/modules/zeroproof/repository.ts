@@ -2,7 +2,7 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, asc, count, desc, eq, gt, ilike, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type ZeroproofBet,
@@ -26,6 +26,8 @@ import {
   zeroproofOddsSnapshots,
   zeroproofReferralClicks,
   zeroproofWallets,
+  users,
+  userProfiles,
 } from '../../config/drizzle/schema.js';
 import { ConflictError } from '../../shared/errors/index.js';
 import {
@@ -358,6 +360,61 @@ export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
       ),
     )
     .orderBy(desc(zeroproofBets.placedAt));
+}
+
+/** A bet row joined to who placed it — the admin god's view's raw material. */
+export type AdminBetRow = ZeroproofBet & {
+  userSub: string;
+  mode: string;
+  email: string | null;
+  username: string | null;
+  displayName: string | null;
+};
+
+/**
+ * Every user's bets, newest first, each joined to its wallet owner (for the sub
+ * and wallet mode), the users row (for the email) and the profile (for a handle).
+ * A left join on users/profiles so a bet never drops out just because its bettor
+ * has no profile yet. `search` filters case-insensitively across email, username,
+ * display name, selection and market — admin only, so it de-anonymizes on purpose.
+ */
+export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
+  const trimmed = search?.trim();
+  const like = trimmed ? `%${trimmed}%` : null;
+  const rows = await db
+    .select({
+      bet: zeroproofBets,
+      userSub: zeroproofWallets.userSub,
+      mode: zeroproofWallets.mode,
+      email: users.email,
+      username: userProfiles.username,
+      displayName: userProfiles.displayName,
+    })
+    .from(zeroproofBets)
+    .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
+    .leftJoin(users, eq(users.sub, zeroproofWallets.userSub))
+    .leftJoin(userProfiles, eq(userProfiles.userSub, zeroproofWallets.userSub))
+    .where(
+      like
+        ? or(
+            ilike(users.email, like),
+            ilike(userProfiles.username, like),
+            ilike(userProfiles.displayName, like),
+            ilike(zeroproofBets.selection, like),
+            ilike(zeroproofBets.market, like),
+          )
+        : undefined,
+    )
+    .orderBy(desc(zeroproofBets.placedAt));
+
+  return rows.map((r) => ({
+    ...r.bet,
+    userSub: r.userSub,
+    mode: r.mode,
+    email: r.email,
+    username: r.username,
+    displayName: r.displayName,
+  }));
 }
 
 /** The closing line: the latest snapshot for a market taken before kickoff. */

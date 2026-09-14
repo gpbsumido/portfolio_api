@@ -88,6 +88,19 @@ export interface BetDto {
   settledAt: string | null;
 }
 
+/**
+ * A bet as the admin god's view sees it: the normal bet DTO plus who placed it.
+ * `handle` is the display name, falling back to the username, or null if the
+ * bettor has no profile yet; `email` is null only if no user row exists.
+ */
+export interface AdminBetDto extends BetDto {
+  userSub: string;
+  email: string | null;
+  handle: string | null;
+  /** The wallet's mode — 'season' | 'challenge' | 'league' — so league play is distinguishable. */
+  mode: string;
+}
+
 /** A member's place on a league board, ranked by bankroll. */
 export interface LeagueStanding {
   userSub: string;
