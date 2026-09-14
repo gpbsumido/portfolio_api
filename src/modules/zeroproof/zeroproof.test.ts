@@ -29,6 +29,7 @@ vi.mock('./repository.js', () => ({
   getLatestSnapshot: vi.fn(),
   placeBet: vi.fn(),
   getBetsForUser: vi.fn(),
+  getAllBets: vi.fn(),
   getSettledBetsForUser: vi.fn(),
   getSettledBetsByUser: vi.fn(),
   logReferralClick: vi.fn(),
@@ -588,5 +589,63 @@ describe('bet history', () => {
       settledAt: '2026-09-02T00:00:00.000Z',
     });
     expect(repo.getBetsForUser).toHaveBeenCalledWith('auth0|me');
+  });
+});
+
+describe("admin god's view (/admin/bets)", () => {
+  const adminRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'bet-9',
+    walletId: 'w9',
+    eventId: 'evt-9',
+    market: 'h2h',
+    selection: 'Celtics',
+    oddsAmerican: 122,
+    lineValue: null,
+    closingOddsAmerican: 130,
+    clv: 7.9,
+    stakeCents: 2500,
+    status: 'won',
+    placedAt: new Date('2026-09-01T00:00:00.000Z'),
+    settledAt: new Date('2026-09-02T00:00:00.000Z'),
+    userSub: 'auth0|greg',
+    mode: 'season',
+    email: 'greg@example.com',
+    username: 'greg',
+    displayName: 'Greg the Sharp',
+    ...overrides,
+  });
+
+  test('returns every user bet with identity, handle and mode as ISO-dated DTOs', async () => {
+    vi.mocked(repo.getAllBets).mockResolvedValue([
+      adminRow(),
+      adminRow({ id: 'bet-10', userSub: 'auth0|me', status: 'open', settledAt: null, displayName: null, username: 'me' }),
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/admin/bets');
+
+    expect(res.status).toBe(200);
+    expect(res.body.bets).toHaveLength(2);
+    expect(res.body.bets[0]).toMatchObject({
+      id: 'bet-9',
+      userSub: 'auth0|greg',
+      email: 'greg@example.com',
+      handle: 'Greg the Sharp',
+      mode: 'season',
+      status: 'won',
+      placedAt: '2026-09-01T00:00:00.000Z',
+      settledAt: '2026-09-02T00:00:00.000Z',
+    });
+    // Falls back to the username when there's no display name.
+    expect(res.body.bets[1]).toMatchObject({ handle: 'me', status: 'open', settledAt: null });
+    expect(repo.getAllBets).toHaveBeenCalledWith(undefined);
+  });
+
+  test('forwards the ?q= search term to the repository', async () => {
+    vi.mocked(repo.getAllBets).mockResolvedValue([] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/admin/bets?q=greg');
+
+    expect(res.status).toBe(200);
+    expect(repo.getAllBets).toHaveBeenCalledWith('greg');
   });
 });

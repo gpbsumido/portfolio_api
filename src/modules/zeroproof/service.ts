@@ -79,6 +79,11 @@ export function getBets(userSub: string) {
   return repo.getBetsForUser(userSub);
 }
 
+/** Every user's bets for the admin god's view, optionally filtered by a search term. */
+export function getAllBets(search?: string) {
+  return repo.getAllBets(search);
+}
+
 /** The caller's profile: wallets, stats, and the accolades their play has earned. */
 export async function getProfile(userSub: string): Promise<ProfileResponse> {
   const [wallets, bets] = await Promise.all([

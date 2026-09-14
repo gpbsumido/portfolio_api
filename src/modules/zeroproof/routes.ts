@@ -41,6 +41,12 @@ router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, 
 // GET /api/zeroproof/bets — the caller's bet history, newest first
 router.get('/bets', checkJwt, (req, res, next) => ctrl.myBets(req, res, next));
 
+// GET /api/zeroproof/admin/bets — every user's bets with identity, searchable by
+// ?q= across email/handle/selection/market. Admin only (the god's view).
+router.get('/admin/bets', checkJwt, requireAdmin, (req, res, next) =>
+  ctrl.adminAllBets(req, res, next),
+);
+
 // POST /api/zeroproof/wallets — open a Season or Challenge wallet
 router.post('/wallets', checkJwt, validateBody(openWalletSchema), (req, res, next) =>
   ctrl.openWallet(req, res, next),
