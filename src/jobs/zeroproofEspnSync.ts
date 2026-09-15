@@ -19,8 +19,8 @@ import {
   recordEspnLeagueHealth,
   resolveEspnCookies,
   resolveEspnLeagueKeys,
+  retireClosedLeagues,
   syncOdds,
-  voidBetsForClosedLeagues,
 } from '../modules/zeroproof/service.js';
 import { createModuleLogger } from '../shared/utils/logger.js';
 
@@ -45,12 +45,19 @@ export async function zeroproofEspnSync(): Promise<void> {
 
   const summary = await syncOdds(provider, leagues);
   await recordEspnLeagueHealth(outcomes, new Date());
-  // A league that isn't open for betting shouldn't carry open bets; void and
-  // refund any that were placed before matchup gating existed.
-  const voided = await voidBetsForClosedLeagues(closed);
+  // A league that isn't open for betting shouldn't be on the board or carry open
+  // bets: close its still-upcoming matchups and void/refund any bets placed on
+  // them before matchup gating existed.
+  const retired = await retireClosedLeagues(closed);
 
   log.info(
-    { ...summary, checked: outcomes.length, closed: closed.length, betsVoided: voided },
+    {
+      ...summary,
+      checked: outcomes.length,
+      closed: closed.length,
+      betsVoided: retired.betsVoided,
+      eventsClosed: retired.eventsClosed,
+    },
     'ESPN fantasy sync complete',
   );
 }
