@@ -195,7 +195,22 @@ export function isLeagueOpenForBetting(
 ): boolean {
   if (!league.draftDetail?.drafted) return false;
   if (seasonStart) return now.getTime() >= seasonStart.getTime() - SEASON_OPEN_LEAD_MS;
-  return (league.status?.latestScoringPeriod ?? 0) >= 1;
+  // No pro schedule to read a start date from: only open once the season has
+  // actually been played. ESPN can report latestScoringPeriod as 1 before a ball
+  // is bounced, so trust points on the board, not the period counter.
+  return hasSeasonStarted(league);
+}
+
+/** Whether any matchup has been played — points scored or a winner decided. */
+export function hasSeasonStarted(league: EspnLeague): boolean {
+  return league.schedule.some(
+    (m) =>
+      (m.home?.totalPoints ?? 0) > 0 ||
+      (m.away?.totalPoints ?? 0) > 0 ||
+      m.winner === 'HOME' ||
+      m.winner === 'AWAY' ||
+      m.winner === 'TIE',
+  );
 }
 
 /** A team's display name, resolved from the teams array, with graceful fallbacks. */

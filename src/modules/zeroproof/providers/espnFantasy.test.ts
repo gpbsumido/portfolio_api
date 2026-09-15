@@ -5,6 +5,7 @@ import {
   EspnFantasyProvider,
   type EspnLeague,
   type EspnProSchedule,
+  hasSeasonStarted,
   isLeagueOpenForBetting,
   type LeagueSpec,
   matchupProviderKey,
@@ -338,8 +339,26 @@ describe('ESPN fantasy — draft + season-start gating', () => {
     expect(isLeagueOpenForBetting(league, start, new Date('2027-12-01T00:00:00Z'))).toBe(true);
   });
 
-  test('with no pro schedule, falls back to has-the-season-begun', () => {
-    expect(isLeagueOpenForBetting(drafted({ status: { latestScoringPeriod: 0 } }), null, new Date())).toBe(false);
-    expect(isLeagueOpenForBetting(drafted({ status: { latestScoringPeriod: 3 } }), null, new Date())).toBe(true);
+  test('with no pro schedule, opens only once a matchup has actually been played', () => {
+    const preseason = drafted({
+      status: { latestScoringPeriod: 1 }, // ESPN reports period 1 before any game
+      schedule: [{ id: 1, matchupPeriodId: 1, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0 }, away: { teamId: 2, totalPoints: 0 } }],
+    });
+    expect(isLeagueOpenForBetting(preseason, null, new Date())).toBe(false);
+
+    const played = drafted({
+      schedule: [{ id: 1, matchupPeriodId: 1, winner: 'HOME', home: { teamId: 1, totalPoints: 104 }, away: { teamId: 2, totalPoints: 98 } }],
+    });
+    expect(isLeagueOpenForBetting(played, null, new Date())).toBe(true);
+  });
+
+  test('hasSeasonStarted keys off points or a decided winner, not the period counter', () => {
+    expect(hasSeasonStarted(drafted({ schedule: [] }))).toBe(false);
+    expect(
+      hasSeasonStarted(drafted({ schedule: [{ id: 1, matchupPeriodId: 1, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0 }, away: { teamId: 2, totalPoints: 0 } }] })),
+    ).toBe(false);
+    expect(
+      hasSeasonStarted(drafted({ schedule: [{ id: 1, matchupPeriodId: 1, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 12 }, away: { teamId: 2, totalPoints: 8 } }] })),
+    ).toBe(true);
   });
 });

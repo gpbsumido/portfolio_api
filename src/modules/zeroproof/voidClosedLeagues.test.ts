@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('./repository.js', () => ({
   getOpenBetsForProviderKeyPrefix: vi.fn(),
+  closeUpcomingEventsForProviderKeyPrefix: vi.fn(),
   settleBet: vi.fn(),
 }));
 
 import type { LeagueSpec } from './providers/espnFantasy.js';
 import * as repo from './repository.js';
-import { voidBetsForClosedLeagues } from './service.js';
+import { retireClosedLeagues } from './service.js';
 
 const spec = (over: Partial<LeagueSpec> = {}): LeagueSpec => ({
   game: 'fba',
@@ -16,43 +17,49 @@ const spec = (over: Partial<LeagueSpec> = {}): LeagueSpec => ({
   ...over,
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(repo.closeUpcomingEventsForProviderKeyPrefix).mockResolvedValue(0);
+  vi.mocked(repo.getOpenBetsForProviderKeyPrefix).mockResolvedValue([]);
+});
 
-describe('voidBetsForClosedLeagues', () => {
-  test('voids and refunds every open bet on a closed league, keyed by its provider prefix', async () => {
+describe('retireClosedLeagues', () => {
+  test('voids every open bet and closes the upcoming events, keyed by provider prefix', async () => {
     vi.mocked(repo.getOpenBetsForProviderKeyPrefix).mockResolvedValue([
       { id: 'b1', walletId: 'w1', stakeCents: 1000, oddsAmerican: -110 },
       { id: 'b2', walletId: 'w2', stakeCents: 500, oddsAmerican: 120 },
     ]);
+    vi.mocked(repo.closeUpcomingEventsForProviderKeyPrefix).mockResolvedValue(3);
 
-    const voided = await voidBetsForClosedLeagues([spec()]);
+    const result = await retireClosedLeagues([spec()]);
 
     expect(repo.getOpenBetsForProviderKeyPrefix).toHaveBeenCalledWith('espn:fba:2027:123:');
+    expect(repo.closeUpcomingEventsForProviderKeyPrefix).toHaveBeenCalledWith('espn:fba:2027:123:');
     expect(repo.settleBet).toHaveBeenCalledTimes(2);
-    // A void grade refunds the stake and keeps the bet out of the record.
     expect(repo.settleBet).toHaveBeenCalledWith({
       bet: { id: 'b1', walletId: 'w1', stakeCents: 1000, oddsAmerican: -110 },
       grade: 'void',
       closingOdds: null,
       clv: null,
     });
-    expect(voided).toBe(2);
+    expect(result).toEqual({ betsVoided: 2, eventsClosed: 3 });
+  });
+
+  test('closes events even when a closed league has no open bets', async () => {
+    vi.mocked(repo.closeUpcomingEventsForProviderKeyPrefix).mockResolvedValue(4);
+
+    const result = await retireClosedLeagues([spec({ game: 'fba', leagueId: '9' })]);
+
+    expect(repo.closeUpcomingEventsForProviderKeyPrefix).toHaveBeenCalledWith('espn:fba:2027:9:');
+    expect(repo.settleBet).not.toHaveBeenCalled();
+    expect(result).toEqual({ betsVoided: 0, eventsClosed: 4 });
   });
 
   test('no closed leagues means nothing is touched', async () => {
-    const voided = await voidBetsForClosedLeagues([]);
+    const result = await retireClosedLeagues([]);
     expect(repo.getOpenBetsForProviderKeyPrefix).not.toHaveBeenCalled();
+    expect(repo.closeUpcomingEventsForProviderKeyPrefix).not.toHaveBeenCalled();
     expect(repo.settleBet).not.toHaveBeenCalled();
-    expect(voided).toBe(0);
-  });
-
-  test('a closed league with no open bets refunds nothing', async () => {
-    vi.mocked(repo.getOpenBetsForProviderKeyPrefix).mockResolvedValue([]);
-
-    const voided = await voidBetsForClosedLeagues([spec({ game: 'ffl', leagueId: '9' })]);
-
-    expect(repo.getOpenBetsForProviderKeyPrefix).toHaveBeenCalledWith('espn:ffl:2027:9:');
-    expect(repo.settleBet).not.toHaveBeenCalled();
-    expect(voided).toBe(0);
+    expect(result).toEqual({ betsVoided: 0, eventsClosed: 0 });
   });
 });
