@@ -20,7 +20,7 @@ import {
   TheOddsApiResultsProvider,
   resultsDaysFromEnv,
 } from './providers/theOddsApiResults.js';
-import type { EspnCookies } from './providers/espnFantasy.js';
+import type { EspnCookies, LeagueSpec } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
 import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
 import * as repo from './repository.js';
@@ -283,6 +283,30 @@ export async function settle(
   }
 
   return { eventsSettled, betsGraded };
+}
+
+/**
+ * Void and refund open bets on fantasy leagues that aren't open for betting.
+ *
+ * A closed league is one that hasn't drafted, or whose season is still more than
+ * a week out — the sync reports these as it skips them. No valid bet can exist on
+ * a closed league (a closed league is never offered), and a league only ever goes
+ * from closed to open, never back, so an open bet on a closed league is always a
+ * pre-open one placed before matchup gating existed. Voiding refunds the stake and
+ * keeps the bet out of the win/loss record. Idempotent: a voided bet is no longer
+ * 'open', so a re-run over the same leagues refunds nothing twice.
+ */
+export async function voidBetsForClosedLeagues(specs: LeagueSpec[]): Promise<number> {
+  let voided = 0;
+  for (const spec of specs) {
+    const prefix = `espn:${spec.game}:${spec.season}:${spec.leagueId}:`;
+    const bets = await repo.getOpenBetsForProviderKeyPrefix(prefix);
+    for (const bet of bets) {
+      await repo.settleBet({ bet, grade: 'void', closingOdds: null, clv: null });
+      voided += 1;
+    }
+  }
+  return voided;
 }
 
 /**
