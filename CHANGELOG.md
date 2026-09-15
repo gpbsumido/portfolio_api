@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-15 - version 5.22.2
+
+- **Fantasy matchups no longer open when the pro schedule points at the wrong season.** Basketball matchups were still on the board weeks before the season, which means the league was reading as open — i.e. `seasonStart` from ESPN's pro schedule resolved to a date within the week-out window even though the season hadn't started. The most likely cause is a stale or wrong-season schedule (a season-year off by one, or a mis-parsed date) resolving to a date in the *past*, which then read as "started long ago". The gate now distrusts a past `seasonStart` when the league itself shows no game has been played — that contradiction means the schedule is for the wrong season — so a pre-season league stays closed (and the sync then closes its lingering events). A past start with a game actually played still reads as in-season and open.
+- **Added a per-league gate diagnostic.** Each sync now logs `ESPN league betting gate` with the league key, whether it drafted, the resolved `seasonStart` (and days from now), whether the league shows a game played, its latest scoring period, and the open/closed decision — so an environment-specific misfire like this is visible in one log line instead of a guess.
+
 ## 2026-09-15 - version 5.22.1
 
 - **Pre-season fantasy matchups actually leave the board now.** The gating in 5.22.0 stopped the sync offering new closed-league matchups, but the events synced *before* it stayed `upcoming` in the DB and kept showing — so basketball week-1 matchups were still on the board a month before tip-off. The sync now closes a retired league's still-upcoming events (status `closed`, which the board and `isEventBettable` both exclude) alongside voiding their bets; `voidBetsForClosedLeagues` became `retireClosedLeagues` and returns both counts. Idempotent — a closed event is no longer `upcoming`, so a re-run touches nothing twice.
