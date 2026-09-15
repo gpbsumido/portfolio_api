@@ -2,11 +2,13 @@
 #
 # Container entrypoint. Runs pending migrations, then starts the app.
 #
-# This exists because nothing else ran migrations. Railway deploys on a push to
-# main and starts the process; no workflow in either repo touched knex, so every
-# schema change had to be remembered and run by hand, and the window between a
-# deploy and that memory was a production API serving code its database had not
-# caught up with.
+# This exists because nothing else ran migrations. Railway deploys each
+# environment from its own branch — production from `main`, staging from
+# `develop` — and just starts the process; no workflow in either repo touched
+# knex, so every schema change had to be remembered and run by hand against each
+# database, and the window between a deploy and that memory was an API serving
+# code its database had not caught up with. This entrypoint closes that window
+# in whichever environment it boots: each one migrates its own DATABASE_URL.
 #
 # set -e is the point rather than an incidental: if the migration fails the
 # server must not come up. Railway keeps the previous deploy serving, which is

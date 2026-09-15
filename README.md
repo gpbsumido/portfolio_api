@@ -325,6 +325,13 @@ Notes:
 starts the app, so a deploy brings its own schema with it and there is no window
 where the new code is serving against the old database.
 
+Each environment does this against its **own** database. Railway builds
+production from `main` and staging from `develop` (see the Deployment section),
+and every environment is isolated with its own `DATABASE_URL` — so a merge to
+`develop` migrates staging's database on that deploy, and the develop→main
+release migrates production's later. A schema change reaches staging first, on
+the branch it merged to, without a separate step.
+
 Two things follow from that:
 
 - **A failed migration stops the server coming up.** That is deliberate. Railway
