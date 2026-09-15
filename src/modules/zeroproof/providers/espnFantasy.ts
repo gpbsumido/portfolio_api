@@ -383,6 +383,11 @@ export class EspnFantasyProvider implements OddsProvider {
   constructor(
     private readonly cookies: EspnCookies = {},
     private readonly onOutcome?: (outcome: EspnLeagueOutcome) => void,
+    /**
+     * Observes each league that resolved but isn't open for betting. The sync
+     * uses it to void the pre-open bets that shouldn't exist on a closed league.
+     */
+    private readonly onClosed?: (spec: LeagueSpec) => void,
   ) {}
 
   async getOdds(sportKeys: string[]): Promise<NormalizedEvent[]> {
@@ -401,7 +406,10 @@ export class EspnFantasyProvider implements OddsProvider {
       }
       // Don't offer matchups from a league that hasn't drafted, or whose season is
       // still more than a week out — ESPN publishes the schedule long before then.
-      if (!isLeagueOpenForBetting(league, seasonStarts.get(seasonKey) ?? null, now)) continue;
+      if (!isLeagueOpenForBetting(league, seasonStarts.get(seasonKey) ?? null, now)) {
+        this.onClosed?.(spec);
+        continue;
+      }
 
       all.push(...normalizeMatchups(league, spec, now));
     }

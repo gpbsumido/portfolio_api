@@ -2,7 +2,7 @@
 // ZeroProof wallets — Drizzle ORM repository
 // ---------------------------------------------------------------------------
 
-import { and, asc, count, desc, eq, gt, ilike, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, like, lte, or, sql } from 'drizzle-orm';
 import { db } from '../../config/drizzle/index.js';
 import {
   type ZeroproofBet,
@@ -341,6 +341,26 @@ export async function getOpenBetsForEvent(eventId: string): Promise<ZeroproofBet
     .select()
     .from(zeroproofBets)
     .where(and(eq(zeroproofBets.eventId, eventId), eq(zeroproofBets.status, 'open')));
+}
+
+/**
+ * Open bets on any event whose provider_key starts with `prefix` — used to void
+ * the bets on a fantasy league that shouldn't have been bettable. Only the
+ * fields settleBet needs, since the caller just voids each.
+ */
+export async function getOpenBetsForProviderKeyPrefix(
+  prefix: string,
+): Promise<Pick<ZeroproofBet, 'id' | 'walletId' | 'stakeCents' | 'oddsAmerican'>[]> {
+  return db
+    .select({
+      id: zeroproofBets.id,
+      walletId: zeroproofBets.walletId,
+      stakeCents: zeroproofBets.stakeCents,
+      oddsAmerican: zeroproofBets.oddsAmerican,
+    })
+    .from(zeroproofBets)
+    .innerJoin(zeroproofEvents, eq(zeroproofBets.eventId, zeroproofEvents.id))
+    .where(and(eq(zeroproofBets.status, 'open'), like(zeroproofEvents.providerKey, `${prefix}%`)));
 }
 
 /** Every bet the caller has placed, newest first — full rows for the DTO. */

@@ -6,6 +6,7 @@ import {
   type EspnLeague,
   type EspnProSchedule,
   isLeagueOpenForBetting,
+  type LeagueSpec,
   matchupProviderKey,
   normalizeMatchups,
   normalizeResults,
@@ -211,6 +212,45 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
       { key: 'ffl:1241838:2022', error: null },
       { key: 'fba:999999:2027', error: expect.stringContaining('401') },
     ]);
+  });
+
+  test('reports a resolved-but-closed (undrafted) league to onClosed and offers nothing', async () => {
+    const undrafted: EspnLeague = {
+      scoringPeriodId: 0,
+      seasonId: 2027,
+      teams: [],
+      schedule: [],
+      draftDetail: { drafted: false },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('proTeamSchedules')) return { ok: true, json: async () => ({}) } as Response;
+        return { ok: true, json: async () => undrafted } as Response;
+      }),
+    );
+    const closed: LeagueSpec[] = [];
+    const events = await new EspnFantasyProvider({}, undefined, (s) => closed.push(s)).getOdds([
+      'fba:999:2027',
+    ]);
+    expect(events).toEqual([]);
+    expect(closed).toEqual([{ game: 'fba', leagueId: '999', season: '2027' }]);
+  });
+
+  test('an open league is not reported to onClosed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('proTeamSchedules')) return { ok: true, json: async () => ({}) } as Response;
+        return { ok: true, json: async () => LEAGUE } as Response;
+      }),
+    );
+    const closed: LeagueSpec[] = [];
+    const events = await new EspnFantasyProvider({}, undefined, (s) => closed.push(s)).getOdds([
+      'ffl:1241838:2022',
+    ]);
+    expect(events).toHaveLength(2);
+    expect(closed).toEqual([]);
   });
 });
 
