@@ -57,6 +57,7 @@ Every router mounted in `src/app.ts`, in source order:
 | `/api/todos` | Admin to-do list behind an email allowlist, with per-item revision history, revert, and comments |
 | `/api/tcg` | Fantasy TCG economy — per-user coin wallet, daily claim, pack opening, and card collection |
 | `/api/calendar` | Events, countdowns, and shared calendars (auth) |
+| `/api/budgets` | Shared budgets — expenses, people, per-person splits, public budgets, and join-request approval (auth) |
 | `/api/gallery` | S3 image upload / delete |
 | `/api/walls` | Saved gallery-wall layouts |
 | `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |
@@ -323,6 +324,13 @@ Notes:
 `scripts/start.sh` is the container entrypoint. It runs `pnpm migrate` and then
 starts the app, so a deploy brings its own schema with it and there is no window
 where the new code is serving against the old database.
+
+Each environment does this against its **own** database. Railway builds
+production from `main` and staging from `develop` (see the Deployment section),
+and every environment is isolated with its own `DATABASE_URL` — so a merge to
+`develop` migrates staging's database on that deploy, and the develop→main
+release migrates production's later. A schema change reaches staging first, on
+the branch it merged to, without a separate step.
 
 Two things follow from that:
 
