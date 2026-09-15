@@ -45,6 +45,40 @@ export function priceFromWinProbability(p: number | undefined): number {
   return Math.round((100 * (1 - clamped)) / clamped);
 }
 
+/**
+ * Roughly how many points a fantasy team's weekly score swings by. It scales the
+ * projected-points gap into a win probability: a scale of 15 means a 10-point
+ * projected edge is about a 66% favourite. A heuristic, not a model — but the
+ * dollars are simulated, so real odds off ESPN's projections beat a flat pick'em.
+ */
+const PROJECTION_SCALE = 15;
+
+/**
+ * A side's win probability derived from the projected-points gap, for when ESPN
+ * hasn't published a direct win probability yet (which is most of the time until
+ * a matchup is close). Logistic on the projected differential. Returns undefined
+ * when either projection is missing or both are zero (nothing to go on), so the
+ * caller falls back to a pick'em rather than inventing a lopsided line.
+ */
+export function winProbabilityFromProjection(
+  projFor: number | undefined,
+  projAgainst: number | undefined,
+): number | undefined {
+  if (projFor == null || projAgainst == null) return undefined;
+  if (!Number.isFinite(projFor) || !Number.isFinite(projAgainst)) return undefined;
+  if (projFor === 0 && projAgainst === 0) return undefined;
+  return 1 / (1 + Math.exp(-(projFor - projAgainst) / PROJECTION_SCALE));
+}
+
+/** The best win probability for a side: ESPN's own if present, else derived from
+ * the projected-points gap, else undefined (→ pick'em). */
+export function sideWinProbability(side: EspnSide, other: EspnSide): number | undefined {
+  if (side.winProbability != null && Number.isFinite(side.winProbability)) {
+    return side.winProbability;
+  }
+  return winProbabilityFromProjection(side.totalProjectedPoints, other.totalProjectedPoints);
+}
+
 /** How far ahead the synthetic commence time sits, so the current week reads as upcoming. */
 export const MATCHUP_LOCK_LEAD_MS = 48 * 60 * 60 * 1000;
 
@@ -87,11 +121,81 @@ export interface EspnMatchup {
   home?: EspnSide;
   away?: EspnSide;
 }
+export interface EspnDraftDetail {
+  /** Whether the league's draft has happened. No draft → no rosters → no bets. */
+  drafted?: boolean;
+  inProgress?: boolean;
+}
+export interface EspnStatus {
+  /** The latest scoring period with data. 0 before the season has begun. */
+  latestScoringPeriod?: number;
+  firstScoringPeriod?: number;
+  currentMatchupPeriod?: number;
+}
 export interface EspnLeague {
   scoringPeriodId: number;
   seasonId: number;
   teams: EspnTeam[];
   schedule: EspnMatchup[];
+  draftDetail?: EspnDraftDetail;
+  status?: EspnStatus;
+}
+
+// --- Pro schedule (season start date) --------------------------------------
+// The league endpoint gives period *numbers*, not calendar dates. The game's pro
+// schedule does: each pro team carries its games keyed by scoring period, and the
+// earliest game date across the league is when the season actually starts.
+
+export interface EspnProGame {
+  date?: number; // epoch ms
+}
+export interface EspnProTeam {
+  proGamesByScoringPeriod?: Record<string, EspnProGame[]>;
+}
+export interface EspnProSchedule {
+  settings?: { proTeams?: EspnProTeam[] };
+}
+
+/**
+ * The season's start: the earliest pro game date across every team's schedule.
+ * "Whichever comes first" — a matchup can't be played before the first pro game,
+ * so the first game date is the earliest the season can be said to start. Returns
+ * null when the schedule carries no usable dates, so the caller falls back.
+ */
+export function seasonStartFromProSchedule(pro: EspnProSchedule): Date | null {
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const team of pro.settings?.proTeams ?? []) {
+    for (const games of Object.values(team.proGamesByScoringPeriod ?? {})) {
+      for (const game of games) {
+        if (typeof game.date === 'number' && Number.isFinite(game.date) && game.date < earliest) {
+          earliest = game.date;
+        }
+      }
+    }
+  }
+  return Number.isFinite(earliest) ? new Date(earliest) : null;
+}
+
+/** How early before the season starts a matchup may be offered to bet on. */
+export const SEASON_OPEN_LEAD_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a league's matchups may be offered for betting now. Two gates the bug
+ * exposed: ESPN publishes the whole schedule before a ball is thrown, so a league
+ * must have (1) actually drafted and (2) be within a week of the season starting.
+ *
+ * `seasonStart` null means the pro schedule couldn't be read; rather than guess,
+ * fall back to "has the season begun" via the league's latest scoring period, so
+ * we still never surface a months-early, pre-draft matchup.
+ */
+export function isLeagueOpenForBetting(
+  league: EspnLeague,
+  seasonStart: Date | null,
+  now: Date,
+): boolean {
+  if (!league.draftDetail?.drafted) return false;
+  if (seasonStart) return now.getTime() >= seasonStart.getTime() - SEASON_OPEN_LEAD_MS;
+  return (league.status?.latestScoringPeriod ?? 0) >= 1;
 }
 
 /** A team's display name, resolved from the teams array, with graceful fallbacks. */
@@ -144,8 +248,8 @@ export function normalizeMatchups(
       const home = teamName(league.teams, homeSide.teamId);
       const away = teamName(league.teams, awaySide.teamId);
       const outcomes: NormalizedOutcome[] = [
-        { name: home, priceAmerican: priceFromWinProbability(homeSide.winProbability) },
-        { name: away, priceAmerican: priceFromWinProbability(awaySide.winProbability) },
+        { name: home, priceAmerican: priceFromWinProbability(sideWinProbability(homeSide, awaySide)) },
+        { name: away, priceAmerican: priceFromWinProbability(sideWinProbability(awaySide, homeSide)) },
       ];
       // Points on the board mean the week's games have started — no more betting
       // it, even though the synthetic commence time still reads as upcoming.
@@ -189,8 +293,29 @@ export function normalizeResults(league: EspnLeague, spec: LeagueSpec): Normaliz
 export function leagueUrl(spec: LeagueSpec): string {
   return (
     `${HOST}/apis/v3/games/${spec.game}/seasons/${spec.season}` +
-    `/segments/0/leagues/${spec.leagueId}?view=mMatchupScore&view=mTeam`
+    `/segments/0/leagues/${spec.leagueId}?view=mMatchupScore&view=mTeam&view=mDraftDetail&view=mStatus`
   );
+}
+
+/** The URL for a game+season's pro schedule, which carries per-game dates. */
+export function proScheduleUrl(game: string, season: string): string {
+  return `${HOST}/apis/v3/games/${game}/seasons/${season}?view=proTeamSchedules_wl`;
+}
+
+/**
+ * The season start date for a game+season, from its pro schedule, or null if it
+ * can't be read (a bad response must not sink the sync — the caller falls back to
+ * the has-the-season-begun gate). Not private-league scoped, so no cookies.
+ */
+export async function fetchSeasonStart(game: string, season: string): Promise<Date | null> {
+  try {
+    const res = await fetch(proScheduleUrl(game, season));
+    if (!res.ok) return null;
+    return seasonStartFromProSchedule((await res.json()) as EspnProSchedule);
+  } catch (err) {
+    log.warn({ err, game, season }, 'could not read pro schedule for season start');
+    return null;
+  }
 }
 
 export interface EspnCookies {
@@ -263,10 +388,22 @@ export class EspnFantasyProvider implements OddsProvider {
   async getOdds(sportKeys: string[]): Promise<NormalizedEvent[]> {
     const now = new Date();
     const all: NormalizedEvent[] = [];
+    // One pro-schedule fetch per game+season, shared across that season's leagues.
+    const seasonStarts = new Map<string, Date | null>();
     for (const sportKey of sportKeys) {
       const fetched = await fetchLeagueOrSkip(sportKey, this.cookies, this.onOutcome);
       if (!fetched) continue;
-      all.push(...normalizeMatchups(fetched.league, fetched.spec, now));
+      const { spec, league } = fetched;
+
+      const seasonKey = `${spec.game}:${spec.season}`;
+      if (!seasonStarts.has(seasonKey)) {
+        seasonStarts.set(seasonKey, await fetchSeasonStart(spec.game, spec.season));
+      }
+      // Don't offer matchups from a league that hasn't drafted, or whose season is
+      // still more than a week out — ESPN publishes the schedule long before then.
+      if (!isLeagueOpenForBetting(league, seasonStarts.get(seasonKey) ?? null, now)) continue;
+
+      all.push(...normalizeMatchups(league, spec, now));
     }
     return all;
   }
