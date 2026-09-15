@@ -57,6 +57,7 @@ Every router mounted in `src/app.ts`, in source order:
 | `/api/todos` | Admin to-do list behind an email allowlist, with per-item revision history, revert, and comments |
 | `/api/tcg` | Fantasy TCG economy — per-user coin wallet, daily claim, pack opening, and card collection |
 | `/api/calendar` | Events, countdowns, and shared calendars (auth) |
+| `/api/budgets` | Shared budgets — expenses, people, per-person splits, public budgets, and join-request approval (auth) |
 | `/api/gallery` | S3 image upload / delete |
 | `/api/walls` | Saved gallery-wall layouts |
 | `/api/med-journal`, `/api/feedback` | Medical rotation journal + feedback (auth) |

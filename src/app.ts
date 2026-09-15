@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
+import budgetsRoutes from './modules/budgets/routes.js';
 import checkInRoutes from './modules/check-in/routes.js';
 import docsRoutes from './modules/docs/routes.js';
 import f1Routes from './modules/f1/routes.js';
@@ -104,6 +105,7 @@ app.use('/api/check-in', checkInRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/budgets', budgetsRoutes);
 app.use('/api/gallery', galleryRoutes);
 app.use('/api/walls', wallsRoutes);
 app.use('/api/med-journal', medJournalRoutes);
