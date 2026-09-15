@@ -3,6 +3,7 @@ import { checkJwt } from '../../config/auth.js';
 import { createKeyedLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody, validateParams } from '../../middleware/validate.js';
 import { CheckInController } from './controller.js';
+import { submitRateLimitKeyOf } from './rateLimitKey.js';
 import { arrivalSchema, createSiteSchema, siteParamsSchema } from './schemas.js';
 
 const router = Router();
@@ -18,8 +19,7 @@ const ctrl = new CheckInController();
 const submitLimiter = createKeyedLimiter({
   windowMs: 60_000,
   max: 30,
-  keyGenerator: (req) =>
-    (req.auth?.payload as { sub?: string } | undefined)?.sub ?? req.ip ?? 'unknown',
+  keyGenerator: submitRateLimitKeyOf,
 });
 
 // Every route needs a signed-in caller: organizers own sites, volunteers are
