@@ -4,6 +4,7 @@
 
 import { Router } from 'express';
 import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
+import { upsertUser } from '../../middleware/upsertUser.js';
 import { validateBody } from '../../middleware/validate.js';
 import { requireAdmin } from '../../shared/auth/adminEmail.js';
 import { ZeroproofController } from './controller.js';
@@ -27,7 +28,7 @@ router.get('/events', (req, res, next) => ctrl.listEvents(req, res, next));
 router.get('/leaderboard', (req, res, next) => ctrl.leaderboard(req, res, next));
 
 // GET /api/zeroproof/me — the caller's profile stats
-router.get('/me', checkJwt, (req, res, next) => ctrl.me(req, res, next));
+router.get('/me', checkJwt, upsertUser, (req, res, next) => ctrl.me(req, res, next));
 
 // GET /api/zeroproof/refer — attributed outbound link to a partner book
 router.get('/refer', optionalCheckJwt, (req, res, next) => ctrl.refer(req, res, next));
@@ -36,10 +37,10 @@ router.get('/refer', optionalCheckJwt, (req, res, next) => ctrl.refer(req, res, 
 router.get('/house', checkJwt, requireAdmin, (req, res, next) => ctrl.house(req, res, next));
 
 // GET /api/zeroproof/wallets — the caller's wallets and balances
-router.get('/wallets', checkJwt, (req, res, next) => ctrl.listWallets(req, res, next));
+router.get('/wallets', checkJwt, upsertUser, (req, res, next) => ctrl.listWallets(req, res, next));
 
 // GET /api/zeroproof/bets — the caller's bet history, newest first
-router.get('/bets', checkJwt, (req, res, next) => ctrl.myBets(req, res, next));
+router.get('/bets', checkJwt, upsertUser, (req, res, next) => ctrl.myBets(req, res, next));
 
 // GET /api/zeroproof/admin/bets — every user's bets with identity, searchable by
 // ?q= across email/handle/selection/market. Admin only (the god's view).
@@ -48,12 +49,12 @@ router.get('/admin/bets', checkJwt, requireAdmin, (req, res, next) =>
 );
 
 // POST /api/zeroproof/wallets — open a Season or Challenge wallet
-router.post('/wallets', checkJwt, validateBody(openWalletSchema), (req, res, next) =>
+router.post('/wallets', checkJwt, upsertUser, validateBody(openWalletSchema), (req, res, next) =>
   ctrl.openWallet(req, res, next),
 );
 
 // POST /api/zeroproof/bets — place a bet
-router.post('/bets', checkJwt, validateBody(placeBetSchema), (req, res, next) =>
+router.post('/bets', checkJwt, upsertUser, validateBody(placeBetSchema), (req, res, next) =>
   ctrl.placeBet(req, res, next),
 );
 
@@ -63,18 +64,18 @@ router.get('/leagues', optionalCheckJwt, (req, res, next) => ctrl.listLeagues(re
 
 // GET /api/zeroproof/leagues/mine — the caller's leagues (before :id so it isn't
 // captured as a league id)
-router.get('/leagues/mine', checkJwt, (req, res, next) => ctrl.myLeagues(req, res, next));
+router.get('/leagues/mine', checkJwt, upsertUser, (req, res, next) => ctrl.myLeagues(req, res, next));
 
 // GET /api/zeroproof/leagues/:id — a league's rules, board, and the caller's place
 router.get('/leagues/:id', optionalCheckJwt, (req, res, next) => ctrl.leagueDetail(req, res, next));
 
 // POST /api/zeroproof/leagues — create a league
-router.post('/leagues', checkJwt, validateBody(createLeagueSchema), (req, res, next) =>
+router.post('/leagues', checkJwt, upsertUser, validateBody(createLeagueSchema), (req, res, next) =>
   ctrl.createLeague(req, res, next),
 );
 
 // POST /api/zeroproof/leagues/:id/join — join a league
-router.post('/leagues/:id/join', checkJwt, validateBody(joinLeagueSchema), (req, res, next) =>
+router.post('/leagues/:id/join', checkJwt, upsertUser, validateBody(joinLeagueSchema), (req, res, next) =>
   ctrl.joinLeague(req, res, next),
 );
 
@@ -84,10 +85,11 @@ router.post('/leagues/:id/join', checkJwt, validateBody(joinLeagueSchema), (req,
 router.post(
   '/leagues/:id/espn-leagues',
   checkJwt,
+  upsertUser,
   validateBody(addLeagueEspnLeagueSchema),
   (req, res, next) => ctrl.addLeagueEspnLeague(req, res, next),
 );
-router.delete('/leagues/:id/espn-leagues/:espnId', checkJwt, (req, res, next) =>
+router.delete('/leagues/:id/espn-leagues/:espnId', checkJwt, upsertUser, (req, res, next) =>
   ctrl.removeLeagueEspnLeague(req, res, next),
 );
 

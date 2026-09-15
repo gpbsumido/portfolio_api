@@ -4,13 +4,19 @@ import {
   currentBettableWeek,
   EspnFantasyProvider,
   type EspnLeague,
+  type EspnProSchedule,
+  isLeagueOpenForBetting,
+  type LeagueSpec,
   matchupProviderKey,
   normalizeMatchups,
   normalizeResults,
   parseLeagueSpec,
   PICK_EM_PRICE_AMERICAN,
   priceFromWinProbability,
+  seasonStartFromProSchedule,
+  sideWinProbability,
   teamName,
+  winProbabilityFromProjection,
 } from './espnFantasy.js';
 import { EspnFantasyResultsProvider } from './espnFantasyResults.js';
 
@@ -32,6 +38,9 @@ const LEAGUE: EspnLeague = {
     { id: 3, matchupPeriodId: 2, winner: 'UNDECIDED', home: { teamId: 2, totalPoints: 0 }, away: { teamId: 4, totalPoints: 0 } },
     { id: 4, matchupPeriodId: 3, winner: 'UNDECIDED', home: { teamId: 1, totalPoints: 0 }, away: { teamId: 4, totalPoints: 0 } },
   ],
+  // Drafted and mid-season, so the odds provider offers its matchups.
+  draftDetail: { drafted: true },
+  status: { latestScoringPeriod: 2 },
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -184,12 +193,15 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
   });
 
   test('reports each league resolution to onOutcome — null when ok, the error when not', async () => {
+    // URL-aware: the pro-schedule fetch (per season) must not consume the league
+    // responses. League 1241838 resolves; the fba league 401s; pro schedules 200.
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce({ ok: true, json: async () => LEAGUE } as Response)
-        .mockResolvedValueOnce({ ok: false, status: 401 } as Response),
+      vi.fn(async (url: string) => {
+        if (url.includes('proTeamSchedules')) return { ok: true, json: async () => ({}) } as Response;
+        if (url.includes('1241838')) return { ok: true, json: async () => LEAGUE } as Response;
+        return { ok: false, status: 401 } as Response;
+      }),
     );
     const outcomes: { key: string; error: string | null }[] = [];
     await new EspnFantasyProvider({}, (o) => outcomes.push(o)).getOdds([
@@ -200,5 +212,134 @@ describe('ESPN fantasy — providers over a mocked fetch', () => {
       { key: 'ffl:1241838:2022', error: null },
       { key: 'fba:999999:2027', error: expect.stringContaining('401') },
     ]);
+  });
+
+  test('reports a resolved-but-closed (undrafted) league to onClosed and offers nothing', async () => {
+    const undrafted: EspnLeague = {
+      scoringPeriodId: 0,
+      seasonId: 2027,
+      teams: [],
+      schedule: [],
+      draftDetail: { drafted: false },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('proTeamSchedules')) return { ok: true, json: async () => ({}) } as Response;
+        return { ok: true, json: async () => undrafted } as Response;
+      }),
+    );
+    const closed: LeagueSpec[] = [];
+    const events = await new EspnFantasyProvider({}, undefined, (s) => closed.push(s)).getOdds([
+      'fba:999:2027',
+    ]);
+    expect(events).toEqual([]);
+    expect(closed).toEqual([{ game: 'fba', leagueId: '999', season: '2027' }]);
+  });
+
+  test('an open league is not reported to onClosed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('proTeamSchedules')) return { ok: true, json: async () => ({}) } as Response;
+        return { ok: true, json: async () => LEAGUE } as Response;
+      }),
+    );
+    const closed: LeagueSpec[] = [];
+    const events = await new EspnFantasyProvider({}, undefined, (s) => closed.push(s)).getOdds([
+      'ffl:1241838:2022',
+    ]);
+    expect(events).toHaveLength(2);
+    expect(closed).toEqual([]);
+  });
+});
+
+describe('ESPN fantasy — odds from projections', () => {
+  test('derives a win probability from the projected-points gap', () => {
+    const p = winProbabilityFromProjection(110, 100);
+    expect(p).toBeGreaterThan(0.5);
+    // symmetric: the underdog is 1 - favourite
+    expect(winProbabilityFromProjection(100, 110)).toBeCloseTo(1 - (p as number), 6);
+  });
+
+  test('returns undefined when a projection is missing or both are zero', () => {
+    expect(winProbabilityFromProjection(undefined, 100)).toBeUndefined();
+    expect(winProbabilityFromProjection(0, 0)).toBeUndefined();
+  });
+
+  test('sideWinProbability prefers ESPN\'s own probability, else the projection', () => {
+    expect(sideWinProbability({ teamId: 1, totalPoints: 0, winProbability: 0.7 }, { teamId: 2, totalPoints: 0 })).toBe(0.7);
+    const derived = sideWinProbability(
+      { teamId: 1, totalPoints: 0, totalProjectedPoints: 120 },
+      { teamId: 2, totalPoints: 0, totalProjectedPoints: 100 },
+    );
+    expect(derived).toBeGreaterThan(0.5);
+  });
+
+  test('a projected favourite is priced better than a pick\'em', () => {
+    const league: EspnLeague = {
+      scoringPeriodId: 2,
+      seasonId: 2022,
+      teams: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }],
+      schedule: [
+        {
+          id: 1,
+          matchupPeriodId: 1,
+          winner: 'UNDECIDED',
+          home: { teamId: 1, totalPoints: 0, totalProjectedPoints: 130 },
+          away: { teamId: 2, totalPoints: 0, totalProjectedPoints: 100 },
+        },
+      ],
+    };
+    const [event] = normalizeMatchups(league, { game: 'ffl', leagueId: '1', season: '2022' }, new Date('2026-01-01'));
+    const home = event.markets[0].outcomes.find((o) => o.name === 'A')!;
+    // Favourite is negative and not the flat pick'em.
+    expect(home.priceAmerican).toBeLessThan(PICK_EM_PRICE_AMERICAN);
+  });
+});
+
+describe('ESPN fantasy — draft + season-start gating', () => {
+  const drafted = (over: Partial<EspnLeague> = {}): EspnLeague => ({
+    scoringPeriodId: 0,
+    seasonId: 2027,
+    teams: [],
+    schedule: [],
+    draftDetail: { drafted: true },
+    status: { latestScoringPeriod: 0 },
+    ...over,
+  });
+
+  test('seasonStartFromProSchedule finds the earliest pro game date', () => {
+    const pro: EspnProSchedule = {
+      settings: {
+        proTeams: [
+          { proGamesByScoringPeriod: { '1': [{ date: Date.parse('2027-10-24') }] } },
+          { proGamesByScoringPeriod: { '1': [{ date: Date.parse('2027-10-22') }], '2': [{ date: Date.parse('2027-10-26') }] } },
+        ],
+      },
+    };
+    expect(seasonStartFromProSchedule(pro)?.toISOString()).toBe(new Date('2027-10-22').toISOString());
+    expect(seasonStartFromProSchedule({})).toBeNull();
+  });
+
+  test('an undrafted league is never open', () => {
+    const league = drafted({ draftDetail: { drafted: false } });
+    expect(isLeagueOpenForBetting(league, new Date('2027-10-22'), new Date('2027-10-21'))).toBe(false);
+  });
+
+  test('a drafted league opens at most a week before the season starts', () => {
+    const start = new Date('2027-10-22T00:00:00Z');
+    const league = drafted();
+    // 8 days out — too early
+    expect(isLeagueOpenForBetting(league, start, new Date('2027-10-14T00:00:00Z'))).toBe(false);
+    // 6 days out — within the week
+    expect(isLeagueOpenForBetting(league, start, new Date('2027-10-16T00:00:00Z'))).toBe(true);
+    // mid-season — well after start
+    expect(isLeagueOpenForBetting(league, start, new Date('2027-12-01T00:00:00Z'))).toBe(true);
+  });
+
+  test('with no pro schedule, falls back to has-the-season-begun', () => {
+    expect(isLeagueOpenForBetting(drafted({ status: { latestScoringPeriod: 0 } }), null, new Date())).toBe(false);
+    expect(isLeagueOpenForBetting(drafted({ status: { latestScoringPeriod: 3 } }), null, new Date())).toBe(true);
   });
 });
