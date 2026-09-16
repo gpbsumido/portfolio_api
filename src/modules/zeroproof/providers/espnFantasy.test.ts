@@ -328,6 +328,8 @@ describe('ESPN fantasy — draft + season-start gating', () => {
     expect(isLeagueOpenForBetting(league, new Date('2027-10-22'), new Date('2027-10-21'))).toBe(false);
   });
 
+  const played = { id: 1, matchupPeriodId: 1, winner: 'HOME', home: { teamId: 1, totalPoints: 104 }, away: { teamId: 2, totalPoints: 98 } };
+
   test('a drafted league opens at most a week before the season starts', () => {
     const start = new Date('2027-10-22T00:00:00Z');
     const league = drafted();
@@ -335,8 +337,24 @@ describe('ESPN fantasy — draft + season-start gating', () => {
     expect(isLeagueOpenForBetting(league, start, new Date('2027-10-14T00:00:00Z'))).toBe(false);
     // 6 days out — within the week
     expect(isLeagueOpenForBetting(league, start, new Date('2027-10-16T00:00:00Z'))).toBe(true);
-    // mid-season — well after start
-    expect(isLeagueOpenForBetting(league, start, new Date('2027-12-01T00:00:00Z'))).toBe(true);
+    // mid-season — well after start, and a game has been played
+    const midSeason = drafted({ schedule: [played] });
+    expect(isLeagueOpenForBetting(midSeason, start, new Date('2027-12-01T00:00:00Z'))).toBe(true);
+  });
+
+  test('distrusts a past season start when the league shows no game played', () => {
+    // The pro schedule points at a past date (e.g. a season-year off by one), but
+    // the league itself has no played matchup — that contradiction means the
+    // schedule is for the wrong season, so it must not open a pre-season league.
+    const league = drafted(); // empty schedule → nothing played
+    expect(
+      isLeagueOpenForBetting(league, new Date('2025-10-20T00:00:00Z'), new Date('2026-09-15T00:00:00Z')),
+    ).toBe(false);
+    // Same past start, but a game HAS been played → genuinely in-season → open.
+    const inSeason = drafted({ schedule: [played] });
+    expect(
+      isLeagueOpenForBetting(inSeason, new Date('2025-10-20T00:00:00Z'), new Date('2026-09-15T00:00:00Z')),
+    ).toBe(true);
   });
 
   test('with no pro schedule, opens only once a matchup has actually been played', () => {
