@@ -185,7 +185,7 @@ export const SEASON_OPEN_LEAD_MS = 7 * 24 * 60 * 60 * 1000;
  * must have (1) actually drafted and (2) be within a week of the season starting.
  *
  * `seasonStart` null means the pro schedule couldn't be read; rather than guess,
- * fall back to "has the season begun" via the league's latest scoring period, so
+ * fall back to "has the season begun" via the league's own played matchups, so
  * we still never surface a months-early, pre-draft matchup.
  */
 export function isLeagueOpenForBetting(
@@ -194,8 +194,32 @@ export function isLeagueOpenForBetting(
   now: Date,
 ): boolean {
   if (!league.draftDetail?.drafted) return false;
-  if (seasonStart) return now.getTime() >= seasonStart.getTime() - SEASON_OPEN_LEAD_MS;
-  return (league.status?.latestScoringPeriod ?? 0) >= 1;
+  const begun = hasSeasonStarted(league);
+  if (seasonStart) {
+    // A pro-schedule start that's already in the past but with no game played in
+    // the league itself is a contradiction — the schedule is for the wrong (a
+    // previous) season, e.g. a season-year off by one. Don't let that stale date
+    // read as "started long ago" and open a pre-season league. Trust it only when
+    // the league agrees a game has been played, or the start is still ahead.
+    if (seasonStart.getTime() < now.getTime() && !begun) return false;
+    return now.getTime() >= seasonStart.getTime() - SEASON_OPEN_LEAD_MS;
+  }
+  // No pro schedule to read a start date from: only open once the season has
+  // actually been played. ESPN can report latestScoringPeriod as 1 before a ball
+  // is bounced, so trust points on the board, not the period counter.
+  return begun;
+}
+
+/** Whether any matchup has been played — points scored or a winner decided. */
+export function hasSeasonStarted(league: EspnLeague): boolean {
+  return league.schedule.some(
+    (m) =>
+      (m.home?.totalPoints ?? 0) > 0 ||
+      (m.away?.totalPoints ?? 0) > 0 ||
+      m.winner === 'HOME' ||
+      m.winner === 'AWAY' ||
+      m.winner === 'TIE',
+  );
 }
 
 /** A team's display name, resolved from the teams array, with graceful fallbacks. */
@@ -406,7 +430,23 @@ export class EspnFantasyProvider implements OddsProvider {
       }
       // Don't offer matchups from a league that hasn't drafted, or whose season is
       // still more than a week out — ESPN publishes the schedule long before then.
-      if (!isLeagueOpenForBetting(league, seasonStarts.get(seasonKey) ?? null, now)) {
+      const seasonStart = seasonStarts.get(seasonKey) ?? null;
+      const open = isLeagueOpenForBetting(league, seasonStart, now);
+      log.info(
+        {
+          league: sportKey,
+          drafted: league.draftDetail?.drafted ?? false,
+          seasonStart: seasonStart ? seasonStart.toISOString() : null,
+          seasonStartInDays: seasonStart
+            ? Math.round((seasonStart.getTime() - now.getTime()) / 86_400_000)
+            : null,
+          seasonBegun: hasSeasonStarted(league),
+          latestScoringPeriod: league.status?.latestScoringPeriod ?? null,
+          open,
+        },
+        'ESPN league betting gate',
+      );
+      if (!open) {
         this.onClosed?.(spec);
         continue;
       }

@@ -286,27 +286,33 @@ export async function settle(
 }
 
 /**
- * Void and refund open bets on fantasy leagues that aren't open for betting.
+ * Retire fantasy leagues that aren't open for betting: void and refund their open
+ * bets, and close their still-upcoming events so they leave the board.
  *
- * A closed league is one that hasn't drafted, or whose season is still more than
- * a week out — the sync reports these as it skips them. No valid bet can exist on
- * a closed league (a closed league is never offered), and a league only ever goes
- * from closed to open, never back, so an open bet on a closed league is always a
- * pre-open one placed before matchup gating existed. Voiding refunds the stake and
- * keeps the bet out of the win/loss record. Idempotent: a voided bet is no longer
- * 'open', so a re-run over the same leagues refunds nothing twice.
+ * A closed league is one that hasn't drafted, or whose season is still more than a
+ * week out — the sync reports these as it skips them. Gating stopped NEW matchups
+ * being offered, but the events synced before it stayed 'upcoming' in the DB and
+ * kept showing on the board; closing them is what actually clears them. A league
+ * only ever goes from closed to open, never back, so any open bet on a closed
+ * league is a pre-open one — voiding refunds the stake and keeps it out of the
+ * record. Idempotent: a voided bet is no longer 'open' and a closed event no
+ * longer 'upcoming', so a re-run touches nothing twice.
  */
-export async function voidBetsForClosedLeagues(specs: LeagueSpec[]): Promise<number> {
-  let voided = 0;
+export async function retireClosedLeagues(
+  specs: LeagueSpec[],
+): Promise<{ betsVoided: number; eventsClosed: number }> {
+  let betsVoided = 0;
+  let eventsClosed = 0;
   for (const spec of specs) {
     const prefix = `espn:${spec.game}:${spec.season}:${spec.leagueId}:`;
     const bets = await repo.getOpenBetsForProviderKeyPrefix(prefix);
     for (const bet of bets) {
       await repo.settleBet({ bet, grade: 'void', closingOdds: null, clv: null });
-      voided += 1;
+      betsVoided += 1;
     }
+    eventsClosed += await repo.closeUpcomingEventsForProviderKeyPrefix(prefix);
   }
-  return voided;
+  return { betsVoided, eventsClosed };
 }
 
 /**

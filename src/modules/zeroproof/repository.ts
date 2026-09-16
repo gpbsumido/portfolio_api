@@ -363,6 +363,22 @@ export async function getOpenBetsForProviderKeyPrefix(
     .where(and(eq(zeroproofBets.status, 'open'), like(zeroproofEvents.providerKey, `${prefix}%`)));
 }
 
+/**
+ * Retire the still-upcoming events whose provider_key starts with `prefix` —
+ * stamping them 'closed' so the board (which lists only 'upcoming' events) drops
+ * them and isEventBettable refuses them. Used to clear a fantasy league's
+ * pre-season matchups once it's no longer open for betting. Returns how many were
+ * closed; idempotent, since a re-run matches only events still 'upcoming'.
+ */
+export async function closeUpcomingEventsForProviderKeyPrefix(prefix: string): Promise<number> {
+  const closed = await db
+    .update(zeroproofEvents)
+    .set({ status: 'closed', updatedAt: new Date() })
+    .where(and(eq(zeroproofEvents.status, 'upcoming'), like(zeroproofEvents.providerKey, `${prefix}%`)))
+    .returning({ id: zeroproofEvents.id });
+  return closed.length;
+}
+
 /** Every bet the caller has placed, newest first — full rows for the DTO. */
 export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
   const wallets = await db
