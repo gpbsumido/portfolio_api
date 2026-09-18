@@ -234,11 +234,12 @@ export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
 }
 
 /**
- * Recently-finished fixtures — kickoff in the past, within `windowDays` — with
- * the latest snapshot per market, newest first. The read behind the board's
- * opt-in "show past fixtures".
+ * Finished fixtures — kickoff in the past, within `windowDays` (up to 3 months)
+ * — with the latest snapshot per market, newest first. The read behind the
+ * board's opt-in "show past fixtures"; the frontend reveals them a few days at a
+ * time as you scroll back.
  */
-export async function listPastEventsWithLines(windowDays = 7): Promise<EventWithLines[]> {
+export async function listPastEventsWithLines(windowDays = 90): Promise<EventWithLines[]> {
   const now = new Date();
   const cutoff = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
   const events = await db
