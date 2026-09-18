@@ -173,8 +173,11 @@ export async function syncOdds(
   return { events: events.length, snapshots };
 }
 
-export function listEvents() {
-  return repo.listUpcomingEventsWithLines();
+export async function listEvents(opts?: { includePast?: boolean; pastDays?: number }) {
+  const upcoming = await repo.listUpcomingEventsWithLines();
+  if (!opts?.includePast) return upcoming;
+  const past = await repo.listPastEventsWithLines(opts.pastDays);
+  return [...upcoming, ...past];
 }
 
 interface PlaceBetRequest {

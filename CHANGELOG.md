@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-18 - version 5.23.0
+
+- **Serve past fixtures on the events endpoint, incrementally.** `GET /api/zeroproof/events` returns upcoming games only; a new opt-in `?include=past` also returns finished fixtures with their last lines, and `?pastDays=N` sets how far back — clamped to a 1-day floor and a 90-day (3-month) cap — so the frontend fetches just the window it's showing and widens it as you scroll rather than pulling the whole 3 months at once. Read-only and bounded: `listPastEventsWithLines(windowDays)` reuses the same latest-snapshot-per-market join as the upcoming query — extracted into a shared `attachLatestLines` helper, with no behaviour change to the upcoming path — and `service.listEvents({ includePast, pastDays })` appends the past set only when the param is present. Covered by endpoint tests: `?include=past` returns both sets, `?pastDays` passes through clamped, and the default never touches the past query.
+
 ## 2026-09-15 - version 5.22.2
 
 - **Fantasy matchups no longer open when the pro schedule points at the wrong season.** Basketball matchups were still on the board weeks before the season, which means the league was reading as open — i.e. `seasonStart` from ESPN's pro schedule resolved to a date within the week-out window even though the season hadn't started. The most likely cause is a stale or wrong-season schedule (a season-year off by one, or a mis-parsed date) resolving to a date in the *past*, which then read as "started long ago". The gate now distrusts a past `seasonStart` when the league itself shows no game has been played — that contradiction means the schedule is for the wrong season — so a pre-season league stays closed (and the sync then closes its lingering events). A past start with a game actually played still reads as in-season and open.

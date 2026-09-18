@@ -21,6 +21,7 @@ vi.mock('./repository.js', () => ({
   openWallet: vi.fn(),
   listWallets: vi.fn(),
   listUpcomingEventsWithLines: vi.fn(),
+  listPastEventsWithLines: vi.fn(),
   upsertEvent: vi.fn(),
   insertSnapshot: vi.fn(),
   getWalletById: vi.fn(),
@@ -528,6 +529,51 @@ describe('listing events', () => {
     expect(res.body.events[0].commenceTime).toBe('2026-09-02T23:05:00.000Z');
     expect(res.body.events[0].markets[0].market).toBe('h2h');
     expect(res.body.events[0].markets[0].outcomes[0].priceAmerican).toBe(-145);
+  });
+
+  test('adds recent past fixtures when ?include=past is set', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([
+      { id: 'up-1', sport: 'x', home: 'A', away: 'B', commenceTime: new Date('2026-09-10T00:00:00Z'), status: 'upcoming', markets: [] },
+    ] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([
+      { id: 'past-1', sport: 'x', home: 'C', away: 'D', commenceTime: new Date('2026-09-01T00:00:00Z'), status: 'final', markets: [] },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/events?include=past');
+
+    expect(res.status).toBe(200);
+    const ids = res.body.events.map((e: { id: string }) => e.id);
+    expect(ids).toContain('up-1');
+    expect(ids).toContain('past-1');
+  });
+
+  test('does not fetch past fixtures by default', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events');
+
+    expect(repo.listPastEventsWithLines).not.toHaveBeenCalled();
+  });
+
+  test('passes the requested pastDays window through to the repository', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=14');
+
+    expect(repo.listPastEventsWithLines).toHaveBeenCalledWith(14);
+  });
+
+  test('clamps pastDays to a 1-day floor and the 90-day cap', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=500');
+    expect(repo.listPastEventsWithLines).toHaveBeenLastCalledWith(90);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=0');
+    expect(repo.listPastEventsWithLines).toHaveBeenLastCalledWith(1);
   });
 
   test('is public — no auth token required to read the slate', async () => {
