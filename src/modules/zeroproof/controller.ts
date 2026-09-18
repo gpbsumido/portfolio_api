@@ -172,10 +172,14 @@ function toEventDto(e: EventWithLines): EventDto {
 }
 
 export class ZeroproofController {
-  /** GET /api/zeroproof/events — upcoming events with latest lines (public). */
-  async listEvents(_req: Request, res: Response, next: NextFunction) {
+  /**
+   * GET /api/zeroproof/events — upcoming events with latest lines (public).
+   * `?include=past` also returns recently-finished fixtures.
+   */
+  async listEvents(req: Request, res: Response, next: NextFunction) {
     try {
-      const events = await service.listEvents();
+      const includePast = req.query.include === 'past';
+      const events = await service.listEvents({ includePast });
       res.json({ events: events.map(toEventDto) });
     } catch (err) {
       next(err);
