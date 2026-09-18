@@ -2,7 +2,7 @@
 
 ## 2026-09-18 - version 5.23.0
 
-- **Serve past fixtures on the events endpoint.** `GET /api/zeroproof/events` returns upcoming games only; a new opt-in `?include=past` also returns finished fixtures from the last 3 months (kickoff within a bounded 90-day window) with their last lines, so the frontend board can let you scroll back through past games. Read-only and bounded: a new `listPastEventsWithLines(windowDays = 90)` reuses the same latest-snapshot-per-market join as the upcoming query — extracted into a shared `attachLatestLines` helper, with no behaviour change to the upcoming path — and `service.listEvents({ includePast })` appends the past set only when the param is present. Covered by endpoint tests: `?include=past` returns both the upcoming and past sets, and the default never touches the past query.
+- **Serve past fixtures on the events endpoint, incrementally.** `GET /api/zeroproof/events` returns upcoming games only; a new opt-in `?include=past` also returns finished fixtures with their last lines, and `?pastDays=N` sets how far back — clamped to a 1-day floor and a 90-day (3-month) cap — so the frontend fetches just the window it's showing and widens it as you scroll rather than pulling the whole 3 months at once. Read-only and bounded: `listPastEventsWithLines(windowDays)` reuses the same latest-snapshot-per-market join as the upcoming query — extracted into a shared `attachLatestLines` helper, with no behaviour change to the upcoming path — and `service.listEvents({ includePast, pastDays })` appends the past set only when the param is present. Covered by endpoint tests: `?include=past` returns both sets, `?pastDays` passes through clamped, and the default never touches the past query.
 
 ## 2026-09-15 - version 5.22.2
 

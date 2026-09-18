@@ -171,15 +171,24 @@ function toEventDto(e: EventWithLines): EventDto {
   };
 }
 
+/** Parse `?pastDays`, clamped to a 1-day floor and a 90-day (3-month) cap. Undefined when absent or not a number. */
+function parsePastDays(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(Math.max(Math.trunc(n), 1), 90);
+}
+
 export class ZeroproofController {
   /**
    * GET /api/zeroproof/events — upcoming events with latest lines (public).
-   * `?include=past` also returns recently-finished fixtures.
+   * `?include=past` also returns finished fixtures; `?pastDays=N` sets how far
+   * back (1–90, so the frontend can widen the window as you scroll).
    */
   async listEvents(req: Request, res: Response, next: NextFunction) {
     try {
       const includePast = req.query.include === 'past';
-      const events = await service.listEvents({ includePast });
+      const pastDays = parsePastDays(req.query.pastDays);
+      const events = await service.listEvents({ includePast, pastDays });
       res.json({ events: events.map(toEventDto) });
     } catch (err) {
       next(err);

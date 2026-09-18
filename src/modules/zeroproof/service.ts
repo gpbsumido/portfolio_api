@@ -173,10 +173,10 @@ export async function syncOdds(
   return { events: events.length, snapshots };
 }
 
-export async function listEvents(opts?: { includePast?: boolean }) {
+export async function listEvents(opts?: { includePast?: boolean; pastDays?: number }) {
   const upcoming = await repo.listUpcomingEventsWithLines();
   if (!opts?.includePast) return upcoming;
-  const past = await repo.listPastEventsWithLines();
+  const past = await repo.listPastEventsWithLines(opts.pastDays);
   return [...upcoming, ...past];
 }
 
