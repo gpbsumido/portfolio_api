@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-21 - version 5.24.0
+
+- **Every bet now carries its matchup.** `GET /api/zeroproof/bets` (my record) and `GET /api/zeroproof/admin/bets` (the god's view) join `zeroproof_events` and return `home`, `away` and `sport` on each bet DTO, so a bet reads as "Over — Heat @ Celtics" instead of a bare "Over Total" with no way to tell who was playing. The place-bet response carries the same fields, joined off the event the placement already validated (`getEventById` now returns `home`/`away` too). Additive read-model only — no migration, no write-path change.
+- **`GET /api/zeroproof/me` returns the caller's `userSub`.** The frontend compare panel lists leaderboard players to stack yourself against; without knowing my own subject it couldn't drop me from that list. `/me` now returns it (I already had it from the token), so the client can exclude itself.
+
 ## 2026-09-18 - version 5.23.0
 
 - **Serve past fixtures on the events endpoint, incrementally.** `GET /api/zeroproof/events` returns upcoming games only; a new opt-in `?include=past` also returns finished fixtures with their last lines, and `?pastDays=N` sets how far back — clamped to a 1-day floor and a 90-day (3-month) cap — so the frontend fetches just the window it's showing and widens it as you scroll rather than pulling the whole 3 months at once. Read-only and bounded: `listPastEventsWithLines(windowDays)` reuses the same latest-snapshot-per-market join as the upcoming query — extracted into a shared `attachLatestLines` helper, with no behaviour change to the upcoming path — and `service.listEvents({ includePast, pastDays })` appends the past set only when the param is present. Covered by endpoint tests: `?include=past` returns both sets, `?pastDays` passes through clamped, and the default never touches the past query.
