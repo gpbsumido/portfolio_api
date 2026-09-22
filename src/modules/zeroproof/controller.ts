@@ -5,7 +5,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../../shared/errors/index.js';
 import type {
-  ZeroproofBet,
   ZeroproofLeagueEspnLeague,
 } from '../../config/drizzle/schema.js';
 import type {
@@ -21,6 +20,7 @@ import type { AdminBetRow } from './repository.js';
 import type {
   AdminBetDto,
   BetDto,
+  BetWithEvent,
   EventDto,
   EventWithLines,
   IngestHealthDto,
@@ -39,13 +39,16 @@ function toNumber(value: string | null): number | null {
   return value != null ? Number(value) : null;
 }
 
-function toBetDto(bet: ZeroproofBet): BetDto {
+function toBetDto(bet: BetWithEvent): BetDto {
   return {
     id: bet.id,
     walletId: bet.walletId,
     eventId: bet.eventId,
     market: bet.market,
     selection: bet.selection,
+    home: bet.home,
+    away: bet.away,
+    sport: bet.sport,
     oddsAmerican: bet.oddsAmerican,
     lineValue: toNumber(bet.lineValue),
     closingOddsAmerican: bet.closingOddsAmerican,
@@ -198,8 +201,10 @@ export class ZeroproofController {
   /** GET /api/zeroproof/me — the caller's profile stats, wallets and accolades. */
   async me(req: Request, res: Response, next: NextFunction) {
     try {
-      const { wallets, stats, accolades } = await service.getProfile(requireSub(req));
+      const userSub = requireSub(req);
+      const { wallets, stats, accolades } = await service.getProfile(userSub);
       res.json({
+        userSub,
         stats,
         wallets: wallets.map(toWalletDto),
         accolades: accolades.map((a) => ({ id: a.id, name: a.name, awardedAt: a.awardedAt.toISOString() })),

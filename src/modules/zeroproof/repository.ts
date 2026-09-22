@@ -42,6 +42,7 @@ import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
 import type { Grade } from './settlement.js';
 import type {
+  BetWithEvent,
   EventWithLines,
   LeagueEspnLeagueRow,
   LeagueListItem,
@@ -345,13 +346,17 @@ export async function getEventByProviderKey(providerKey: string): Promise<Zeropr
 /** An event's provider key by our id — the league-binding gate needs it at placement. */
 export async function getEventById(
   eventId: string,
-): Promise<{ providerKey: string; sport: string; status: string; commenceTime: Date } | undefined> {
+): Promise<
+  { providerKey: string; sport: string; status: string; commenceTime: Date; home: string; away: string } | undefined
+> {
   const rows = await db
     .select({
       providerKey: zeroproofEvents.providerKey,
       sport: zeroproofEvents.sport,
       status: zeroproofEvents.status,
       commenceTime: zeroproofEvents.commenceTime,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
     })
     .from(zeroproofEvents)
     .where(eq(zeroproofEvents.id, eventId))
@@ -404,15 +409,21 @@ export async function closeUpcomingEventsForProviderKeyPrefix(prefix: string): P
 }
 
 /** Every bet the caller has placed, newest first — full rows for the DTO. */
-export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
+export async function getBetsForUser(userSub: string): Promise<BetWithEvent[]> {
   const wallets = await db
     .select({ id: zeroproofWallets.id })
     .from(zeroproofWallets)
     .where(eq(zeroproofWallets.userSub, userSub));
   if (wallets.length === 0) return [];
-  return db
-    .select()
+  const rows = await db
+    .select({
+      bet: zeroproofBets,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
+      sport: zeroproofEvents.sport,
+    })
     .from(zeroproofBets)
+    .innerJoin(zeroproofEvents, eq(zeroproofBets.eventId, zeroproofEvents.id))
     .where(
       inArray(
         zeroproofBets.walletId,
@@ -420,10 +431,11 @@ export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
       ),
     )
     .orderBy(desc(zeroproofBets.placedAt));
+  return rows.map((r) => ({ ...r.bet, home: r.home, away: r.away, sport: r.sport }));
 }
 
-/** A bet row joined to who placed it — the admin god's view's raw material. */
-export type AdminBetRow = ZeroproofBet & {
+/** A bet row joined to who placed it and its matchup — the admin god's view's raw material. */
+export type AdminBetRow = BetWithEvent & {
   userSub: string;
   mode: string;
   email: string | null;
@@ -444,6 +456,9 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
   const rows = await db
     .select({
       bet: zeroproofBets,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
+      sport: zeroproofEvents.sport,
       userSub: zeroproofWallets.userSub,
       mode: zeroproofWallets.mode,
       email: users.email,
@@ -452,6 +467,7 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
     })
     .from(zeroproofBets)
     .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
+    .innerJoin(zeroproofEvents, eq(zeroproofBets.eventId, zeroproofEvents.id))
     .leftJoin(users, eq(users.sub, zeroproofWallets.userSub))
     .leftJoin(userProfiles, eq(userProfiles.userSub, zeroproofWallets.userSub))
     .where(
@@ -469,6 +485,9 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
 
   return rows.map((r) => ({
     ...r.bet,
+    home: r.home,
+    away: r.away,
+    sport: r.sport,
     userSub: r.userSub,
     mode: r.mode,
     email: r.email,

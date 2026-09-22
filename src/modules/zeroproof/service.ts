@@ -27,6 +27,7 @@ import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
 import { computeStats } from './stats.js';
 import type {
+  BetWithEvent,
   LeaderboardEntry,
   LeagueDetail,
   LeagueListItem,
@@ -34,6 +35,11 @@ import type {
   ProfileResponse,
   WalletMode,
 } from './types.js';
+
+/** A placed bet enriched with its matchup, or a balance-shortfall answer for a 402. */
+type PlaceBetOutcome =
+  | { ok: true; bet: BetWithEvent }
+  | { ok: false; availableCents: number };
 
 /** Season takes any deposit at or above $20; Challenge is a fixed $100. */
 export const MIN_SEASON_DEPOSIT_CENTS = 2000;
@@ -193,7 +199,7 @@ interface PlaceBetRequest {
  * the price off the latest snapshot, then hand to the repo to debit and record
  * in one transaction. The ordering matters — every gate runs before any write.
  */
-export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<repo.PlaceBetResult> {
+export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<PlaceBetOutcome> {
   const now = new Date();
 
   const wallet = await repo.getWalletById(req.walletId);
@@ -221,7 +227,7 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
   }
 
   const { priceAmerican, lineValue } = selectLine(snapshot.outcomes, req.selection);
-  return repo.placeBet({
+  const placed = await repo.placeBet({
     walletId: req.walletId,
     eventId: req.eventId,
     market: req.market,
@@ -230,6 +236,10 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
     lineValue,
     stakeCents: req.stakeCents,
   });
+  if (!placed.ok) return placed;
+  // Carry the matchup back with the placed bet, so the response DTO names both
+  // teams the same way the record and god's view do.
+  return { ok: true, bet: { ...placed.bet, home: event.home, away: event.away, sport: event.sport } };
 }
 
 /**
