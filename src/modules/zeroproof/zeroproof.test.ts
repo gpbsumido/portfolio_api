@@ -449,6 +449,8 @@ describe('profile (/me)', () => {
     const res = await request(makeApp()).get('/api/zeroproof/me');
 
     expect(res.status).toBe(200);
+    // The caller's own subject, so the client can exclude itself from the compare list.
+    expect(res.body.userSub).toBe('auth0|me');
     expect(res.body.stats.wins).toBe(1);
     expect(res.body.stats.losses).toBe(1);
     expect(res.body.wallets).toHaveLength(1);
@@ -617,6 +619,9 @@ describe('bet history', () => {
         status: 'won',
         placedAt: new Date('2026-09-01T00:00:00.000Z'),
         settledAt: new Date('2026-09-02T00:00:00.000Z'),
+        home: 'Boston Celtics',
+        away: 'Miami Heat',
+        sport: 'basketball_nba',
       },
     ] as never);
 
@@ -633,6 +638,10 @@ describe('bet history', () => {
       status: 'won',
       placedAt: '2026-09-01T00:00:00.000Z',
       settledAt: '2026-09-02T00:00:00.000Z',
+      // The matchup, joined from the event, so the record can name both teams.
+      home: 'Boston Celtics',
+      away: 'Miami Heat',
+      sport: 'basketball_nba',
     });
     expect(repo.getBetsForUser).toHaveBeenCalledWith('auth0|me');
   });
@@ -658,6 +667,9 @@ describe("admin god's view (/admin/bets)", () => {
     email: 'greg@example.com',
     username: 'greg',
     displayName: 'Greg the Sharp',
+    home: 'Boston Celtics',
+    away: 'Miami Heat',
+    sport: 'basketball_nba',
     ...overrides,
   });
 
@@ -680,6 +692,10 @@ describe("admin god's view (/admin/bets)", () => {
       status: 'won',
       placedAt: '2026-09-01T00:00:00.000Z',
       settledAt: '2026-09-02T00:00:00.000Z',
+      // The matchup travels with each bet in the god's view too.
+      home: 'Boston Celtics',
+      away: 'Miami Heat',
+      sport: 'basketball_nba',
     });
     // Falls back to the username when there's no display name.
     expect(res.body.bets[1]).toMatchObject({ handle: 'me', status: 'open', settledAt: null });

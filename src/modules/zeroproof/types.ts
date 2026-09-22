@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type {
+  ZeroproofBet,
   ZeroproofLeague,
   ZeroproofLeagueEspnLeague,
   ZeroproofWallet,
@@ -76,6 +77,10 @@ export interface BetDto {
   eventId: string;
   market: string;
   selection: string;
+  /** The matchup, joined from the event, so a bet reads as "Over — Heat @ Celtics" not just "Over Total". */
+  home: string;
+  away: string;
+  sport: string;
   /** Locked at placement. */
   oddsAmerican: number;
   lineValue: number | null;
@@ -87,6 +92,9 @@ export interface BetDto {
   placedAt: string;
   settledAt: string | null;
 }
+
+/** A bet row joined to its event's matchup — what the repository hands the DTO mapper. */
+export type BetWithEvent = ZeroproofBet & { home: string; away: string; sport: string };
 
 /**
  * A bet as the admin god's view sees it: the normal bet DTO plus who placed it.
