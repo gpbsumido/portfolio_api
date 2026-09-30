@@ -14,6 +14,7 @@ import type {
   JoinLeagueInput,
   OpenWalletInput,
   PlaceBetInput,
+  TrackBatchInput,
 } from './schemas.js';
 import * as service from './service.js';
 import type { AdminBetRow } from './repository.js';
@@ -442,6 +443,18 @@ export class ZeroproofController {
         })),
       };
       res.json(dto);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /track — store a batch of anonymous telemetry events. 202: the client
+   * is fire-and-forget, so it only needs to know the batch was accepted. */
+  async ingestAnalytics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { events } = req.body as TrackBatchInput;
+      const result = await service.ingestAnalytics(events);
+      res.status(202).json(result);
     } catch (err) {
       next(err);
     }

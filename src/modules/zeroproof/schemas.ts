@@ -79,3 +79,31 @@ export type AddEspnLeagueInput = z.infer<typeof addEspnLeagueSchema>;
 export const addLeagueEspnLeagueSchema = addEspnLeagueSchema;
 
 export type AddLeagueEspnLeagueInput = z.infer<typeof addLeagueEspnLeagueSchema>;
+
+/** One anonymous telemetry event from the ZeroProof client. */
+export const trackEventSchema = z.object({
+  // Client-generated UUID; the dedup key for at-least-once delivery.
+  eventUuid: z.string().uuid(),
+  name: z.string().min(1).max(64),
+  page: z.string().min(1).max(512),
+  // Per-session monotonic counter, so the backend can spot a gap.
+  seq: z.number().int().nonnegative(),
+  sessionId: z.string().min(1).max(64),
+  // Hashed, non-reversible device key — not a person.
+  anonId: z.string().min(1).max(128),
+  clientTs: z.string().datetime(),
+  props: z.record(z.string(), z.unknown()).optional(),
+  appVersion: z.string().min(1).max(32).default('unknown'),
+});
+
+export type TrackEventInput = z.infer<typeof trackEventSchema>;
+
+/**
+ * POST /api/zeroproof/track — a batch of events. Capped so a single request
+ * can't flood the table; the client batches at ~20 and never nears this.
+ */
+export const trackBatchSchema = z.object({
+  events: z.array(trackEventSchema).min(1).max(100),
+});
+
+export type TrackBatchInput = z.infer<typeof trackBatchSchema>;

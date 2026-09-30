@@ -22,6 +22,7 @@ import {
 } from './providers/theOddsApiResults.js';
 import type { EspnCookies, LeagueSpec } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
+import type { TrackEventInput } from './schemas.js';
 import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
 import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
@@ -778,4 +779,14 @@ export async function getIngestHealth() {
     repo.listEspnLeagueHealth(),
   ]);
   return { sports, espnLeagues };
+}
+
+/**
+ * Store a batch of anonymous telemetry events. Thin: the shape was validated at
+ * the edge, and idempotent dedup on event_uuid lives in the repository.
+ */
+export function ingestAnalytics(
+  events: TrackEventInput[],
+): Promise<{ accepted: number; deduped: number }> {
+  return repo.insertAnalyticsEvents(events);
 }
