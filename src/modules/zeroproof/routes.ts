@@ -15,6 +15,7 @@ import {
   joinLeagueSchema,
   openWalletSchema,
   placeBetSchema,
+  trackBatchSchema,
 } from './schemas.js';
 
 const router = Router();
@@ -26,6 +27,12 @@ router.get('/events', (req, res, next) => ctrl.listEvents(req, res, next));
 
 // GET /api/zeroproof/leaderboard — ranked profiles (public)
 router.get('/leaderboard', (req, res, next) => ctrl.leaderboard(req, res, next));
+
+// POST /api/zeroproof/track — anonymous telemetry ingest (public, no auth). A
+// batch of client events; stored idempotently, deduped on event_uuid.
+router.post('/track', validateBody(trackBatchSchema), (req, res, next) =>
+  ctrl.ingestAnalytics(req, res, next),
+);
 
 // GET /api/zeroproof/me — the caller's profile stats
 router.get('/me', checkJwt, upsertUser, (req, res, next) => ctrl.me(req, res, next));

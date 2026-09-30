@@ -14,6 +14,7 @@ import {
   type ZeroproofEspnLeagueHealth,
   type ZeroproofIngestHealth,
   type ZeroproofLeagueEspnLeague,
+  zeroproofAnalyticsEvents,
   zeroproofBets,
   zeroproofEspnLeagues,
   zeroproofEspnLeagueHealth,
@@ -40,6 +41,7 @@ import {
 } from './ledger.js';
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
+import type { TrackEventInput } from './schemas.js';
 import type { Grade } from './settlement.js';
 import type {
   BetWithEvent,
@@ -1317,4 +1319,52 @@ export async function removeLeagueEspnLeague(leagueId: string, id: string): Prom
         eq(zeroproofLeagueEspnLeagues.leagueId, leagueId),
       ),
     );
+}
+
+/**
+ * Keep the first occurrence of each event_uuid. A batch can carry the same
+ * event twice (a retry overlapping a beacon), and Postgres refuses to apply
+ * ON CONFLICT DO NOTHING to the same row twice in one statement, so the batch
+ * must be deduped before it reaches the insert.
+ */
+export function dedupeByEventUuid<T extends { eventUuid: string }>(events: T[]): T[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event.eventUuid)) return false;
+    seen.add(event.eventUuid);
+    return true;
+  });
+}
+
+/**
+ * Store a batch of telemetry events idempotently. Duplicates — within the batch
+ * or already stored — are dropped rather than counted, so an at-least-once
+ * client can resend freely. Returns how many rows were new and how many the
+ * dedupe absorbed.
+ */
+export async function insertAnalyticsEvents(
+  events: TrackEventInput[],
+): Promise<{ accepted: number; deduped: number }> {
+  const unique = dedupeByEventUuid(events);
+  if (unique.length === 0) return { accepted: 0, deduped: events.length };
+
+  const inserted = await db
+    .insert(zeroproofAnalyticsEvents)
+    .values(
+      unique.map((event) => ({
+        eventUuid: event.eventUuid,
+        anonId: event.anonId,
+        sessionId: event.sessionId,
+        seq: event.seq,
+        name: event.name,
+        page: event.page,
+        props: event.props ?? null,
+        appVersion: event.appVersion,
+        clientTs: new Date(event.clientTs),
+      })),
+    )
+    .onConflictDoNothing({ target: zeroproofAnalyticsEvents.eventUuid })
+    .returning({ eventUuid: zeroproofAnalyticsEvents.eventUuid });
+
+  return { accepted: inserted.length, deduped: events.length - inserted.length };
 }
