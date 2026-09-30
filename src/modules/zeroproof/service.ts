@@ -22,11 +22,13 @@ import {
 } from './providers/theOddsApiResults.js';
 import type { EspnCookies, LeagueSpec } from './providers/espnFantasy.js';
 import type { MarketKey, OddsProvider, ResultsProvider } from './providers/types.js';
+import type { TrackEventInput } from './schemas.js';
 import { accoladeName, challengeMilestone, earnedAccolades } from './accolades.js';
 import * as repo from './repository.js';
 import { closingOddsFor, computeClv, gradeBet } from './settlement.js';
 import { computeStats } from './stats.js';
 import type {
+  BetWithEvent,
   LeaderboardEntry,
   LeagueDetail,
   LeagueListItem,
@@ -34,6 +36,11 @@ import type {
   ProfileResponse,
   WalletMode,
 } from './types.js';
+
+/** A placed bet enriched with its matchup, or a balance-shortfall answer for a 402. */
+type PlaceBetOutcome =
+  | { ok: true; bet: BetWithEvent }
+  | { ok: false; availableCents: number };
 
 /** Season takes any deposit at or above $20; Challenge is a fixed $100. */
 export const MIN_SEASON_DEPOSIT_CENTS = 2000;
@@ -173,8 +180,11 @@ export async function syncOdds(
   return { events: events.length, snapshots };
 }
 
-export function listEvents() {
-  return repo.listUpcomingEventsWithLines();
+export async function listEvents(opts?: { includePast?: boolean; pastDays?: number }) {
+  const upcoming = await repo.listUpcomingEventsWithLines();
+  if (!opts?.includePast) return upcoming;
+  const past = await repo.listPastEventsWithLines(opts.pastDays);
+  return [...upcoming, ...past];
 }
 
 interface PlaceBetRequest {
@@ -190,7 +200,7 @@ interface PlaceBetRequest {
  * the price off the latest snapshot, then hand to the repo to debit and record
  * in one transaction. The ordering matters — every gate runs before any write.
  */
-export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<repo.PlaceBetResult> {
+export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<PlaceBetOutcome> {
   const now = new Date();
 
   const wallet = await repo.getWalletById(req.walletId);
@@ -218,7 +228,7 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
   }
 
   const { priceAmerican, lineValue } = selectLine(snapshot.outcomes, req.selection);
-  return repo.placeBet({
+  const placed = await repo.placeBet({
     walletId: req.walletId,
     eventId: req.eventId,
     market: req.market,
@@ -227,6 +237,10 @@ export async function placeBet(userSub: string, req: PlaceBetRequest): Promise<r
     lineValue,
     stakeCents: req.stakeCents,
   });
+  if (!placed.ok) return placed;
+  // Carry the matchup back with the placed bet, so the response DTO names both
+  // teams the same way the record and god's view do.
+  return { ok: true, bet: { ...placed.bet, home: event.home, away: event.away, sport: event.sport } };
 }
 
 /**
@@ -765,4 +779,14 @@ export async function getIngestHealth() {
     repo.listEspnLeagueHealth(),
   ]);
   return { sports, espnLeagues };
+}
+
+/**
+ * Store a batch of anonymous telemetry events. Thin: the shape was validated at
+ * the edge, and idempotent dedup on event_uuid lives in the repository.
+ */
+export function ingestAnalytics(
+  events: TrackEventInput[],
+): Promise<{ accepted: number; deduped: number }> {
+  return repo.insertAnalyticsEvents(events);
 }

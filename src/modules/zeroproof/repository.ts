@@ -14,6 +14,7 @@ import {
   type ZeroproofEspnLeagueHealth,
   type ZeroproofIngestHealth,
   type ZeroproofLeagueEspnLeague,
+  zeroproofAnalyticsEvents,
   zeroproofBets,
   zeroproofEspnLeagues,
   zeroproofEspnLeagueHealth,
@@ -40,8 +41,10 @@ import {
 } from './ledger.js';
 import { canAfford } from './placement.js';
 import type { MarketKey, NormalizedOutcome, NormalizedResult } from './providers/types.js';
+import type { TrackEventInput } from './schemas.js';
 import type { Grade } from './settlement.js';
 import type {
+  BetWithEvent,
   EventWithLines,
   LeagueEspnLeagueRow,
   LeagueListItem,
@@ -186,16 +189,10 @@ export async function insertSnapshot(input: InsertSnapshotInput): Promise<void> 
   });
 }
 
-/**
- * Upcoming events (kickoff still ahead) with the latest snapshot per market.
- * Served straight from the DB, so user traffic never touches the vendor.
- */
-export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
-  const events = await db
-    .select()
-    .from(zeroproofEvents)
-    .where(and(eq(zeroproofEvents.status, 'upcoming'), gt(zeroproofEvents.commenceTime, new Date())))
-    .orderBy(asc(zeroproofEvents.commenceTime));
+/** Attach the latest snapshot per market to a set of event rows. */
+async function attachLatestLines(
+  events: (typeof zeroproofEvents.$inferSelect)[],
+): Promise<EventWithLines[]> {
   if (events.length === 0) return [];
 
   const ids = events.map((e) => e.id);
@@ -207,7 +204,7 @@ export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
 
   return events.map((event) => {
     const seen = new Set<string>();
-    const markets = [];
+    const markets: EventWithLines['markets'] = [];
     // Snapshots come newest-first, so the first row per market is the latest line.
     for (const snap of snapshots) {
       if (snap.eventId !== event.id || seen.has(snap.market)) continue;
@@ -224,6 +221,36 @@ export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
       markets,
     };
   });
+}
+
+/**
+ * Upcoming events (kickoff still ahead) with the latest snapshot per market.
+ * Served straight from the DB, so user traffic never touches the vendor.
+ */
+export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
+  const events = await db
+    .select()
+    .from(zeroproofEvents)
+    .where(and(eq(zeroproofEvents.status, 'upcoming'), gt(zeroproofEvents.commenceTime, new Date())))
+    .orderBy(asc(zeroproofEvents.commenceTime));
+  return attachLatestLines(events);
+}
+
+/**
+ * Finished fixtures — kickoff in the past, within `windowDays` (up to 3 months)
+ * — with the latest snapshot per market, newest first. The read behind the
+ * board's opt-in "show past fixtures"; the frontend reveals them a few days at a
+ * time as you scroll back.
+ */
+export async function listPastEventsWithLines(windowDays = 90): Promise<EventWithLines[]> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+  const events = await db
+    .select()
+    .from(zeroproofEvents)
+    .where(and(lte(zeroproofEvents.commenceTime, now), gt(zeroproofEvents.commenceTime, cutoff)))
+    .orderBy(desc(zeroproofEvents.commenceTime));
+  return attachLatestLines(events);
 }
 
 /** A single wallet by id, for ownership and lock-window checks. */
@@ -321,13 +348,17 @@ export async function getEventByProviderKey(providerKey: string): Promise<Zeropr
 /** An event's provider key by our id — the league-binding gate needs it at placement. */
 export async function getEventById(
   eventId: string,
-): Promise<{ providerKey: string; sport: string; status: string; commenceTime: Date } | undefined> {
+): Promise<
+  { providerKey: string; sport: string; status: string; commenceTime: Date; home: string; away: string } | undefined
+> {
   const rows = await db
     .select({
       providerKey: zeroproofEvents.providerKey,
       sport: zeroproofEvents.sport,
       status: zeroproofEvents.status,
       commenceTime: zeroproofEvents.commenceTime,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
     })
     .from(zeroproofEvents)
     .where(eq(zeroproofEvents.id, eventId))
@@ -380,15 +411,21 @@ export async function closeUpcomingEventsForProviderKeyPrefix(prefix: string): P
 }
 
 /** Every bet the caller has placed, newest first — full rows for the DTO. */
-export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
+export async function getBetsForUser(userSub: string): Promise<BetWithEvent[]> {
   const wallets = await db
     .select({ id: zeroproofWallets.id })
     .from(zeroproofWallets)
     .where(eq(zeroproofWallets.userSub, userSub));
   if (wallets.length === 0) return [];
-  return db
-    .select()
+  const rows = await db
+    .select({
+      bet: zeroproofBets,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
+      sport: zeroproofEvents.sport,
+    })
     .from(zeroproofBets)
+    .innerJoin(zeroproofEvents, eq(zeroproofBets.eventId, zeroproofEvents.id))
     .where(
       inArray(
         zeroproofBets.walletId,
@@ -396,10 +433,11 @@ export async function getBetsForUser(userSub: string): Promise<ZeroproofBet[]> {
       ),
     )
     .orderBy(desc(zeroproofBets.placedAt));
+  return rows.map((r) => ({ ...r.bet, home: r.home, away: r.away, sport: r.sport }));
 }
 
-/** A bet row joined to who placed it — the admin god's view's raw material. */
-export type AdminBetRow = ZeroproofBet & {
+/** A bet row joined to who placed it and its matchup — the admin god's view's raw material. */
+export type AdminBetRow = BetWithEvent & {
   userSub: string;
   mode: string;
   email: string | null;
@@ -420,6 +458,9 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
   const rows = await db
     .select({
       bet: zeroproofBets,
+      home: zeroproofEvents.home,
+      away: zeroproofEvents.away,
+      sport: zeroproofEvents.sport,
       userSub: zeroproofWallets.userSub,
       mode: zeroproofWallets.mode,
       email: users.email,
@@ -428,6 +469,7 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
     })
     .from(zeroproofBets)
     .innerJoin(zeroproofWallets, eq(zeroproofBets.walletId, zeroproofWallets.id))
+    .innerJoin(zeroproofEvents, eq(zeroproofBets.eventId, zeroproofEvents.id))
     .leftJoin(users, eq(users.sub, zeroproofWallets.userSub))
     .leftJoin(userProfiles, eq(userProfiles.userSub, zeroproofWallets.userSub))
     .where(
@@ -445,6 +487,9 @@ export async function getAllBets(search?: string): Promise<AdminBetRow[]> {
 
   return rows.map((r) => ({
     ...r.bet,
+    home: r.home,
+    away: r.away,
+    sport: r.sport,
     userSub: r.userSub,
     mode: r.mode,
     email: r.email,
@@ -1274,4 +1319,52 @@ export async function removeLeagueEspnLeague(leagueId: string, id: string): Prom
         eq(zeroproofLeagueEspnLeagues.leagueId, leagueId),
       ),
     );
+}
+
+/**
+ * Keep the first occurrence of each event_uuid. A batch can carry the same
+ * event twice (a retry overlapping a beacon), and Postgres refuses to apply
+ * ON CONFLICT DO NOTHING to the same row twice in one statement, so the batch
+ * must be deduped before it reaches the insert.
+ */
+export function dedupeByEventUuid<T extends { eventUuid: string }>(events: T[]): T[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event.eventUuid)) return false;
+    seen.add(event.eventUuid);
+    return true;
+  });
+}
+
+/**
+ * Store a batch of telemetry events idempotently. Duplicates — within the batch
+ * or already stored — are dropped rather than counted, so an at-least-once
+ * client can resend freely. Returns how many rows were new and how many the
+ * dedupe absorbed.
+ */
+export async function insertAnalyticsEvents(
+  events: TrackEventInput[],
+): Promise<{ accepted: number; deduped: number }> {
+  const unique = dedupeByEventUuid(events);
+  if (unique.length === 0) return { accepted: 0, deduped: events.length };
+
+  const inserted = await db
+    .insert(zeroproofAnalyticsEvents)
+    .values(
+      unique.map((event) => ({
+        eventUuid: event.eventUuid,
+        anonId: event.anonId,
+        sessionId: event.sessionId,
+        seq: event.seq,
+        name: event.name,
+        page: event.page,
+        props: event.props ?? null,
+        appVersion: event.appVersion,
+        clientTs: new Date(event.clientTs),
+      })),
+    )
+    .onConflictDoNothing({ target: zeroproofAnalyticsEvents.eventUuid })
+    .returning({ eventUuid: zeroproofAnalyticsEvents.eventUuid });
+
+  return { accepted: inserted.length, deduped: events.length - inserted.length };
 }

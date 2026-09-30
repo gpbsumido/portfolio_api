@@ -8,6 +8,7 @@ import {
   boolean,
   decimal,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -676,3 +677,25 @@ export const zeroproofIngestHealth = pgTable(
 
 export type ZeroproofIngestHealth = InferSelectModel<typeof zeroproofIngestHealth>;
 export type NewZeroproofIngestHealth = InferInsertModel<typeof zeroproofIngestHealth>;
+
+export const zeroproofAnalyticsEvents = pgTable(
+  "zeroproof_analytics_events",
+  {
+    // Client-generated, so an at-least-once delivery layer can resend and let
+    // the insert dedupe on conflict.
+    eventUuid: uuid("event_uuid").primaryKey(),
+    anonId: text("anon_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    seq: integer("seq").notNull(),
+    name: text("name").notNull(),
+    page: text("page").notNull(),
+    props: jsonb("props"),
+    appVersion: text("app_version").notNull().default("unknown"),
+    clientTs: timestamp("client_ts", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("zeroproof_analytics_session_seq_idx").on(t.anonId, t.sessionId, t.seq)],
+);
+
+export type ZeroproofAnalyticsEvent = InferSelectModel<typeof zeroproofAnalyticsEvents>;
+export type NewZeroproofAnalyticsEvent = InferInsertModel<typeof zeroproofAnalyticsEvents>;

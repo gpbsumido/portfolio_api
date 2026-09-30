@@ -21,6 +21,7 @@ vi.mock('./repository.js', () => ({
   openWallet: vi.fn(),
   listWallets: vi.fn(),
   listUpcomingEventsWithLines: vi.fn(),
+  listPastEventsWithLines: vi.fn(),
   upsertEvent: vi.fn(),
   insertSnapshot: vi.fn(),
   getWalletById: vi.fn(),
@@ -448,6 +449,8 @@ describe('profile (/me)', () => {
     const res = await request(makeApp()).get('/api/zeroproof/me');
 
     expect(res.status).toBe(200);
+    // The caller's own subject, so the client can exclude itself from the compare list.
+    expect(res.body.userSub).toBe('auth0|me');
     expect(res.body.stats.wins).toBe(1);
     expect(res.body.stats.losses).toBe(1);
     expect(res.body.wallets).toHaveLength(1);
@@ -530,6 +533,51 @@ describe('listing events', () => {
     expect(res.body.events[0].markets[0].outcomes[0].priceAmerican).toBe(-145);
   });
 
+  test('adds recent past fixtures when ?include=past is set', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([
+      { id: 'up-1', sport: 'x', home: 'A', away: 'B', commenceTime: new Date('2026-09-10T00:00:00Z'), status: 'upcoming', markets: [] },
+    ] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([
+      { id: 'past-1', sport: 'x', home: 'C', away: 'D', commenceTime: new Date('2026-09-01T00:00:00Z'), status: 'final', markets: [] },
+    ] as never);
+
+    const res = await request(makeApp()).get('/api/zeroproof/events?include=past');
+
+    expect(res.status).toBe(200);
+    const ids = res.body.events.map((e: { id: string }) => e.id);
+    expect(ids).toContain('up-1');
+    expect(ids).toContain('past-1');
+  });
+
+  test('does not fetch past fixtures by default', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events');
+
+    expect(repo.listPastEventsWithLines).not.toHaveBeenCalled();
+  });
+
+  test('passes the requested pastDays window through to the repository', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=14');
+
+    expect(repo.listPastEventsWithLines).toHaveBeenCalledWith(14);
+  });
+
+  test('clamps pastDays to a 1-day floor and the 90-day cap', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=500');
+    expect(repo.listPastEventsWithLines).toHaveBeenLastCalledWith(90);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=0');
+    expect(repo.listPastEventsWithLines).toHaveBeenLastCalledWith(1);
+  });
+
   test('is public — no auth token required to read the slate', async () => {
     claims = {};
     vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
@@ -571,6 +619,9 @@ describe('bet history', () => {
         status: 'won',
         placedAt: new Date('2026-09-01T00:00:00.000Z'),
         settledAt: new Date('2026-09-02T00:00:00.000Z'),
+        home: 'Boston Celtics',
+        away: 'Miami Heat',
+        sport: 'basketball_nba',
       },
     ] as never);
 
@@ -587,6 +638,10 @@ describe('bet history', () => {
       status: 'won',
       placedAt: '2026-09-01T00:00:00.000Z',
       settledAt: '2026-09-02T00:00:00.000Z',
+      // The matchup, joined from the event, so the record can name both teams.
+      home: 'Boston Celtics',
+      away: 'Miami Heat',
+      sport: 'basketball_nba',
     });
     expect(repo.getBetsForUser).toHaveBeenCalledWith('auth0|me');
   });
@@ -612,6 +667,9 @@ describe("admin god's view (/admin/bets)", () => {
     email: 'greg@example.com',
     username: 'greg',
     displayName: 'Greg the Sharp',
+    home: 'Boston Celtics',
+    away: 'Miami Heat',
+    sport: 'basketball_nba',
     ...overrides,
   });
 
@@ -634,6 +692,10 @@ describe("admin god's view (/admin/bets)", () => {
       status: 'won',
       placedAt: '2026-09-01T00:00:00.000Z',
       settledAt: '2026-09-02T00:00:00.000Z',
+      // The matchup travels with each bet in the god's view too.
+      home: 'Boston Celtics',
+      away: 'Miami Heat',
+      sport: 'basketball_nba',
     });
     // Falls back to the username when there's no display name.
     expect(res.body.bets[1]).toMatchObject({ handle: 'me', status: 'open', settledAt: null });
