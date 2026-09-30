@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-09-30 - version 5.25.1
+
+- **`work-portfolio-remote` is a live gate here now.** paul-explore picks per visitor between its in-repo `/work-portfolio` and the micro-frontend remote on this flag, but the flag only existed in paul-explore's local seed, so the `/flags` console had nothing to ramp. It's now the third admin-only protected flag, next to `pocket-tcg` and `world-live-presence`: kept out of the 6-hourly reset and re-created by it if missing. Unlike those two it's created at 0% in production, because paul-explore's gate for it fails closed and the row appearing must not move anyone. Migration `046` inserts it once and never overwrites an existing row.
+
 ## 2026-09-29 - version 5.25.0
 
 - **Anonymous telemetry ingest for ZeroProof.** New public `POST /api/zeroproof/track` accepts a batch of client events — `{ events: [...] }` — and returns `202 { accepted, deduped }`. No auth: it's fire-and-forget from signed-out visitors too. Events land in a new `zeroproof_analytics_events` table (migration `045`) keyed by a client-generated `event_uuid` that's UNIQUE, so the insert runs `ON CONFLICT DO NOTHING` and the browser's at-least-once delivery layer (retries, a `sendBeacon` flush that races the next page load) can resend freely without double-counting. A batch is deduped on `event_uuid` before insert too, because Postgres refuses ON CONFLICT against the same row twice in one statement. Each row stores a hashed, non-reversible `anon_id`, a per-tab `session_id`, and a per-session `seq`, indexed together so a gap in a session's sequence — events lost in flight rather than never sent — is detectable server-side. The batch is capped at 100 events; the client batches at ~20 and never nears it. Covered by route tests (public 202, count reporting, rejects empty/oversized/malformed) and a dedup unit test.

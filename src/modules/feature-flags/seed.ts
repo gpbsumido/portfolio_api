@@ -234,9 +234,10 @@ export const CANONICAL_FLAGS: Flag[] = [
     },
   },
   // ── Live gates ─────────────────────────────────────────────────────────────
-  // These two are not demo data. They gate real pages on paul-explore, which is
-  // why they are admin-only and why the reset below leaves them alone. Seeded
-  // fully on so creating them changes nothing for visitors.
+  // These are not demo data. They gate real pages on paul-explore, which is why
+  // they are admin-only and why the reset below leaves them alone. Each is
+  // seeded to match what visitors already get, so creating it changes nothing:
+  // the first two fully on, work-portfolio-remote at 0%.
   {
     key: 'pocket-tcg',
     access: 'admin',
@@ -284,6 +285,34 @@ export const CANONICAL_FLAGS: Flag[] = [
       production: boolEnv({
         enabled: true,
         fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+    },
+  },
+  {
+    key: 'work-portfolio-remote',
+    access: 'admin',
+    name: 'Work portfolio remote',
+    description:
+      'Serves /work-portfolio from the micro-frontend remote (gpbsumido/work-portfolio-mfe) instead of the in-repo copy. Sticky per visitor, and paul-explore fails closed: a missing flag means the in-repo page. Created at 0% in production; dial it up to migrate, and down to roll back without a deploy.',
+    kind: 'boolean',
+    tags: ['work-portfolio', 'micro-frontend', 'migration'],
+    variations: [...BOOLEAN],
+    createdAt: '2026-09-30T12:00:00.000Z',
+    environments: {
+      development: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      staging: boolEnv({
+        enabled: true,
+        fallthrough: [{ variation: 'on', weight: 100 }],
+      }),
+      production: boolEnv({
+        enabled: true,
+        fallthrough: [
+          { variation: 'on', weight: 0 },
+          { variation: 'off', weight: 100 },
+        ],
       }),
     },
   },
