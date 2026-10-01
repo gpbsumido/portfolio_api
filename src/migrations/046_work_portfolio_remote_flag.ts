@@ -13,14 +13,11 @@
 
 import type { Knex } from 'knex';
 
-import { CANONICAL_FLAGS } from '../modules/feature-flags/seed.js';
-
-const KEY = 'work-portfolio-remote';
+// Read from the frozen definition, not CANONICAL_FLAGS: the flag has since
+// been retired (047), and this still has to run on a fresh database.
+import { WORK_PORTFOLIO_REMOTE_FLAG as flag } from '../modules/feature-flags/retired.js';
 
 export async function up(knex: Knex): Promise<void> {
-  const flag = CANONICAL_FLAGS.find((f) => f.key === KEY);
-  if (!flag) throw new Error(`${KEY} is missing from CANONICAL_FLAGS`);
-
   await knex('feature_flags')
     .insert({
       key: flag.key,
@@ -38,5 +35,5 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
-  await knex('feature_flags').where({ key: KEY }).del();
+  await knex('feature_flags').where({ key: flag.key }).del();
 }
