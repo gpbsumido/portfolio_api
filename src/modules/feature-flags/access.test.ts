@@ -9,22 +9,16 @@ describe('flag access tiers', () => {
     }
   });
 
-  test('the live kill switches are admin-only', () => {
+  test('the two live kill switches are admin-only', () => {
     // These gate real pages on paul-explore. Anything looser would hand a
-    // stranger the switch for /tcg/pocket, world presence, or which build of
-    // /work-portfolio visitors get.
+    // stranger the switch for /tcg/pocket or world presence.
     const admin = CANONICAL_FLAGS.filter((f) => f.access === 'admin').map((f) => f.key);
-    expect(admin).toEqual(['pocket-tcg', 'world-live-presence', 'work-portfolio-remote']);
+    expect(admin).toEqual(['pocket-tcg', 'world-live-presence']);
   });
 
-  test('work-portfolio-remote is created at 0% in production, so adding it moves no one', () => {
-    // paul-explore's gate fails closed (a missing flag means the in-repo
-    // portfolio), and this has to agree with it: the row appearing must not
-    // switch anybody to the remote before the rollout is dialled up.
-    const flag = CANONICAL_FLAGS.find((f) => f.key === 'work-portfolio-remote');
-    expect(flag).toBeDefined();
-    const on = flag?.environments.production?.fallthrough.find((w) => w.variation === 'on');
-    expect(on?.weight ?? 0).toBe(0);
+  test('work-portfolio-remote is retired: paul-explore always serves the remote now', () => {
+    expect(CANONICAL_FLAGS.map((f) => f.key)).not.toContain('work-portfolio-remote');
+    expect(isProtectedFlag('work-portfolio-remote')).toBe(false);
   });
 
   test('the demo flags stay reachable without being admin', () => {
@@ -40,7 +34,6 @@ describe('isProtectedFlag', () => {
   test('protects the admin tier from the reset', () => {
     expect(isProtectedFlag('pocket-tcg')).toBe(true);
     expect(isProtectedFlag('world-live-presence')).toBe(true);
-    expect(isProtectedFlag('work-portfolio-remote')).toBe(true);
   });
 
   test('leaves the demo flags resettable', () => {
@@ -61,24 +54,19 @@ describe('RESETTABLE_FLAGS', () => {
     const keys = RESETTABLE_FLAGS.map((f) => f.key);
     expect(keys).not.toContain('pocket-tcg');
     expect(keys).not.toContain('world-live-presence');
-    expect(keys).not.toContain('work-portfolio-remote');
   });
 
   test('still covers all the demo flags', () => {
     const keys = RESETTABLE_FLAGS.map((f) => f.key);
     expect(keys).toContain('dark-mode');
     expect(keys).toContain('new-checkout');
-    expect(RESETTABLE_FLAGS.length).toBe(CANONICAL_FLAGS.length - 3);
+    expect(RESETTABLE_FLAGS.length).toBe(CANONICAL_FLAGS.length - 2);
   });
 });
 
 describe('PROTECTED_FLAGS', () => {
   test('holds exactly the live gates', () => {
-    expect(PROTECTED_FLAGS.map((f) => f.key)).toEqual([
-      'pocket-tcg',
-      'world-live-presence',
-      'work-portfolio-remote',
-    ]);
+    expect(PROTECTED_FLAGS.map((f) => f.key)).toEqual(['pocket-tcg', 'world-live-presence']);
   });
 
   test('together with RESETTABLE_FLAGS accounts for every canonical flag exactly once', () => {

@@ -25,11 +25,7 @@ export type FlagAccess = (typeof ACCESS_TIERS)[number];
  * a kill switch: turning /tcg/pocket off after a regression would silently
  * revert within six hours, exactly when nobody is watching.
  */
-export const PROTECTED_FLAG_KEYS = [
-  'pocket-tcg',
-  'world-live-presence',
-  'work-portfolio-remote',
-] as const;
+export const PROTECTED_FLAG_KEYS = ['pocket-tcg', 'world-live-presence'] as const;
 
 /** Whether the reset must leave this flag alone. */
 export function isProtectedFlag(key: string): boolean {

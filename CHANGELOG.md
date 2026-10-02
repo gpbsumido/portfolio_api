@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-30 - version 5.25.2
+
+- **Retired `work-portfolio-remote`.** The flag ran at 100%, and paul-explore 7.11.4 always mounts the work-portfolio remote, so nothing reads it. It leaves `CANONICAL_FLAGS` and `PROTECTED_FLAG_KEYS`, and migration `047` deletes the row (`down` restores it at 100%, the state it was retired in). Deploy after paul-explore 7.11.4: older paul-explore builds fail closed on a missing flag.
+- Migration `046` now reads the flag's definition from a frozen copy in `feature-flags/retired.ts` instead of `CANONICAL_FLAGS`, so it still runs on a fresh database now that the flag has left the seed. Same row, same effect.
+
 ## 2026-09-30 - version 5.25.1
 
 - **`work-portfolio-remote` is a live gate here now.** paul-explore picks per visitor between its in-repo `/work-portfolio` and the micro-frontend remote on this flag, but the flag only existed in paul-explore's local seed, so the `/flags` console had nothing to ramp. It's now the third admin-only protected flag, next to `pocket-tcg` and `world-live-presence`: kept out of the 6-hourly reset and re-created by it if missing. Unlike those two it's created at 0% in production, because paul-explore's gate for it fails closed and the row appearing must not move anyone. Migration `046` inserts it once and never overwrites an existing row.
