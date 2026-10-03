@@ -226,13 +226,17 @@ async function attachLatestLines(
 /**
  * Upcoming events (kickoff still ahead) with the latest snapshot per market.
  * Served straight from the DB, so user traffic never touches the vendor.
+ * `aheadDays` stops the list that many days out; without it, every upcoming
+ * fixture comes back.
  */
-export async function listUpcomingEventsWithLines(): Promise<EventWithLines[]> {
-  const events = await db
-    .select()
-    .from(zeroproofEvents)
-    .where(and(eq(zeroproofEvents.status, 'upcoming'), gt(zeroproofEvents.commenceTime, new Date())))
-    .orderBy(asc(zeroproofEvents.commenceTime));
+export async function listUpcomingEventsWithLines(aheadDays?: number): Promise<EventWithLines[]> {
+  const now = new Date();
+  const upcoming = and(eq(zeroproofEvents.status, 'upcoming'), gt(zeroproofEvents.commenceTime, now));
+  const where =
+    aheadDays === undefined
+      ? upcoming
+      : and(upcoming, lte(zeroproofEvents.commenceTime, new Date(now.getTime() + aheadDays * 24 * 60 * 60 * 1000)));
+  const events = await db.select().from(zeroproofEvents).where(where).orderBy(asc(zeroproofEvents.commenceTime));
   return attachLatestLines(events);
 }
 
