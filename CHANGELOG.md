@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-02 - version 5.26.0
+
+- **`GET /api/zeroproof/events` takes `?aheadDays`.** Upcoming fixtures stop that many days out, clamped to 1–30. paul-explore's board now shows a month at most and asks for `aheadDays=30`, so it no longer downloads fixtures it will never show. Without the parameter the response is unchanged, so this can deploy before or after the frontend.
+
 ## 2026-09-30 - version 5.25.2
 
 - **Retired `work-portfolio-remote`.** The flag ran at 100%, and paul-explore 7.11.4 always mounts the work-portfolio remote, so nothing reads it. It leaves `CANONICAL_FLAGS` and `PROTECTED_FLAG_KEYS`, and migration `047` deletes the row (`down` restores it at 100%, the state it was retired in). Deploy after paul-explore 7.11.4: older paul-explore builds fail closed on a missing flag.
