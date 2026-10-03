@@ -180,8 +180,8 @@ export async function syncOdds(
   return { events: events.length, snapshots };
 }
 
-export async function listEvents(opts?: { includePast?: boolean; pastDays?: number }) {
-  const upcoming = await repo.listUpcomingEventsWithLines();
+export async function listEvents(opts?: { includePast?: boolean; pastDays?: number; aheadDays?: number }) {
+  const upcoming = await repo.listUpcomingEventsWithLines(opts?.aheadDays);
   if (!opts?.includePast) return upcoming;
   const past = await repo.listPastEventsWithLines(opts.pastDays);
   return [...upcoming, ...past];
