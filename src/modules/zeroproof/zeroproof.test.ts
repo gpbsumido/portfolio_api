@@ -578,6 +578,38 @@ describe('listing events', () => {
     expect(repo.listPastEventsWithLines).toHaveBeenLastCalledWith(1);
   });
 
+  test('asks the repository for every upcoming fixture when no aheadDays is given', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events');
+
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(undefined);
+  });
+
+  test('passes aheadDays through so upcoming fixtures stop at that many days out', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+    vi.mocked(repo.listPastEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?aheadDays=30');
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(30);
+
+    await request(makeApp()).get('/api/zeroproof/events?include=past&pastDays=14&aheadDays=21');
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(21);
+  });
+
+  test('clamps aheadDays to a 1-day floor and the 30-day cap', async () => {
+    vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);
+
+    await request(makeApp()).get('/api/zeroproof/events?aheadDays=365');
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(30);
+
+    await request(makeApp()).get('/api/zeroproof/events?aheadDays=0');
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(1);
+
+    await request(makeApp()).get('/api/zeroproof/events?aheadDays=soon');
+    expect(repo.listUpcomingEventsWithLines).toHaveBeenLastCalledWith(undefined);
+  });
+
   test('is public — no auth token required to read the slate', async () => {
     claims = {};
     vi.mocked(repo.listUpcomingEventsWithLines).mockResolvedValue([] as never);

@@ -182,17 +182,27 @@ function parsePastDays(raw: unknown): number | undefined {
   return Math.min(Math.max(Math.trunc(n), 1), 90);
 }
 
+/** Parse `?aheadDays`, clamped to a 1-day floor and a 30-day (one-month) cap. Undefined when absent or not a number. */
+function parseAheadDays(raw: unknown): number | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(Math.max(Math.trunc(n), 1), 30);
+}
+
 export class ZeroproofController {
   /**
    * GET /api/zeroproof/events — upcoming events with latest lines (public).
    * `?include=past` also returns finished fixtures; `?pastDays=N` sets how far
-   * back (1–90, so the frontend can widen the window as you scroll).
+   * back (1–90, so the frontend can widen the window as you scroll), and
+   * `?aheadDays=N` how far ahead upcoming fixtures reach (1–30; all when absent).
    */
   async listEvents(req: Request, res: Response, next: NextFunction) {
     try {
       const includePast = req.query.include === 'past';
       const pastDays = parsePastDays(req.query.pastDays);
-      const events = await service.listEvents({ includePast, pastDays });
+      const aheadDays = parseAheadDays(req.query.aheadDays);
+      const events = await service.listEvents({ includePast, pastDays, aheadDays });
       res.json({ events: events.map(toEventDto) });
     } catch (err) {
       next(err);
