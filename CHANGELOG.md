@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-05 - version 5.26.1
+
+- **An email's `users` row follows the verified login that presents it.** paul-explore's Auth0 Action now links logins that share a verified email into one user, so after a link the same email arrives under the primary's `sub`. `users.email` is unique and calendar and budget invites resolve through it, so if the folded-in account had claimed the row first, the primary's upsert failed and invites kept going to a `sub` nobody signs in as. `upsertUser` now hands the row over first, and only for Google and email-and-password logins, the same providers the Action trusts.
+- **Migration `048` adds `ON UPDATE CASCADE` to all seven foreign keys on `users.sub`** (calendar members and their inviter, profiles, budgets, budget people, members and join requests), so memberships, budgets and the profile move with the row. Names and `ON DELETE` behaviour are unchanged, and `down` puts them back as they were.
+
 ## 2026-10-02 - version 5.26.0
 
 - **`GET /api/zeroproof/events` takes `?aheadDays`.** Upcoming fixtures stop that many days out, clamped to 1–30. paul-explore's board now shows a month at most and asks for `aheadDays=30`, so it no longer downloads fixtures it will never show. Without the parameter the response is unchanged, so this can deploy before or after the frontend.

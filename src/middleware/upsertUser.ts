@@ -11,6 +11,13 @@ const log = createModuleLogger('upsertUser');
 const EMAIL_CLAIM_NS = 'https://paulsumido.com/';
 
 /**
+ * Providers whose verified email I trust enough to hand an email's row over
+ * on. Same list as the Auth0 Action in paul-explore that links logins sharing
+ * a verified email (auth0/actions/link-accounts-by-email.js).
+ */
+const TRUSTED_PROVIDERS = new Set(['google-oauth2', 'auth0']);
+
+/**
  * Module-level cache: sub → email for subs seen this process lifetime.
  * Skips the DB upsert when the sub+email pair hasn't changed.
  */
@@ -51,6 +58,19 @@ export async function upsertUser(
   }
 
   try {
+    // Auth0 links logins that share a verified email into one user, so after a
+    // link the email turns up under the primary's sub. If another sub still
+    // holds the row, hand it over, and the foreign keys cascade so memberships,
+    // budgets and the profile come along. Only when this sub has no row of its
+    // own yet, since two rows can't both become this sub.
+    if (TRUSTED_PROVIDERS.has(sub.split('|')[0])) {
+      await query(
+        `UPDATE users SET sub = $1, updated_at = NOW()
+         WHERE email = $2 AND sub <> $1
+           AND NOT EXISTS (SELECT 1 FROM users WHERE sub = $1)`,
+        [sub, email],
+      );
+    }
     await query(
       `INSERT INTO users (sub, email, updated_at)
        VALUES ($1, $2, NOW())
