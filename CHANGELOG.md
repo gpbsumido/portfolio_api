@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-23 - version 6.0.0
+
+- **A major release, alongside paul-explore 8.0.0.** It ships 5.28.2 to production. The major number is for migration `051`: it deletes every row in `evar_attempts` and `evar_case_references`, and `down` can't bring them back, so the EVAR study starts again with this release. `evar_participants` is untouched, so nobody has to consent again.
+- The OpenAPI document's `info.version` had said 2.4.2 since 2.x. It says 6.0.0 now.
+
 ## 2026-10-23 - version 5.28.2
 
 - **Migration `051` resets the EVAR study for the reworked phantom.** paul-explore 7.26.0 gives every phantom neck a taper, an angle, thrombus or calcium. The case ids stayed the same and every image changed, so attempts recorded before it were measured on necks that no longer exist, and hand-set references describe the old geometry. `up` deletes every row in `evar_attempts` and `evar_case_references`. `evar_participants` is untouched, so nobody has to consent again. `down` can't restore the rows and does nothing.
