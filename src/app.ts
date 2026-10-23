@@ -9,6 +9,7 @@ import calendarRoutes from './modules/calendar/routes.js';
 import budgetsRoutes from './modules/budgets/routes.js';
 import checkInRoutes from './modules/check-in/routes.js';
 import docsRoutes from './modules/docs/routes.js';
+import evarRoutes from './modules/evar/routes.js';
 import f1Routes from './modules/f1/routes.js';
 import fantasyRoutes from './modules/fantasy/routes.js';
 import featureFlagsRoutes from './modules/feature-flags/routes.js';
@@ -102,6 +103,7 @@ app.use('/api/todos', todosRoutes);
 
 // Signed-in routes (the module applies checkJwt to its whole router)
 app.use('/api/check-in', checkInRoutes);
+app.use('/api/evar', evarRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);
