@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-22 - version 5.28.1
+
+- **Fixed the 5.28.0 production deploy, which died in migration `048`.** Production's `calendar_members` and `user_profiles` are older than knex: the legacy SQL scripts made them with a bare `REFERENCES users(sub)`, so Postgres named their foreign keys `<table>_<column>_fkey`, and the knex baseline was marked as run rather than run. `dropForeign` drops `<table>_<column>_foreign`, which only exists on a database built from the baseline. CI and staging are, so both passed; production failed with `constraint "calendar_members_user_sub_foreign" of relation "calendar_members" does not exist`, `start.sh` stopped the container, and the API went down.
+- `048` now looks up the constraint names Postgres actually has in `pg_constraint` and drops those, then recreates them under knex's names with `ON UPDATE CASCADE`. `down` uses the same lookup. Staging, which already ran the old `048`, is unaffected: knex doesn't re-run an applied migration, and its constraints already look the way the fixed one leaves them.
+
 ## 2026-10-22 - version 5.28.0
 
 - **Admins can set the correct answers for an EVAR case.** The synthetic phantoms work their answers out from their own geometry, but a value can need correcting, and a real scan has no geometry, only answers someone measured by hand. `PUT /api/evar/admin/references/:caseId` adds or replaces all five (neck diameter and length, maximum sac, both common iliacs, in mm, plus an optional note), and `DELETE` drops the override so the case goes back to its built-in answers. Both are admin-only, and the case id has to be a lowercase slug.
