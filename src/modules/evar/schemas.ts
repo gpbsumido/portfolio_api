@@ -77,5 +77,27 @@ export const attemptSchema = z
   })
   .strict();
 
+/** A case id as the page knows it: lowercase words joined by hyphens. */
+export const caseParamsSchema = z
+  .object({
+    caseId: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(40),
+  })
+  .strict();
+
+const answer = z.number().positive().max(300);
+
+/** All five answers at once, so a case is never half overridden. */
+export const referenceSchema = z
+  .object({
+    neckDiameter: answer,
+    neckLength: answer,
+    maxSac: answer,
+    rightCia: answer,
+    leftCia: answer,
+    note: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+
+export type ReferenceInput = z.infer<typeof referenceSchema>;
 export type ParticipantInput = z.infer<typeof participantSchema>;
 export type AttemptInput = z.infer<typeof attemptSchema>;

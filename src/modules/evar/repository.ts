@@ -1,6 +1,6 @@
 import { pool } from '../../config/database.js';
-import type { AttemptInput, ParticipantInput } from './schemas.js';
-import type { EvarAttemptRow, EvarParticipantRow, RecordAttemptResult } from './types.js';
+import type { AttemptInput, ParticipantInput, ReferenceInput } from './schemas.js';
+import type { EvarAttemptRow, EvarCaseReferenceRow, EvarParticipantRow, RecordAttemptResult } from './types.js';
 
 /** The caller's participant row, or null if they haven't joined. */
 export async function getParticipant(sub: string): Promise<EvarParticipantRow | null> {
@@ -102,4 +102,41 @@ export async function exportAll(): Promise<{ participants: EvarParticipantRow[];
   const participants = await pool.query<EvarParticipantRow>('SELECT * FROM evar_participants ORDER BY consented_at');
   const attempts = await pool.query<EvarAttemptRow>('SELECT * FROM evar_attempts ORDER BY submitted_at');
   return { participants: participants.rows, attempts: attempts.rows };
+}
+
+/** Every admin-set answer, by case. */
+export async function listReferences(): Promise<EvarCaseReferenceRow[]> {
+  const { rows } = await pool.query<EvarCaseReferenceRow>('SELECT * FROM evar_case_references ORDER BY case_id');
+  return rows;
+}
+
+/** Adds or replaces a case's answers. */
+export async function upsertReference(
+  caseId: string,
+  input: ReferenceInput,
+  actor: string | null,
+): Promise<EvarCaseReferenceRow> {
+  const { rows } = await pool.query<EvarCaseReferenceRow>(
+    `INSERT INTO evar_case_references
+       (case_id, neck_diameter, neck_length, max_sac, right_cia, left_cia, note, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (case_id) DO UPDATE SET
+       neck_diameter = EXCLUDED.neck_diameter,
+       neck_length = EXCLUDED.neck_length,
+       max_sac = EXCLUDED.max_sac,
+       right_cia = EXCLUDED.right_cia,
+       left_cia = EXCLUDED.left_cia,
+       note = EXCLUDED.note,
+       updated_by = EXCLUDED.updated_by,
+       updated_at = now()
+     RETURNING *`,
+    [caseId, input.neckDiameter, input.neckLength, input.maxSac, input.rightCia, input.leftCia, input.note ?? null, actor],
+  );
+  return rows[0];
+}
+
+/** Drops an override, so the case goes back to its built-in answers. */
+export async function deleteReference(caseId: string): Promise<boolean> {
+  const { rowCount } = await pool.query('DELETE FROM evar_case_references WHERE case_id = $1', [caseId]);
+  return (rowCount ?? 0) > 0;
 }

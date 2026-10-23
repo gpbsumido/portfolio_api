@@ -30,6 +30,19 @@ export interface EvarAttemptRow {
   created_at: string;
 }
 
+/** Admin-set answers for one case, overriding what its geometry gives. */
+export interface EvarCaseReferenceRow {
+  case_id: string;
+  neck_diameter: number;
+  neck_length: number;
+  max_sac: number;
+  right_cia: number;
+  left_cia: number;
+  note: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
 /** `already` is a resend of an attempt that was stored the first time. */
 export type RecordAttemptResult =
   | { status: 'recorded'; attempt: EvarAttemptRow }
