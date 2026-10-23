@@ -1,8 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
+import { actorEmail } from '../../shared/auth/adminEmail.js';
 import { ForbiddenError, UnauthorizedError } from '../../shared/errors/index.js';
 import * as repo from './repository.js';
-import type { AttemptInput, ParticipantInput } from './schemas.js';
-import type { EvarAttemptRow, EvarParticipantRow } from './types.js';
+import type { AttemptInput, ParticipantInput, ReferenceInput } from './schemas.js';
+import type { EvarAttemptRow, EvarCaseReferenceRow, EvarParticipantRow } from './types.js';
 
 /** How many of your own attempts the history shows. */
 const HISTORY_LIMIT = 100;
@@ -43,7 +44,51 @@ const toAttempt = (a: EvarAttemptRow) => ({
   devices: a.devices,
 });
 
+/** A case's answers as the page reads them. Who set them stays on the server. */
+const toReference = (r: EvarCaseReferenceRow) => ({
+  caseId: r.case_id,
+  neckDiameter: r.neck_diameter,
+  neckLength: r.neck_length,
+  maxSac: r.max_sac,
+  rightCia: r.right_cia,
+  leftCia: r.left_cia,
+  note: r.note,
+  updatedAt: r.updated_at,
+});
+
 export class EvarController {
+  /** GET /api/evar/references. Public: anonymous practice scores against these too. */
+  async listReferences(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const rows = await repo.listReferences();
+      res.json({ references: rows.map(toReference) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PUT /api/evar/admin/references/:caseId */
+  async putReference(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { caseId } = req.params as { caseId: string };
+      const row = await repo.upsertReference(caseId, req.body as ReferenceInput, actorEmail(req));
+      res.json({ reference: toReference(row) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** DELETE /api/evar/admin/references/:caseId. Idempotent, like withdrawing. */
+  async deleteReference(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { caseId } = req.params as { caseId: string };
+      await repo.deleteReference(caseId);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  }
+
   /** GET /api/evar/participant */
   async getParticipant(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
