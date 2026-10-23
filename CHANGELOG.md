@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-23 - version 5.28.2
+
+- **Migration `051` resets the EVAR study for the reworked phantom.** paul-explore 7.26.0 gives every phantom neck a taper, an angle, thrombus or calcium. The case ids stayed the same and every image changed, so attempts recorded before it were measured on necks that no longer exist, and hand-set references describe the old geometry. `up` deletes every row in `evar_attempts` and `evar_case_references`. `evar_participants` is untouched, so nobody has to consent again. `down` can't restore the rows and does nothing.
+- The migration's test lives in `src/modules/evar/` rather than beside it, because knex loads every `.ts` file in `src/migrations` as a migration.
+
 ## 2026-10-22 - version 5.28.1
 
 - **Fixed the 5.28.0 production deploy, which died in migration `048`.** Production's `calendar_members` and `user_profiles` are older than knex: the legacy SQL scripts made them with a bare `REFERENCES users(sub)`, so Postgres named their foreign keys `<table>_<column>_fkey`, and the knex baseline was marked as run rather than run. `dropForeign` drops `<table>_<column>_foreign`, which only exists on a database built from the baseline. CI and staging are, so both passed; production failed with `constraint "calendar_members_user_sub_foreign" of relation "calendar_members" does not exist`, `start.sh` stopped the container, and the API went down.
