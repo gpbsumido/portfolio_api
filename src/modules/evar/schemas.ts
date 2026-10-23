@@ -13,7 +13,12 @@ export const participantSchema = z
   })
   .strict();
 
-const mm = z.number().min(0).max(300);
+/**
+ * Any length a caliper can draw. The slice is 384 px at 0.85 mm, so corner to
+ * corner is about 460 mm: a silly measurement, but one to keep, not a reason
+ * to drop the attempt it belongs to.
+ */
+const mm = z.number().min(0).max(1000);
 
 const taskScoreSchema = z
   .object({

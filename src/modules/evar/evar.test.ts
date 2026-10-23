@@ -158,6 +158,19 @@ describe('attempts', () => {
     expect(res.body.attempt.id).toBe(ATTEMPT_ID);
   });
 
+  test('keeps a wild caliper rather than losing the whole attempt', async () => {
+    vi.mocked(repo.recordAttempt).mockResolvedValue({ status: 'recorded', attempt: attemptRow } as never);
+    const corner = 384 * 0.85 * Math.SQRT2;
+    const res = await request(makeApp())
+      .post('/api/evar/attempts')
+      .send({
+        ...attemptBody,
+        measurements: { maxSac: corner },
+        scores: [{ id: 'maxSac', yours: corner, reference: 70, verdict: 'outside' }],
+      });
+    expect(res.status).toBe(201);
+  });
+
   test('rejects an attempt at a level that does not exist', async () => {
     const res = await request(makeApp()).post('/api/evar/attempts').send({ ...attemptBody, level: 'nightmare' });
     expect(res.status).toBe(400);
