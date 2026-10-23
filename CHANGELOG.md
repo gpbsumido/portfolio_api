@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-22 - version 5.27.0
+
+- **New `/api/evar` module for the EVAR sizing research study.** paul-explore's `/evar` practice page will offer opt-in recording of attempts, so results can be compared over a training career for a paper. Nothing is recorded for anyone who hasn't joined: `POST /attempts` returns 403 without a participant row, and anonymous practice never reaches this API.
+- **`GET`, `PUT` and `DELETE /participant`** read, join or update, and withdraw. Joining stores the consent version the page showed, plus training level, year and specialty. `consented_at` only moves when the consent version changes, so editing a profile doesn't look like consenting again. Withdrawing deletes the participant, and the foreign key cascade deletes every attempt with it. No soft delete: "delete my data" means it.
+- **`POST /attempts`** stores case, level, app version, start and submit times, duration, time limit, whether the clock ran out, and the raw measurements, scores and device picks as bounded jsonb. Keeping the raw numbers and app version next to the scores means attempts can be re-scored if a reference or tolerance changes. The browser makes the attempt id, and `ON CONFLICT DO NOTHING` turns a retry into the same row (200 instead of 201). **`GET /attempts`** returns your own 100 most recent.
+- **`GET /admin/export`** is admin-only and pseudonymous: participant uuids and profiles, never the Auth0 subject or an email.
+- **Migration `049`** adds `evar_participants` (unique `auth_sub`) and `evar_attempts` (unique `client_attempt_id`, cascade on participant, indexed by participant and submit time). `down` drops both.
+
 ## 2026-10-05 - version 5.26.1
 
 - **An email's `users` row follows the verified login that presents it.** paul-explore's Auth0 Action now links logins that share a verified email into one user, so after a link the same email arrives under the primary's `sub`. `users.email` is unique and calendar and budget invites resolve through it, so if the folded-in account had claimed the row first, the primary's upsert failed and invites kept going to a `sub` nobody signs in as. `upsertUser` now hands the row over first, and only for Google and email-and-password logins, the same providers the Action trusts.
