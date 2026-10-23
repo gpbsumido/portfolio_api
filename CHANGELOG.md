@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-22 - version 5.28.0
+
+- **Admins can set the correct answers for an EVAR case.** The synthetic phantoms work their answers out from their own geometry, but a value can need correcting, and a real scan has no geometry, only answers someone measured by hand. `PUT /api/evar/admin/references/:caseId` adds or replaces all five (neck diameter and length, maximum sac, both common iliacs, in mm, plus an optional note), and `DELETE` drops the override so the case goes back to its built-in answers. Both are admin-only, and the case id has to be a lowercase slug.
+- **`GET /api/evar/references` is public**, declared ahead of the module's `checkJwt`, because signed-out practice scores against these answers too. It doesn't say who set them: `updated_by` is kept for the record and never served.
+- **Migration `050`** adds `evar_case_references`, keyed by case id. Values are `double precision` rather than `numeric`, so node-postgres returns numbers instead of strings. `down` drops it.
+
 ## 2026-10-22 - version 5.27.0
 
 - **New `/api/evar` module for the EVAR sizing research study.** paul-explore's `/evar` practice page will offer opt-in recording of attempts, so results can be compared over a training career for a paper. Nothing is recorded for anyone who hasn't joined: `POST /attempts` returns 403 without a participant row, and anonymous practice never reaches this API.
