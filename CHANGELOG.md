@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-22 - version 5.28.0
+
+- **Admins can set the correct answers for an EVAR case.** The synthetic phantoms work their answers out from their own geometry, but a value can need correcting, and a real scan has no geometry, only answers someone measured by hand. `PUT /api/evar/admin/references/:caseId` adds or replaces all five (neck diameter and length, maximum sac, both common iliacs, in mm, plus an optional note), and `DELETE` drops the override so the case goes back to its built-in answers. Both are admin-only, and the case id has to be a lowercase slug.
+- **`GET /api/evar/references` is public**, declared ahead of the module's `checkJwt`, because signed-out practice scores against these answers too. It doesn't say who set them: `updated_by` is kept for the record and never served.
+- **Migration `050`** adds `evar_case_references`, keyed by case id. Values are `double precision` rather than `numeric`, so node-postgres returns numbers instead of strings. `down` drops it.
+
+## 2026-10-22 - version 5.27.0
+
+- **New `/api/evar` module for the EVAR sizing research study.** paul-explore's `/evar` practice page will offer opt-in recording of attempts, so results can be compared over a training career for a paper. Nothing is recorded for anyone who hasn't joined: `POST /attempts` returns 403 without a participant row, and anonymous practice never reaches this API.
+- **`GET`, `PUT` and `DELETE /participant`** read, join or update, and withdraw. Joining stores the consent version the page showed, plus training level, year and specialty. `consented_at` only moves when the consent version changes, so editing a profile doesn't look like consenting again. Withdrawing deletes the participant, and the foreign key cascade deletes every attempt with it. No soft delete: "delete my data" means it.
+- **`POST /attempts`** stores case, level, app version, start and submit times, duration, time limit, whether the clock ran out, and the raw measurements, scores and device picks as bounded jsonb. Keeping the raw numbers and app version next to the scores means attempts can be re-scored if a reference or tolerance changes. The browser makes the attempt id, and `ON CONFLICT DO NOTHING` turns a retry into the same row (200 instead of 201). **`GET /attempts`** returns your own 100 most recent.
+- Measurements are bounded at 1000 mm rather than 300. A caliper dragged corner to corner across a slice is about 460 mm: wrong, but worth keeping, and not a reason to reject the whole attempt.
+- **`GET /admin/export`** is admin-only and pseudonymous: participant uuids and profiles, never the Auth0 subject or an email.
+- **Migration `049`** adds `evar_participants` (unique `auth_sub`) and `evar_attempts` (unique `client_attempt_id`, cascade on participant, indexed by participant and submit time). `down` drops both.
+
+## 2026-10-05 - version 5.26.1
+
+- **An email's `users` row follows the verified login that presents it.** paul-explore's Auth0 Action now links logins that share a verified email into one user, so after a link the same email arrives under the primary's `sub`. `users.email` is unique and calendar and budget invites resolve through it, so if the folded-in account had claimed the row first, the primary's upsert failed and invites kept going to a `sub` nobody signs in as. `upsertUser` now hands the row over first, and only for Google and email-and-password logins, the same providers the Action trusts.
+- **Migration `048` adds `ON UPDATE CASCADE` to all seven foreign keys on `users.sub`** (calendar members and their inviter, profiles, budgets, budget people, members and join requests), so memberships, budgets and the profile move with the row. Names and `ON DELETE` behaviour are unchanged, and `down` puts them back as they were.
+
 ## 2026-10-02 - version 5.26.0
 
 - **`GET /api/zeroproof/events` takes `?aheadDays`.** Upcoming fixtures stop that many days out, clamped to 1–30. paul-explore's board now shows a month at most and asks for `aheadDays=30`, so it no longer downloads fixtures it will never show. Without the parameter the response is unchanged, so this can deploy before or after the frontend.

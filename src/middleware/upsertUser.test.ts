@@ -60,3 +60,43 @@ describe('upsertUser identity', () => {
     expect(vi.mocked(query)).not.toHaveBeenCalled();
   });
 });
+
+const sqlRun = () => vi.mocked(query).mock.calls.map((c) => String(c[0]));
+const handsOverRow = (sql: string) => /UPDATE\s+users\s+SET\s+sub\b/i.test(sql);
+const upsertsRow = (sql: string) => /INSERT\s+INTO\s+users\b/i.test(sql);
+
+describe('upsertUser email ownership', () => {
+  // Auth0 links logins that share a verified email into one user, so after a
+  // link the same email turns up under the primary's sub. Email is unique in
+  // users, and invites resolve through it, so the row has to follow.
+  test('a verified login takes the email row from whichever sub held it', async () => {
+    await runWith({
+      sub: 'google-oauth2|100',
+      [`${NS}email`]: 'linked@example.com',
+      [`${NS}email_verified`]: true,
+    });
+
+    const sql = sqlRun();
+    const handOver = sql.findIndex(handsOverRow);
+    expect(handOver).toBeGreaterThanOrEqual(0);
+    expect(vi.mocked(query).mock.calls[handOver][1]).toEqual([
+      'google-oauth2|100',
+      'linked@example.com',
+    ]);
+    // Hand the row over first, so the upsert by sub finds it instead of
+    // tripping the unique email.
+    expect(handOver).toBeLessThan(sql.findIndex(upsertsRow));
+  });
+
+  test('a login through a provider I do not trust to verify email never takes the row', async () => {
+    await runWith({
+      sub: 'github|7',
+      [`${NS}email`]: 'untrusted@example.com',
+      [`${NS}email_verified`]: true,
+    });
+
+    const sql = sqlRun();
+    expect(sql.some(handsOverRow)).toBe(false);
+    expect(sql.some(upsertsRow)).toBe(true);
+  });
+});
