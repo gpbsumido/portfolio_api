@@ -47,3 +47,19 @@ export interface EvarCaseReferenceRow {
 export type RecordAttemptResult =
   | { status: 'recorded'; attempt: EvarAttemptRow }
   | { status: 'already'; attempt: EvarAttemptRow };
+
+/** A mistake someone reported in a scan, and whether an admin has dealt with it. */
+export interface EvarScanReportRow {
+  id: string;
+  reporter_sub: string;
+  case_id: string;
+  slice: number | null;
+  kind: 'missing-slices' | 'wrong-answers' | 'image' | 'other';
+  message: string;
+  status: 'open' | 'fixed';
+  admin_note: string | null;
+  handled_by: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

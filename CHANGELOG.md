@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-25 - version 5.29.0
+
+- **People can report a mistake in an EVAR scan, and see whether it was handled.** `POST /api/evar/reports` takes a case id, an optional slice (counted from 1, like the slider), a kind (`missing-slices`, `wrong-answers`, `image` or `other`) and a message up to 1000 characters. It needs sign-in but not the study: reporting a bad scan has nothing to do with consenting to research. Ten an hour per person, so one account can't fill the admin's list.
+- **`GET /api/evar/reports`** returns your own, newest first, with the status and the admin's note, so a reporter can tell whether it was dealt with.
+- **Admins get a queue.** `GET /api/evar/admin/reports?status=open|fixed|all` defaults to `open`, oldest first. `PATCH /api/evar/admin/reports/:id` sets `open` or `fixed` and takes an optional note written for the reporter. Leaving the note out keeps it, `null` clears it. Fixing stamps when and by whom; reopening clears both, so a row never says "handled" about something open again.
+- **Neither the reporter's Auth0 subject nor the admin's email is served,** to anyone. The admin sees what was wrong, not who said so.
+- **Migration `052`** adds `evar_scan_reports` with check constraints on `kind` and `status`, and indexes for the queue and for "mine". I ran it, the queries and `down` against a throwaway Postgres 15 before opening this.
+
 ## 2026-10-23 - version 5.28.2
 
 - **Migration `051` resets the EVAR study for the reworked phantom.** paul-explore 7.26.0 gives every phantom neck a taper, an angle, thrombus or calcium. The case ids stayed the same and every image changed, so attempts recorded before it were measured on necks that no longer exist, and hand-set references describe the old geometry. `up` deletes every row in `evar_attempts` and `evar_case_references`. `evar_participants` is untouched, so nobody has to consent again. `down` can't restore the rows and does nothing.

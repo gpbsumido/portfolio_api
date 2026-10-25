@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { actorEmail } from '../../shared/auth/adminEmail.js';
-import { ForbiddenError, UnauthorizedError } from '../../shared/errors/index.js';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '../../shared/errors/index.js';
 import * as repo from './repository.js';
-import type { AttemptInput, ParticipantInput, ReferenceInput } from './schemas.js';
-import type { EvarAttemptRow, EvarCaseReferenceRow, EvarParticipantRow } from './types.js';
+import type { AttemptInput, ParticipantInput, ReferenceInput, ReportInput, ReportListStatus, ReportUpdateInput } from './schemas.js';
+import type { EvarAttemptRow, EvarCaseReferenceRow, EvarParticipantRow, EvarScanReportRow } from './types.js';
 
 /** How many of your own attempts the history shows. */
 const HISTORY_LIMIT = 100;
@@ -54,6 +54,23 @@ const toReference = (r: EvarCaseReferenceRow) => ({
   leftCia: r.left_cia,
   note: r.note,
   updatedAt: r.updated_at,
+});
+
+/**
+ * A report as the page reads it. The reporter's sub and the admin's email stay
+ * behind: the reporter only ever sees their own, and the admin needs to know
+ * what was wrong, not who said so.
+ */
+const toReport = (r: EvarScanReportRow) => ({
+  id: r.id,
+  caseId: r.case_id,
+  slice: r.slice,
+  kind: r.kind,
+  message: r.message,
+  status: r.status,
+  adminNote: r.admin_note,
+  handledAt: r.handled_at,
+  createdAt: r.created_at,
 });
 
 export class EvarController {
@@ -151,6 +168,49 @@ export class EvarController {
     try {
       const { participants, attempts } = await repo.exportAll();
       res.json({ participants: participants.map(toParticipant), attempts: attempts.map(toAttempt) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/evar/reports. Open to anyone signed in: reporting a bad scan isn't part of the study. */
+  async createReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const report = await repo.createReport(requireSub(req), req.body as ReportInput);
+      res.status(201).json({ report: toReport(report) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/evar/reports. Your own, so you can see whether they were handled. */
+  async listMyReports(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const reports = await repo.listReportsFor(requireSub(req), HISTORY_LIMIT);
+      res.json({ reports: reports.map(toReport) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/evar/admin/reports?status= */
+  async listReports(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { status } = req.validatedQuery as { status: ReportListStatus };
+      const reports = await repo.listReports(status);
+      res.json({ reports: reports.map(toReport) });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** PATCH /api/evar/admin/reports/:id */
+  async updateReport(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params as { id: string };
+      const report = await repo.updateReport(id, req.body as ReportUpdateInput, actorEmail(req));
+      if (!report) throw new NotFoundError('Report not found');
+      res.json({ report: toReport(report) });
     } catch (err) {
       next(err);
     }
