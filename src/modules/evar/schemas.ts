@@ -101,3 +101,32 @@ export const referenceSchema = z
 export type ReferenceInput = z.infer<typeof referenceSchema>;
 export type ParticipantInput = z.infer<typeof participantSchema>;
 export type AttemptInput = z.infer<typeof attemptSchema>;
+
+/**
+ * A mistake in a scan. The slice is the one the reporter was on, counted from
+ * 1 like the slider, and optional because some mistakes aren't on a slice.
+ */
+export const reportSchema = z
+  .object({
+    caseId: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(40),
+    slice: z.number().int().min(1).max(2000).nullable().optional(),
+    kind: z.enum(['missing-slices', 'wrong-answers', 'image', 'other']),
+    message: z.string().trim().min(1).max(1000),
+  })
+  .strict();
+
+export const reportListQuerySchema = z.object({ status: z.enum(['open', 'fixed', 'all']).default('open') });
+
+export const reportParamsSchema = z.object({ id: z.string().uuid() }).strict();
+
+/** Handling a report. Leaving the note out keeps what's there; `null` clears it. */
+export const reportUpdateSchema = z
+  .object({
+    status: z.enum(['open', 'fixed']),
+    adminNote: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+
+export type ReportInput = z.infer<typeof reportSchema>;
+export type ReportListStatus = z.infer<typeof reportListQuerySchema>['status'];
+export type ReportUpdateInput = z.infer<typeof reportUpdateSchema>;
