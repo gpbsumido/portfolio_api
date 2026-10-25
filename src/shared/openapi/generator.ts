@@ -15,7 +15,7 @@ export function generateOpenAPIDocument() {
     openapi: '3.1.0',
     info: {
       title: 'Portfolio API',
-      version: '2.4.2',
+      version: '6.0.0',
       description:
         'Backend API for the Portfolio platform. Provides endpoints for NBA stats, calendar management, social features, media galleries, and more.',
     },
