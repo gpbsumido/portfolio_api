@@ -1,6 +1,19 @@
 import { pool } from '../../config/database.js';
-import type { AttemptInput, ParticipantInput, ReferenceInput } from './schemas.js';
-import type { EvarAttemptRow, EvarCaseReferenceRow, EvarParticipantRow, RecordAttemptResult } from './types.js';
+import type {
+  AttemptInput,
+  ParticipantInput,
+  ReferenceInput,
+  ReportInput,
+  ReportListStatus,
+  ReportUpdateInput,
+} from './schemas.js';
+import type {
+  EvarAttemptRow,
+  EvarCaseReferenceRow,
+  EvarParticipantRow,
+  EvarScanReportRow,
+  RecordAttemptResult,
+} from './types.js';
 
 /** The caller's participant row, or null if they haven't joined. */
 export async function getParticipant(sub: string): Promise<EvarParticipantRow | null> {
@@ -139,4 +152,62 @@ export async function upsertReference(
 export async function deleteReference(caseId: string): Promise<boolean> {
   const { rowCount } = await pool.query('DELETE FROM evar_case_references WHERE case_id = $1', [caseId]);
   return (rowCount ?? 0) > 0;
+}
+
+/** Files a report against the caller. It starts open. */
+export async function createReport(sub: string, input: ReportInput): Promise<EvarScanReportRow> {
+  const { rows } = await pool.query<EvarScanReportRow>(
+    `INSERT INTO evar_scan_reports (reporter_sub, case_id, slice, kind, message)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [sub, input.caseId, input.slice ?? null, input.kind, input.message],
+  );
+  return rows[0];
+}
+
+/** The caller's own reports, newest first. */
+export async function listReportsFor(sub: string, limit: number): Promise<EvarScanReportRow[]> {
+  const { rows } = await pool.query<EvarScanReportRow>(
+    'SELECT * FROM evar_scan_reports WHERE reporter_sub = $1 ORDER BY created_at DESC LIMIT $2',
+    [sub, limit],
+  );
+  return rows;
+}
+
+/** The admin queue, oldest first so the ones waiting longest are on top. */
+export async function listReports(status: ReportListStatus): Promise<EvarScanReportRow[]> {
+  const { rows } = await pool.query<EvarScanReportRow>(
+    `SELECT * FROM evar_scan_reports
+     WHERE $1 = 'all' OR status = $1
+     ORDER BY created_at ASC`,
+    [status],
+  );
+  return rows;
+}
+
+/**
+ * Marks a report fixed or reopens it, and records who did.
+ *
+ * Fixed stamps when and by whom; reopening clears both, so the row never
+ * says "handled" about something that's open again. The note is only touched
+ * when the update carries one: `$3` says whether it did, so `null` can mean
+ * "clear it" and absent can mean "leave it".
+ */
+export async function updateReport(
+  id: string,
+  input: ReportUpdateInput,
+  adminEmail: string | null,
+): Promise<EvarScanReportRow | null> {
+  const { rows } = await pool.query<EvarScanReportRow>(
+    `UPDATE evar_scan_reports SET
+       status = $2,
+       admin_note = CASE WHEN $3 THEN $4 ELSE admin_note END,
+       handled_by = CASE WHEN $2 = 'fixed' THEN $5 ELSE NULL END,
+       handled_at = CASE WHEN $2 = 'fixed' THEN now() ELSE NULL END,
+       updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, input.status, input.adminNote !== undefined, input.adminNote ?? null, adminEmail],
+  );
+  return rows[0] ?? null;
 }
