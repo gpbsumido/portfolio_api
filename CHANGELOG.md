@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-04 - version 6.2.0
+
+- **Interview-prep progress is stored per user**, so the LeetCode playbook in paul-explore 9.1.0 follows a signed-in person between devices instead of living in one browser. `GET /api/practice/reviews` returns the caller's reviews, and `PUT /api/practice/reviews/:kind/:itemId` stores one. `kind` is `problem` (a LeetCode problem re-solved on a spaced ladder) or `drill` (a recognition card), and `itemId` is the LeetCode slug.
+- **`POST /api/practice/reviews/import`** merges what a browser kept before sign-in, up to 2000 items, in one statement, then returns the full set. The same item twice in one batch is a 400, because Postgres won't update a row twice in one upsert and there's no right answer for which copy was meant.
+- **The later review wins.** Both writes only land if their `lastReviewedAt` is at least as recent as what's stored, so a stale tab or an old browser import can't roll a newer attempt back. The client works out the schedule; the API only remembers where each item sits on it.
+- **Migration `053`** adds `practice_reviews`, keyed by user, kind and item, with a cascade from `users.sub` and check constraints on `kind`, `step` and `reviews`. There's no Postgres or Docker on the machine I built this on, so CI's migrate-and-rollback job against Postgres 15 is the first real run of it.
+- The OpenAPI document's `info.version` says 6.2.0.
+
 ## 2026-10-25 - version 6.1.0
 
 - **People can report a mistake in an EVAR scan, and see whether it was handled.** `POST /api/evar/reports` takes a case id, an optional slice (counted from 1, like the slider), a kind (`missing-slices`, `wrong-answers`, `image` or `other`) and a message up to 1000 characters. It needs sign-in but not the study: reporting a bad scan has nothing to do with consenting to research. Ten an hour per person, so one account can't fill the admin's list.
