@@ -7,8 +7,8 @@ const toReview = (r: PracticeReviewRow): PracticeReview => ({
   kind: r.kind,
   itemId: r.item_id,
   step: r.step,
-  dueAt: new Date(r.due_at).toISOString(),
-  lastReviewedAt: new Date(r.last_reviewed_at).toISOString(),
+  dueAt: r.due_at.toISOString(),
+  lastReviewedAt: r.last_reviewed_at.toISOString(),
   reviews: r.reviews,
 });
 

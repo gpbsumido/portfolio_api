@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
-const kindSchema = z.enum(['problem', 'drill']);
+export const kindSchema = z.enum(['problem', 'drill']);
 const itemIdSchema = z
   .string()
   .max(120)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be a lowercase slug');
 
 /** Where one item sits on the ladder. Strict so a typo is a 400, not a no-op. */
-const reviewStateSchema = z
+export const saveReviewSchema = z
   .object({
     step: z.number().int().min(0).max(50),
     dueAt: z.string().datetime(),
@@ -18,8 +18,6 @@ const reviewStateSchema = z
 
 export const reviewParamsSchema = z.object({ kind: kindSchema, itemId: itemIdSchema });
 
-export const saveReviewSchema = reviewStateSchema;
-
 /**
  * A browser's local progress, sent once after sign-in. The same item twice in
  * one batch is refused: Postgres won't update one row twice in a single
@@ -28,7 +26,7 @@ export const saveReviewSchema = reviewStateSchema;
 export const importReviewsSchema = z
   .object({
     reviews: z
-      .array(reviewStateSchema.extend({ kind: kindSchema, itemId: itemIdSchema }).strict())
+      .array(saveReviewSchema.extend({ kind: kindSchema, itemId: itemIdSchema }).strict())
       .min(1)
       .max(2000),
   })

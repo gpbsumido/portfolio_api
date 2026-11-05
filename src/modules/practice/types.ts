@@ -1,7 +1,10 @@
 // The row as Postgres returns it, and the camelCase shape the BFF consumes.
 // The mapper lives in repository.ts.
 
-export type ReviewKind = 'problem' | 'drill';
+import type { z } from 'zod';
+import type { kindSchema } from './schemas.js';
+
+export type ReviewKind = z.infer<typeof kindSchema>;
 
 export type PracticeReviewRow = {
   kind: ReviewKind;

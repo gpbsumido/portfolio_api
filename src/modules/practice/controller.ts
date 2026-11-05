@@ -2,8 +2,12 @@ import type { Request, Response, NextFunction } from 'express';
 import * as repo from './repository.js';
 import type { ImportReviewsInput, ReviewParams, SaveReviewInput } from './schemas.js';
 
-const subOf = (req: Request): string =>
-  (req as { auth?: { payload?: { sub?: string } } }).auth?.payload?.sub as string;
+/** The caller's Auth0 subject. checkJwt runs first, so a missing one is a wiring bug. */
+const subOf = (req: Request): string => {
+  const sub = (req as { auth?: { payload?: { sub?: string } } }).auth?.payload?.sub;
+  if (!sub) throw new Error('Practice route reached without an authenticated subject');
+  return sub;
+};
 
 export class PracticeController {
   /** GET /api/practice/reviews — the caller's reviews. */
