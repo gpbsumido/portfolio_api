@@ -27,6 +27,7 @@ import nbaRoutes from './modules/nba/routes.js';
 import notificationsRoutes from './modules/notifications/routes.js';
 import operatorRoutes from './modules/operator/routes.js';
 import postsRoutes from './modules/posts/routes.js';
+import practiceRoutes from './modules/practice/routes.js';
 import profilesRoutes from './modules/profiles/routes.js';
 import referralsRoutes from './modules/referrals/routes.js';
 import repliesRoutes from './modules/replies/routes.js';
@@ -104,6 +105,7 @@ app.use('/api/todos', todosRoutes);
 // Signed-in routes (the module applies checkJwt to its whole router)
 app.use('/api/check-in', checkInRoutes);
 app.use('/api/evar', evarRoutes);
+app.use('/api/practice', practiceRoutes);
 
 // Auth-aware routes (each module applies checkJwt internally per-route)
 app.use('/api/calendar', calendarRoutes);

@@ -1,6 +1,6 @@
 import express from 'express';
 import request from 'supertest';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 
 // Mock the repository so we exercise routing + controller + analytics without a DB.
 vi.mock('./repository.js', () => ({
@@ -201,6 +201,15 @@ describe('operator routes', () => {
   test('GET /sales-analytics buckets in the tz query param', async () => {
     vi.mocked(repo.salesByPeriod).mockResolvedValue([]);
     vi.mocked(repo.salesByStore).mockResolvedValue([]);
+    // Pinned to a summer day. On the real clock this asserted whatever the
+    // runtime's tz data said about today: tzdata 2026b keeps Vancouver at
+    // UTC-7 from November 2026 on, older data has it fall back to UTC-8, so
+    // the same commit passed in CI and failed on a laptop.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-15T19:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
 
     const res = await request(makeApp()).get(
       '/api/operator/sales-analytics?granularity=day&tz=America/Vancouver',
