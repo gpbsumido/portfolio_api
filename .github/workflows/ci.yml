@@ -38,6 +38,22 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # Every other test mocks the pool, so without a database here the sql-smoke
+    # files skipped on every run and no SQL was ever executed before production.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: portfolio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -46,7 +62,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Migrate the throwaway database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio
+          NODE_ENV: development
+        run: bash scripts/ci-migrate.sh
       - run: pnpm run test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio
+          # Only this throwaway database may be written to. A DATABASE_URL on a
+          # laptop often points at the deployed one, so the tests that insert
+          # rows check for this flag rather than for a DATABASE_URL.
+          ALLOW_DB_WRITE_TESTS: 'true'
 
   migrations:
     name: Migrations
