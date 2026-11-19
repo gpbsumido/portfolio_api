@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-19 - version 6.2.1
+
+- **Two-way Google sync works again.** It had been off since the calendar module moved to TypeScript in July. The controller built the service without the Google helpers, so `POST /api/calendar/calendars/:id/connect-google` returned 500 and every event create, update and delete skipped the push to Google without a log line. Deleting a calendar also skipped the ACL cleanup and the watch-channel stop, and removing a member never revoked their access to the Google calendar.
+- The Google helpers are picked up in one place now, `src/modules/calendar/google.ts`, and the service can't be built without them, so sync can't quietly switch itself off again.
+- The OpenAPI document's `info.version` says 6.2.1.
+
 ## 2026-11-04 - version 6.2.0
 
 - **Interview-prep progress is stored per user**, so the LeetCode playbook in paul-explore 9.1.0 follows a signed-in person between devices instead of living in one browser. `GET /api/practice/reviews` returns the caller's reviews, and `PUT /api/practice/reviews/:kind/:itemId` stores one. `kind` is `problem` (a LeetCode problem re-solved on a spaced ladder) or `drill` (a recognition card), and `itemId` is the LeetCode slug.
