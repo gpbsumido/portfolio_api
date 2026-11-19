@@ -4,6 +4,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { CalendarService } from './service.js';
+import { googleCalendarUtils } from './google.js';
 import type {
   CalendarEventFilters,
   CreateCalendarEventInput,
@@ -16,7 +17,7 @@ import type {
   UpdateEventCardInput,
 } from './types.js';
 
-const service = new CalendarService();
+const service = new CalendarService(googleCalendarUtils);
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
