@@ -1,13 +1,19 @@
 import { Router } from 'express';
 import { VitalsController } from './controller.js';
+import { createIpLimiter } from '../../middleware/rateLimiter.js';
 import { validateBody } from '../../middleware/validate.js';
 import { ingestVitalSchema } from './schemas.js';
 
 const router = Router();
 const ctrl = new VitalsController();
 
+// A page session sends a handful of samples, so this only stops a flood.
+const ingestLimiter = createIpLimiter({ windowMs: 60_000, max: 120 });
+
 // Open ingestion — no auth
-router.post('/', validateBody(ingestVitalSchema), (req, res, next) => ctrl.ingest(req, res, next));
+router.post('/', ingestLimiter, validateBody(ingestVitalSchema), (req, res, next) =>
+  ctrl.ingest(req, res, next),
+);
 
 // Public reads — site-wide, non-personal aggregate metrics, nothing to gate.
 // The paul-explore Web Vitals dashboard is public, so these must answer
