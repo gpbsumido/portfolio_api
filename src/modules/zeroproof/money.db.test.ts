@@ -54,9 +54,15 @@ async function walletAndEvent(principalCents: number) {
 describe.skipIf(!canWriteToDatabase)('zeroproof money against a real database', () => {
   test('concurrent bets can only spend what the wallet holds', async () => {
     const { repo, wallet, eventId } = await walletAndEvent(1000);
+    const concurrentBets = 10;
+    // Open the connections first. On a cold pool the first bet commits on the
+    // one warm connection before the others have connected, nothing overlaps,
+    // and this passed against the unlocked read it exists to catch.
+    const { pool } = await import('../../config/database.js');
+    await Promise.all(Array.from({ length: concurrentBets }, () => pool.query('SELECT pg_sleep(0.05)')));
 
     const results = await Promise.all(
-      Array.from({ length: 5 }, () =>
+      Array.from({ length: concurrentBets }, () =>
         repo.placeBet({
           walletId: wallet.id,
           eventId,
