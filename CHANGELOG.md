@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-19 - version 6.3.1
+
+- **Caller mistakes get a 4xx instead of a 500.** Malformed JSON is now a 400 and a body over the limit is a 413. A value Postgres can't parse as an id (`22P02`) and a reference to a row that doesn't exist (`23503`) are 400s, and a duplicate (`23505`) is a 409. All of them used to come back as 500s and get logged as unhandled errors. The Postgres codes are read off the error itself (pg, Knex) or off its `cause`, because Drizzle wraps driver errors in `DrizzleQueryError`. The client gets a sentence of ours, never Postgres's text, which names tables and constraints.
+- **The NBA roster fails loudly when stats.nba.com renames a column.** Columns were looked up inside each row's `try`, so a missing one made every row `null` and the endpoint answered 200 with an empty roster. They're resolved once before parsing now, and a missing one throws `Column 'X' not found`.
+- The audit flagged the Redis rate-limit fallback as silent. That was a misread: `createRateLimitStore` already logs when it falls back to memory, so nothing changed there.
+- The OpenAPI document's `info.version` says 6.3.1.
+
 ## 2026-11-19 - version 6.3.0
 
 - **Connecting Google now has to be confirmed by the account that started it.** The OAuth state only signed `{userId, origin}`, and the callback stored tokens under that `userId` for whoever consented. So anyone could mint an auth URL, get someone else to open it, and end up holding that person's Google calendar. The callback no longer exchanges the code. It sends it back to `/settings?gcal=confirm&code=…&state=…`, and the new `POST /api/google/auth/confirm` (signed in, body `{ code, state }`) only redeems it when the state was minted for the caller. Anyone else gets a 403. paul-explore needs the matching settings change live before this deploys.
