@@ -638,14 +638,14 @@ export class CalendarRepository {
 
     const rows = await db.raw<{ rows: EventCardRow[] }>(
       `UPDATE event_cards ec
-       SET ${Object.entries(updates)
-         .map(([col], i) => `${col} = $${i + 1}`)
+       SET ${Object.keys(updates)
+         .map((col) => `${col} = ?`)
          .join(', ')}
        FROM calendar_events ce
-       WHERE ec.id = $${Object.keys(updates).length + 1}
-         AND ec.event_id = $${Object.keys(updates).length + 2}
+       WHERE ec.id = ?
+         AND ec.event_id = ?
          AND ec.event_id = ce.id
-         AND ce.user_sub = $${Object.keys(updates).length + 3}
+         AND ce.user_sub = ?
        RETURNING ec.*`,
       [...Object.values(updates), entryId, eventId, userSub] as readonly string[],
     );
