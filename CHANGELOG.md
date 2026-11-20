@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-19 - version 6.4.2
+
+- **`GET /api/med-journal/` returns the signed-in user's id.** It read `req.auth.sub`, but the JWT middleware puts claims on `req.auth.payload`, so `userId` was always missing from the response. An `any` cast hid it from the compiler.
+- **Every controller reads the user through one typed helper.** 67 `(req as any).auth.payload.sub` reads across 14 controllers and the rate limiter and request logger are now `requireUserSub(req)` (throws 401 when there's no sub) or `optionalUserSub(req)`. A wrong claim path is a type error now instead of a silent `undefined`.
+- Calendar's member list still passes `req.auth.payload.email` as the requestor's email, now through a `typeof` check instead of a cast. Auth0 only puts email on the access token under a namespaced claim, so this is probably always `null`. I've left the behavior as it was and noted it to look at separately.
+- The OpenAPI document's `info.version` says 6.4.2.
+
 ## 2026-11-19 - version 6.4.1
 
 - **Calendar's database connection uses the shared TLS settings.** It was the one module that built its own: `ssl: { rejectUnauthorized: false }` in production, which ignored `DB_CA_CERT` and never checked who it was talking to. Its Knex instance now takes `connectionString` and `ssl` from `config/pool.js`, so setting a CA verifies calendar's connections too.
