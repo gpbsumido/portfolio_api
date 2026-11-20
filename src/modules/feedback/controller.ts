@@ -1,3 +1,4 @@
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { FeedbackRepository } from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
@@ -16,7 +17,7 @@ export class FeedbackController {
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { page = '1', limit = '10', rotation, searchTerm } = req.query as Record<string, string>;
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       if (!userSub) {
         throw new UnauthorizedError();
       }
@@ -36,7 +37,7 @@ export class FeedbackController {
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { text, rotation, journal_entry_id } = req.body;
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       if (!text || !rotation) {
         throw new ValidationError('Missing required fields: text, rotation');
       }
@@ -51,7 +52,7 @@ export class FeedbackController {
     try {
       const id = param(req.params.id);
       const { text, rotation, journal_entry_id } = req.body;
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       if (!text || !rotation) {
         throw new ValidationError('Missing required fields: text, rotation');
       }
@@ -68,10 +69,7 @@ export class FeedbackController {
   async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = param(req.params.id);
-      const userSub = (req as any).auth?.payload?.sub as string | undefined;
-      if (!userSub) {
-        throw new UnauthorizedError();
-      }
+      const userSub = requireUserSub(req);
       const deleted = await repo.delete(id, userSub);
       if (!deleted) {
         throw new NotFoundError("We couldn't find that feedback.");

@@ -2,6 +2,7 @@
 // Likes module — Express controller
 // ---------------------------------------------------------------------------
 
+import { optionalUserSub, requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as service from './service.js';
@@ -23,7 +24,7 @@ export class LikesController {
   async like(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       await service.like(userSub, postId);
       res.status(204).end();
     } catch (err) {
@@ -35,7 +36,7 @@ export class LikesController {
   async unlike(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       await service.unlike(userSub, postId);
       res.status(204).end();
     } catch (err) {
@@ -55,7 +56,7 @@ export class LikesController {
 
       // Ignore anything that isn't a uuid rather than failing the whole batch.
       const valid = ids.filter((id) => idSchema.safeParse(id).success);
-      const userSub = (req as any).auth?.payload?.sub ?? null;
+      const userSub = optionalUserSub(req);
 
       const likes = await service.summaries(valid, userSub);
       res.json({ likes });

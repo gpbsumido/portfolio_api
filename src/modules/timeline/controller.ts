@@ -2,6 +2,7 @@
 // Timeline module — Express controller
 // ---------------------------------------------------------------------------
 
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import * as repo from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
@@ -14,7 +15,7 @@ const LIMIT = 20;
 export class TimelineController {
   /** GET /api/timeline */
   async getTimeline(req: Request, res: Response, next: NextFunction) {
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     const cursor = req.query.cursor as string | undefined;
 
     let cursorDate: string;

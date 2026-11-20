@@ -1,3 +1,4 @@
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '../../config/env.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
@@ -43,7 +44,7 @@ function enqueueForUser(userId: string, fn: () => Promise<void>): Promise<void> 
 
 export class GoogleAuthController {
   async getStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const userId = (req as any).auth.payload.sub as string;
+    const userId = requireUserSub(req);
     try {
       const auth = await getGoogleAuth(userId);
       if (auth) {
@@ -58,7 +59,7 @@ export class GoogleAuthController {
 
   async getAuthUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).auth.payload.sub as string;
+      const userId = requireUserSub(req);
       const origin = req.query.origin as string | undefined;
 
       if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
@@ -107,7 +108,7 @@ export class GoogleAuthController {
 
   async confirm(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).auth.payload.sub as string;
+      const userId = requireUserSub(req);
       const { code, state } = req.body as { code: string; state: string };
 
       const parsed = verifyState(state);
@@ -158,7 +159,7 @@ export class GoogleAuthController {
   }
 
   async disconnect(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const userId = (req as any).auth.payload.sub as string;
+    const userId = requireUserSub(req);
     try {
       try {
         await stopWatch(userId);
