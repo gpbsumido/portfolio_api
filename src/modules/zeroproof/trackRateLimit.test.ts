@@ -37,9 +37,16 @@ describe('POST /api/zeroproof/track rate limit', () => {
     app.use('/api/zeroproof', zeroproofRouter);
     app.use(errorHandler);
 
+    // Pinned to 127.0.0.1 for the same reason as the vitals limiter test.
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
     const statuses: number[] = [];
-    for (let sent = 0; sent < 121; sent++) {
-      statuses.push((await request(app).post('/api/zeroproof/track').send(batch)).status);
+    try {
+      for (let sent = 0; sent < 121; sent++) {
+        statuses.push((await request(server).post('/api/zeroproof/track').send(batch)).status);
+      }
+    } finally {
+      server.close();
     }
 
     expect(statuses.slice(0, 120)).not.toContain(429);
