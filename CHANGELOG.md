@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-19 - version 6.4.1
+
+- **Calendar's database connection uses the shared TLS settings.** It was the one module that built its own: `ssl: { rejectUnauthorized: false }` in production, which ignored `DB_CA_CERT` and never checked who it was talking to. Its Knex instance now takes `connectionString` and `ssl` from `config/pool.js`, so setting a CA verifies calendar's connections too.
+- **Calendar holds no connections open until it's used.** Its pool was `min: 2, max: 10` on top of the shared pool's 20. It's `min: 0, max: 5` now. Knex can't share the pg `Pool` object itself, so this is two pools with one config rather than one pool.
+- **`utils/db.js` went from 1,452 lines to about 400.** The gallery, feedback, event card, countdown, user, member and calendar CRUD copies had no callers left, because the TypeScript modules replaced them. What remains is what Google Calendar sync calls. Moving that into a typed `google-auth/repository.ts` waits until `utils/googleToken.js` and `utils/googleCalendar.js` are converted, since both still `require` it.
+- The OpenAPI document's `info.version` says 6.4.1.
+
 ## 2026-11-19 - version 6.4.0
 
 - **Forum posts and map markers are gone.** `GET`/`POST /api/postforum` and `GET`/`POST /api/markers` had no live caller (the only client was the archived paul-portfolio), and `GET /markers` read the whole `locations` table with no limit. Routes, controller, repository, schemas and the OpenAPI entries are deleted. The `postforum` and `locations` tables stay until a migration drops them.
