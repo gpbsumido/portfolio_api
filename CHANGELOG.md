@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-19 - version 6.3.0
+
+- **Connecting Google now has to be confirmed by the account that started it.** The OAuth state only signed `{userId, origin}`, and the callback stored tokens under that `userId` for whoever consented. So anyone could mint an auth URL, get someone else to open it, and end up holding that person's Google calendar. The callback no longer exchanges the code. It sends it back to `/settings?gcal=confirm&code=…&state=…`, and the new `POST /api/google/auth/confirm` (signed in, body `{ code, state }`) only redeems it when the state was minted for the caller. Anyone else gets a 403. paul-explore needs the matching settings change live before this deploys.
+- **The state expires after ten minutes.** It used to be good forever. A state signed before this release has no expiry and is refused, so a connect that was mid-flight during the deploy has to start again.
+- **The Google webhook saves its sync token after applying the changes, not before.** One failing item used to lose the rest of the batch for good, because the next push started from the new token. Replaying a batch is safe, since an imported event is found by its Google id the second time.
+- **A revoked Google connection says so.** A refresh rejected with 400 or 401 deletes the stored tokens, so `GET /api/google/auth/status` reports not connected and the user can reconnect. Before, every push was skipped without a word while status kept saying connected. Other token failures, a network error or a Google 5xx, now fail the push and get logged instead of being treated as "not connected".
+- **One list of allowed frontends**, in `src/config/allowedOrigins.ts`, for CORS and the OAuth redirect. The Google copy let `http://localhost:3000` through in production. It doesn't any more, so connecting Google from a local frontend works against a local API only.
+- The OpenAPI document's `info.version` says 6.3.0.
+
 ## 2026-11-19 - version 6.2.2
 
 - **Concurrent bets can't overdraw a ZeroProof wallet any more.** `placeBet` read the ledger, checked the balance and inserted, with nothing stopping a second request from reading the same balance in between. Against a real Postgres, ten simultaneous 1000-cent bets on a 1000-cent wallet all went through. It now locks the wallet row first, so bets on one wallet take turns and each sees the ones before it. Different wallets don't wait on each other.
