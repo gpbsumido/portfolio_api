@@ -50,7 +50,7 @@ export function createUserLimiter(opts: {
     legacyHeaders: false,
     store: nextStore('user'),
     keyGenerator: (req: Request) =>
-      (req as any).auth?.payload?.sub ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
+      req.auth?.payload.sub ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown'),
     message: {
       error: opts.message ?? 'Too many requests, please try again later.',
     },

@@ -4,7 +4,7 @@
 
 import knex, { type Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
-import { env } from '../../config/env.js';
+import { connectionString, ssl } from '../../../config/pool.js';
 import type {
   CalendarEvent,
   CalendarEventRow,
@@ -32,20 +32,15 @@ import type {
 } from './types.js';
 
 // ---------------------------------------------------------------------------
-// Knex instance — uses the same DATABASE_URL as the pg Pool
+// Knex instance. It can't share the pg Pool object, so it takes the pool's
+// connection string and TLS settings instead: one place decides how we talk to
+// Postgres. min 0 so it holds nothing open until calendar is actually used.
 // ---------------------------------------------------------------------------
-
-const connectionString =
-  env.DATABASE_URL ||
-  `postgresql://${env.DB_USER}:${env.DB_PASSWORD}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
 
 export const db: Knex = knex({
   client: 'pg',
-  connection: {
-    connectionString,
-    ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  },
-  pool: { min: 2, max: 10 },
+  connection: { connectionString, ssl },
+  pool: { min: 0, max: 5 },
 });
 
 // ---------------------------------------------------------------------------

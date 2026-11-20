@@ -2,6 +2,7 @@
 // Reposts module — Express controller
 // ---------------------------------------------------------------------------
 
+import { optionalUserSub, requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as service from './service.js';
@@ -21,7 +22,7 @@ export class RepostsController {
   async repost(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       await service.repost(userSub, postId);
       res.status(204).end();
     } catch (err) {
@@ -33,7 +34,7 @@ export class RepostsController {
   async unrepost(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       await service.unrepost(userSub, postId);
       res.status(204).end();
     } catch (err) {
@@ -49,7 +50,7 @@ export class RepostsController {
         .map((s) => s.trim())
         .filter((id) => idSchema.safeParse(id).success)
         .slice(0, MAX_BATCH);
-      const userSub = (req as any).auth?.payload?.sub ?? null;
+      const userSub = optionalUserSub(req);
       const reposts = await service.summaries(ids, userSub);
       res.json({ reposts });
     } catch (err) {

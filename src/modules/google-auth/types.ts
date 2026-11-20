@@ -13,6 +13,8 @@ export interface GoogleAuthRow {
 export interface OAuthState {
   userId: string;
   origin: string;
+  /** Epoch ms after which the state is refused. */
+  expiresAt: number;
 }
 
 export interface TokenExchangeResponse {

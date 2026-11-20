@@ -35,7 +35,6 @@ import { followParamSchema } from '../../modules/follows/schemas.js';
 import { createFeedbackSchema, updateFeedbackSchema } from '../../modules/feedback/schemas.js';
 import { ingestVitalSchema } from '../../modules/vitals/schemas.js';
 import { saveEntrySchema } from '../../modules/medical-journal/schemas.js';
-import { createForumPostSchema, createMarkerSchema } from '../../modules/forum/schemas.js';
 import { savePicksSchema, saveResultsSchema } from '../../modules/nba/schemas.js';
 import { createGalleryItemSchema } from '../../modules/gallery/schemas.js';
 import {
@@ -451,27 +450,6 @@ registry.registerPath({
   tags: ['Gallery walls'],
   security: [{ bearerAuth: [] }],
   responses: { 200: { description: 'Deleted' }, 404: { description: 'Not found' } },
-});
-
-// ── Forum ─────────────────────────────────────────────────────────────────
-
-registry.registerPath({
-  method: 'post',
-  path: '/postforum',
-  summary: 'Create a forum post',
-  tags: ['Forum'],
-  security: [{ bearerAuth: [] }],
-  request: { body: { content: { 'application/json': { schema: createForumPostSchema } } } },
-  responses: { 201: { description: 'Created' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/markers',
-  summary: 'Create a map marker',
-  tags: ['Forum'],
-  request: { body: { content: { 'application/json': { schema: createMarkerSchema } } } },
-  responses: { 201: { description: 'Created' } },
 });
 
 // ── YouTube ───────────────────────────────────────────────────────────────

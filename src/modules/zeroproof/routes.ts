@@ -4,6 +4,7 @@
 
 import { Router } from 'express';
 import { checkJwt, optionalCheckJwt } from '../../config/auth.js';
+import { createIpLimiter } from '../../middleware/rateLimiter.js';
 import { upsertUser } from '../../middleware/upsertUser.js';
 import { validateBody } from '../../middleware/validate.js';
 import { requireAdmin } from '../../shared/auth/adminEmail.js';
@@ -30,7 +31,9 @@ router.get('/leaderboard', (req, res, next) => ctrl.leaderboard(req, res, next))
 
 // POST /api/zeroproof/track — anonymous telemetry ingest (public, no auth). A
 // batch of client events; stored idempotently, deduped on event_uuid.
-router.post('/track', validateBody(trackBatchSchema), (req, res, next) =>
+// The schema caps a batch at 100 events; the limiter caps the batches.
+const trackLimiter = createIpLimiter({ windowMs: 60_000, max: 120 });
+router.post('/track', trackLimiter, validateBody(trackBatchSchema), (req, res, next) =>
   ctrl.ingestAnalytics(req, res, next),
 );
 

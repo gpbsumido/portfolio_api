@@ -1,3 +1,4 @@
+import { optionalUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 
@@ -39,7 +40,7 @@ export class GalleryController {
     }
 
     try {
-      const userSub = (req as any).auth?.payload?.sub as string | undefined;
+      const userSub = optionalUserSub(req) ?? undefined;
       // Decide on the magic bytes, not file.mimetype: multer copies that
       // straight from the multipart part header, so the client picks it.
       // processImage already does this; this path was the outlier.
@@ -136,7 +137,7 @@ export class GalleryController {
 
   async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     const id = param(req.params.id);
-    const userSub = (req as any).auth?.payload?.sub as string | undefined;
+    const userSub = optionalUserSub(req) ?? undefined;
 
     try {
       const record = await repo.findById(id);

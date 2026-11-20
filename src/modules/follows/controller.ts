@@ -2,6 +2,7 @@
 // Follows module — Express controller
 // ---------------------------------------------------------------------------
 
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as repo from './repository.js';
@@ -41,7 +42,7 @@ export class FollowsController {
       throw new ValidationError('Validation failed', details);
     }
 
-    const followerSub = (req as any).auth.payload.sub as string;
+    const followerSub = requireUserSub(req);
     const { username } = parseResult.data;
 
     try {
@@ -68,7 +69,7 @@ export class FollowsController {
 
   /** PUT /api/follows/:id/accept */
   async accept(req: Request, res: Response, next: NextFunction) {
-    const followingSub = (req as any).auth.payload.sub as string;
+    const followingSub = requireUserSub(req);
     const id = param(req.params.id);
 
     try {
@@ -84,7 +85,7 @@ export class FollowsController {
 
   /** PUT /api/follows/:id/reject */
   async reject(req: Request, res: Response, next: NextFunction) {
-    const followingSub = (req as any).auth.payload.sub as string;
+    const followingSub = requireUserSub(req);
     const id = param(req.params.id);
 
     try {
@@ -111,7 +112,7 @@ export class FollowsController {
       throw new ValidationError('Validation failed', details);
     }
 
-    const followerSub = (req as any).auth.payload.sub as string;
+    const followerSub = requireUserSub(req);
     const { username } = parseResult.data;
 
     try {
@@ -132,7 +133,7 @@ export class FollowsController {
 
   /** GET /api/follows/requests */
   async getRequests(req: Request, res: Response, next: NextFunction) {
-    const followingSub = (req as any).auth.payload.sub as string;
+    const followingSub = requireUserSub(req);
 
     try {
       const rows = await repo.getPendingRequests(followingSub);
@@ -145,7 +146,7 @@ export class FollowsController {
 
   /** GET /api/follows/following */
   async getFollowing(req: Request, res: Response, next: NextFunction) {
-    const followerSub = (req as any).auth.payload.sub as string;
+    const followerSub = requireUserSub(req);
 
     try {
       const rows = await repo.getFollowing(followerSub);
@@ -158,7 +159,7 @@ export class FollowsController {
 
   /** GET /api/follows/followers */
   async getFollowers(req: Request, res: Response, next: NextFunction) {
-    const followingSub = (req as any).auth.payload.sub as string;
+    const followingSub = requireUserSub(req);
 
     try {
       const rows = await repo.getFollowers(followingSub);

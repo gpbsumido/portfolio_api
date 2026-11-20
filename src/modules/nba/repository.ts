@@ -98,33 +98,37 @@ export class NbaRepository {
       return idx;
     };
 
+    // Resolved once, up front. Looking them up inside each row's try meant a
+    // renamed column turned every row into null and the roster came back empty.
+    const playerIdx = getIdx('PLAYER');
+    const heightIdx = getIdx('HEIGHT');
+    const playerIdIdx = getIdx('PLAYER_ID');
+    const positionIdx = getIdx('POSITION');
+    const teamIdIdx = getIdx('TeamID');
+
     const players: NbaPlayer[] = data.resultSets[0].rowSet
       .map((row: unknown[]) => {
-        try {
-          const playerName = row[getIdx('PLAYER')] as string;
-          if (!playerName) return null;
-          const height = row[getIdx('HEIGHT')] as string;
+        const playerName = row[playerIdx] as string;
+        if (!playerName) return null;
+        const height = row[heightIdx] as string;
 
-          return {
-            id: row[getIdx('PLAYER_ID')] as number,
-            first_name: playerName.split(' ')[0],
-            last_name: playerName.split(' ').slice(1).join(' '),
-            position: (row[getIdx('POSITION')] as string) || 'N/A',
-            height_feet: height ? parseInt(height.split('-')[0]) : null,
-            height_inches: height ? parseInt(height.split('-')[1]) : null,
-            team: {
-              id: row[getIdx('TeamID')] as number,
-              name: 'Unknown',
-              full_name: 'Unknown',
-              abbreviation: 'Unknown',
-              city: 'Unknown',
-              conference: 'Unknown',
-              division: 'Unknown',
-            },
-          };
-        } catch {
-          return null;
-        }
+        return {
+          id: row[playerIdIdx] as number,
+          first_name: playerName.split(' ')[0],
+          last_name: playerName.split(' ').slice(1).join(' '),
+          position: (row[positionIdx] as string) || 'N/A',
+          height_feet: height ? parseInt(height.split('-')[0]) : null,
+          height_inches: height ? parseInt(height.split('-')[1]) : null,
+          team: {
+            id: row[teamIdIdx] as number,
+            name: 'Unknown',
+            full_name: 'Unknown',
+            abbreviation: 'Unknown',
+            city: 'Unknown',
+            conference: 'Unknown',
+            division: 'Unknown',
+          },
+        };
       })
       .filter((p: NbaPlayer | null): p is NbaPlayer => p !== null);
 

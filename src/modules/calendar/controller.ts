@@ -2,8 +2,10 @@
 // Calendar module — Controller (HTTP layer)
 // ---------------------------------------------------------------------------
 
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { CalendarService } from './service.js';
+import { googleCalendarUtils } from './google.js';
 import type {
   CalendarEventFilters,
   CreateCalendarEventInput,
@@ -16,7 +18,7 @@ import type {
   UpdateEventCardInput,
 } from './types.js';
 
-const service = new CalendarService();
+const service = new CalendarService(googleCalendarUtils);
 
 /** Extract a single string param (Express 5 params can be string | string[]). */
 function param(val: string | string[]): string {
@@ -30,7 +32,7 @@ export class CalendarController {
 
   async getEvents(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const { start, end, cardId, cardName, calendarId } = req.query;
       const filters: CalendarEventFilters = {
         start: start as string | undefined,
@@ -48,7 +50,7 @@ export class CalendarController {
 
   async getEventById(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const event = await service.getEventById(id, userSub);
       res.json({ event });
@@ -59,7 +61,7 @@ export class CalendarController {
 
   async createEvent(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const input: CreateCalendarEventInput = req.body;
       const event = await service.createEvent(input, userSub);
       res.status(201).json({ event });
@@ -70,7 +72,7 @@ export class CalendarController {
 
   async updateEvent(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const fields: UpdateCalendarEventInput = req.body;
       const event = await service.updateEvent(id, fields, userSub);
@@ -82,7 +84,7 @@ export class CalendarController {
 
   async deleteEvent(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       await service.deleteEvent(id, userSub);
       res.status(204).send();
@@ -97,7 +99,7 @@ export class CalendarController {
 
   async getCalendars(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const calendars = await service.getCalendars(userSub);
       res.json({ calendars });
     } catch (err) {
@@ -107,7 +109,7 @@ export class CalendarController {
 
   async createCalendar(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const input: CreateCalendarInput = req.body;
       const calendar = await service.createCalendar(input, userSub);
       res.status(201).json({ calendar });
@@ -118,7 +120,7 @@ export class CalendarController {
 
   async updateCalendar(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const { name, color, syncMode, googleCalId, googleCalName } = req.body;
       const fields: UpdateCalendarInput = {};
@@ -139,7 +141,7 @@ export class CalendarController {
 
   async deleteCalendar(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       await service.deleteCalendar(id, userSub);
       res.status(204).send();
@@ -150,7 +152,7 @@ export class CalendarController {
 
   async connectGoogle(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const calendar = await service.connectGoogle(id, userSub);
       res.json({ calendar });
@@ -161,7 +163,7 @@ export class CalendarController {
 
   async disconnectGoogle(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const calendar = await service.disconnectGoogle(id, userSub);
       res.json({ calendar });
@@ -176,10 +178,10 @@ export class CalendarController {
 
   async getMembers(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const calendarId = param(req.params.id);
-      const requestorEmail =
-        ((req as any).auth?.payload?.email as string) ?? null;
+      const email = req.auth?.payload.email;
+      const requestorEmail = typeof email === 'string' ? email : null;
       const members = await service.getMembers(
         calendarId,
         userSub,
@@ -193,7 +195,7 @@ export class CalendarController {
 
   async inviteMember(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const calendarId = param(req.params.id);
       const { email, role = 'editor' } = req.body;
       const member = await service.inviteMember(
@@ -210,7 +212,7 @@ export class CalendarController {
 
   async updateMemberRole(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const calendarId = param(req.params.id);
       const memberSub = param(req.params.memberSub);
       const { role } = req.body;
@@ -228,7 +230,7 @@ export class CalendarController {
 
   async removeMember(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const calendarId = param(req.params.id);
       const rawMemberSub = param(req.params.memberSub);
       // "me" is a convenience alias
@@ -250,7 +252,7 @@ export class CalendarController {
 
   async getEventCards(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const eventId = param(req.params.id);
       const cards = await service.getEventCards(eventId, userSub);
       res.json({ cards });
@@ -261,7 +263,7 @@ export class CalendarController {
 
   async addEventCard(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const eventId = param(req.params.id);
       const { cardId, cardName, cardSetId, cardSetName, cardImageUrl, quantity, notes } = req.body;
       const input: AddEventCardInput = {
@@ -283,7 +285,7 @@ export class CalendarController {
 
   async updateEventCard(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const eventId = param(req.params.id);
       const entryId = param(req.params.entryId);
       const fields: UpdateEventCardInput = req.body;
@@ -301,7 +303,7 @@ export class CalendarController {
 
   async deleteEventCard(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const eventId = param(req.params.id);
       const entryId = param(req.params.entryId);
       await service.deleteEventCard(entryId, eventId, userSub);
@@ -317,7 +319,7 @@ export class CalendarController {
 
   async getCountdowns(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const cursor = (req.query.cursor as string) || null;
       const result = await service.getCountdowns(userSub, cursor);
       res.json(result);
@@ -328,7 +330,7 @@ export class CalendarController {
 
   async getCountdownById(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const countdown = await service.getCountdownById(id, userSub);
       res.json({ countdown });
@@ -339,7 +341,7 @@ export class CalendarController {
 
   async createCountdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const input: CreateCountdownInput = req.body;
       const countdown = await service.createCountdown(input, userSub);
       res.status(201).json({ countdown });
@@ -350,7 +352,7 @@ export class CalendarController {
 
   async updateCountdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       const fields: UpdateCountdownInput = req.body;
       const countdown = await service.updateCountdown(id, fields, userSub);
@@ -362,7 +364,7 @@ export class CalendarController {
 
   async deleteCountdown(req: Request, res: Response, next: NextFunction) {
     try {
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const id = param(req.params.id);
       await service.deleteCountdown(id, userSub);
       res.status(204).send();
