@@ -15,7 +15,6 @@ import fantasyRoutes from './modules/fantasy/routes.js';
 import featureFlagsRoutes from './modules/feature-flags/routes.js';
 import feedbackRoutes from './modules/feedback/routes.js';
 import followsRoutes from './modules/follows/routes.js';
-import forumRoutes from './modules/forum/routes.js';
 import galleryRoutes from './modules/gallery/routes.js';
 import geoRoutes from './modules/geo/routes.js';
 import googleAuthRoutes from './modules/google-auth/routes.js';
@@ -118,7 +117,6 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/follows', followsRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.use('/api/google', googleAuthRoutes);
-app.use('/api', forumRoutes);
 
 // ── Error handling ────────────────────────────────────────────────────────
 
