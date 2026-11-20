@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-19 - version 6.4.0
+
+- **Forum posts and map markers are gone.** `GET`/`POST /api/postforum` and `GET`/`POST /api/markers` had no live caller (the only client was the archived paul-portfolio), and `GET /markers` read the whole `locations` table with no limit. Routes, controller, repository, schemas and the OpenAPI entries are deleted. The `postforum` and `locations` tables stay until a migration drops them.
+- **The two anonymous writes are rate-limited.** `POST /api/vitals` and `POST /api/zeroproof/track` take 120 requests a minute per IP. A real page session sends a handful, so this only stops a flood. `/track` was already capped at 100 events a batch, but nothing capped the batches.
+- **Clearing the F1 cache is admin-only.** `DELETE /api/f1/cache` only checked for a signed-in user, so anyone with an account could wipe the FastF1 cache and push every visitor onto cold Python fetches.
+- **`src/middleware/cache.ts` is deleted.** Its four exports were re-exported from `middleware/index.ts` and never used.
+- The limiter tests run against one server bound to `127.0.0.1` and listening before the first request. With `request(app)` per call, a parallel run occasionally had one of the 121 answered without any `RateLimit` headers, so the 121st came back 202.
+- The OpenAPI document's `info.version` says 6.4.0.
+
 ## 2026-11-19 - version 6.3.1
 
 - **Caller mistakes get a 4xx instead of a 500.** Malformed JSON is now a 400 and a body over the limit is a 413. A value Postgres can't parse as an id (`22P02`) and a reference to a row that doesn't exist (`23503`) are 400s, and a duplicate (`23505`) is a 409. All of them used to come back as 500s and get logged as unhandled errors. The Postgres codes are read off the error itself (pg, Knex) or off its `cause`, because Drizzle wraps driver errors in `DrizzleQueryError`. The client gets a sentence of ours, never Postgres's text, which names tables and constraints.
