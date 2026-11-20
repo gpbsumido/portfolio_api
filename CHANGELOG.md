@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-19 - version 6.2.2
+
+- **Concurrent bets can't overdraw a ZeroProof wallet any more.** `placeBet` read the ledger, checked the balance and inserted, with nothing stopping a second request from reading the same balance in between. Against a real Postgres, ten simultaneous 1000-cent bets on a 1000-cent wallet all went through. It now locks the wallet row first, so bets on one wallet take turns and each sees the ones before it. Different wallets don't wait on each other.
+- **Settling a bet or refunding a wallet twice pays once.** Both used to update by id alone and then write the payout, so an overlapping cron run or a retry paid out again. They now only touch an open bet or an unrefunded wallet, and write no ledger lines when nothing matched.
+- **The money paths are tested against Postgres.** `money.db.test.ts` runs in CI's throwaway database and only where `ALLOW_DB_WRITE_TESTS` is set, because a laptop's `DATABASE_URL` often points at the deployed one.
+- **CI's test job has a database now**, so the vitals and operator sql-smoke files run on every push instead of skipping.
+- The OpenAPI document's `info.version` says 6.2.2.
+
 ## 2026-11-19 - version 6.2.1
 
 - **Two-way Google sync works again.** It had been off since the calendar module moved to TypeScript in July. The controller built the service without the Google helpers, so `POST /api/calendar/calendars/:id/connect-google` returned 500 and every event create, update and delete skipped the push to Google without a log line. Deleting a calendar also skipped the ACL cleanup and the watch-channel stop, and removing a member never revoked their access to the Google calendar.
