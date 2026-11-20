@@ -3,7 +3,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // The token helpers are CommonJS and require utils/db themselves, so the test
 // loads them the same way to patch the one db instance they actually use.
-const requireCommonJs = createRequire(import.meta.url);
+const requireCommonJs = createRequire(__filename);
 const db = requireCommonJs('../../../utils/db');
 const { getTokenAndCalId } = requireCommonJs('../../../utils/googleToken');
 const { createGoogleEvent } = requireCommonJs('../../../utils/googleCalendar');

@@ -1,14 +1,14 @@
 import type { Request, Response, NextFunction } from 'express';
 import { env } from '../../config/env.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
-import { ValidationError } from '../../shared/errors/AppError.js';
+import { ALLOWED_ORIGINS } from '../../config/allowedOrigins.js';
+import { ForbiddenError, ValidationError } from '../../shared/errors/AppError.js';
 
 const log = createModuleLogger('google-auth');
 import {
   registerWatch,
   stopWatch,
   fetchIncrementalEvents,
-  ALLOWED_ORIGINS,
   buildState,
   verifyState,
   fromGoogleEvent,
@@ -61,7 +61,7 @@ export class GoogleAuthController {
       const userId = (req as any).auth.payload.sub as string;
       const origin = req.query.origin as string | undefined;
 
-      if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+      if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
         throw new ValidationError('Missing or invalid origin');
       }
 
@@ -93,14 +93,30 @@ export class GoogleAuthController {
       return;
     }
 
-    if (!parsed) {
-      log.warn('invalid state param in callback');
+    if (!parsed || !code) {
+      log.warn('invalid state or missing code in callback');
       return next(new ValidationError('Invalid state parameter'));
     }
 
-    const { userId } = parsed;
+    // Google sends whoever consented here, and nothing ties them to the account
+    // that started the flow. So the code goes back to the frontend, and only the
+    // signed-in user the state was minted for can redeem it, at /auth/confirm.
+    const confirm = new URLSearchParams({ gcal: 'confirm', code, state });
+    res.redirect(`${origin}/settings?${confirm}`);
+  }
 
+  async confirm(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const userId = (req as any).auth.payload.sub as string;
+      const { code, state } = req.body as { code: string; state: string };
+
+      const parsed = verifyState(state);
+      if (!parsed) throw new ValidationError('Invalid or expired state');
+      if (parsed.userId !== userId) {
+        log.warn({ userId }, 'Google connect confirmed by a different account than started it');
+        throw new ForbiddenError('This Google connection was started by a different account');
+      }
+
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -116,8 +132,8 @@ export class GoogleAuthController {
       if (!tokenRes.ok) {
         const body = await tokenRes.text();
         log.error({ body }, 'token exchange failed');
-        res.redirect(`${origin}/settings?gcal=error`);
-        return;
+        // A used or expired code. Starting the connect again is the fix.
+        throw new ValidationError('Google rejected the authorization code. Try connecting again.');
       }
 
       const { access_token, refresh_token, expires_in } = await tokenRes.json();
@@ -135,10 +151,9 @@ export class GoogleAuthController {
         log.error({ err: watchErr }, 'registerWatch failed after connect');
       }
 
-      res.redirect(`${origin}/settings?gcal=connected`);
+      res.json({ connected: true });
     } catch (err: any) {
-      log.error({ err }, 'callback error');
-      res.redirect(`${origin}/settings?gcal=error`);
+      next(err);
     }
   }
 
@@ -194,8 +209,6 @@ export class GoogleAuthController {
         );
         log.info({ count: items.length, userId, googleCalId }, 'webhook items received');
 
-        await updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
-
         for (const item of items) {
           const existing = await getEventByGoogleId(item.id, userId);
 
@@ -213,14 +226,17 @@ export class GoogleAuthController {
 
           await processExistingItem(item, userId, existing);
         }
+
+        // Only once every item has landed. Saved first, a failure partway lost
+        // the rest of the batch, because the next push starts from this token.
+        // Replaying is safe: an imported item is found by its Google id next time.
+        await updateCalendar(calendar.id, { syncToken: nextSyncToken }, userId);
       } else {
         const auth = await getGoogleAuth(userId);
         if (!auth) return;
 
         const { items, nextSyncToken } = await fetchIncrementalEvents(userId, auth.sync_token);
         log.info({ count: items.length, userId }, 'incremental fetch items received');
-
-        await updateSyncToken(userId, nextSyncToken);
 
         for (const item of items) {
           const existing = await getEventByGoogleId(item.id, userId);
@@ -230,6 +246,8 @@ export class GoogleAuthController {
           }
           await processExistingItem(item, userId, existing);
         }
+
+        await updateSyncToken(userId, nextSyncToken);
       }
     });
   }

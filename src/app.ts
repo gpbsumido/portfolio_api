@@ -2,7 +2,7 @@ import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { env } from './config/env.js';
+import { ALLOWED_ORIGINS } from './config/allowedOrigins.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import calendarRoutes from './modules/calendar/routes.js';
@@ -54,12 +54,6 @@ app.set('trust proxy', 1);
 // ── Global middleware ─────────────────────────────────────────────────────
 
 app.use(helmet());
-// localhost is a dev convenience, not something production should accept.
-const ALLOWED_ORIGINS = [
-  'https://paulsumido.com',
-  'https://develop.paulsumido.com',
-  ...(env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
-];
 // The Draft Lab extension calls /api/fantasy/{adjustments,draft-results} from a
 // moz-extension:// page whose per-install origin the allowlist can't enumerate.
 // Both resources are non-credentialed (public reads, a custom-header token or a
@@ -76,7 +70,7 @@ app.use(
     allowedHeaders: ['Content-Type', 'x-draft-adj-token', 'x-draft-client-key'],
   }),
 );
-app.use(cors({ origin: ALLOWED_ORIGINS }));
+app.use(cors({ origin: [...ALLOWED_ORIGINS] }));
 app.use(compression());
 app.use(express.json({ limit: '100kb' }));
 app.use(requestLogger);
