@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 - version 6.4.4
+
+- **Editing a card on a calendar event works.** `PUT /api/calendar/events/:id/cards/:entryId` built its update with `db.raw` and `$1..$n` placeholders, and knex only binds `?`, so every quantity or note edit threw "Expected 5 bindings, saw 0" and answered 500. It uses `?` now, the same as the card delete next to it. The repository tests mock knex and took any SQL, so the new test compiles the statement with the real knex.
+- The OpenAPI document's `info.version` says 6.4.4.
+
 ## 2026-11-20 - version 6.4.3
 
 - **Creating or editing a calendar now answers with a `role`.** `POST /api/calendar/calendars` and `PUT /api/calendar/calendars/:id` returned the calendar straight from `.returning('*')`, and the `calendars` table has no role column, so the response had none. paul-explore validates every response body and requires one, so it threw after the write had committed: the person saw "Couldn't save" for a calendar that existed, and a retry made a duplicate. Both writes are filtered on `user_sub`, so only the owner can reach them, and they now answer `role: 'owner'`. The Google connect and disconnect writes go through the same update and get it too.
