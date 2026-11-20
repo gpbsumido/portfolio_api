@@ -25,7 +25,6 @@ Backend REST API for [paulsumido.com](https://paulsumido.com). Built with Node.j
 | Feedback        | Rotation feedback linked to journal entries (Auth0-gated)                       |
 | Calendar        | Personal calendar events, countdowns, and calendar sharing with editor/viewer roles (Auth0-gated) |
 | Web Vitals      | Real-user Core Web Vitals collection, P75 aggregation, and per-version filtering |
-| Forum / Markers | Post forum and geolocation markers stored in PostgreSQL. Markers are create-and-read; there is no delete |
 | Operator        | Unattended-retail dashboard — auditable restocking, promotions, per-store sales, planogram, all resolved in the store's own timezone |
 | Feature Flags   | Flag definitions, deterministic evaluation, targeting rules, and an audit log   |
 | To-do           | Admin-only outstanding-work list behind an email allowlist. Every change is recorded as a revision and can be reverted; reverting writes a new revision rather than discarding later ones |
@@ -65,15 +64,13 @@ Every router mounted in `src/app.ts`, in source order:
 | `/api/posts`, `/api/likes`, `/api/replies`, `/api/reposts` | Ketsup posts and interactions |
 | `/api/search`, `/api/notifications`, `/api/follows`, `/api/timeline` | Ketsup search, notifications, follows, timeline |
 | `/api/google` | Google Calendar OAuth and webhook |
-| `/api` | Forum posts (`/api/postforum`) and map markers (`/api/markers`) |
-
-Two routers mount at bare `/api` — health first, forum last — which is why the
-forum paths look like they belong to no group.
 
 **Gone, and deliberately:** the table-inspection routes (`/tables`,
 `/table/:tableName`) read `information_schema` and handed every table and column
-name to any caller with an account. `DELETE /api/markers/:id` is absent too, so
-markers are create-and-read.
+name to any caller with an account. Forum posts (`/api/postforum`) and map
+markers (`/api/markers`) went in 6.4.0: the only client was the archived
+paul-portfolio, and `GET /markers` read the whole table with no limit. The
+`postforum` and `locations` tables are still there until a migration drops them.
 
 ## Deprecations
 
@@ -511,7 +508,7 @@ Most of the rest sit on authorization boundaries: `write-auth`, `write-tier`,
 `profile-visibility`, `webhook-auth`. That is where a mistake is quiet and
 expensive, so that is where the tests are.
 
-Nothing covers `calendar`, `gallery`, `geo`, `nba`, `youtube`, `forum`,
+Nothing covers `calendar`, `gallery`, `geo`, `nba`, `youtube`,
 `follows`, `timeline`, `fantasy` or `docs`. Mostly thin proxies over external
 APIs, but it is a gap rather than a decision.
 

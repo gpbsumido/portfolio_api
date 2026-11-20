@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import pinoHttp from 'pino-http';
 import { logger } from '../shared/utils/logger.js';
 import { env } from '../config/env.js';
@@ -31,8 +32,10 @@ export const requestLogger = pinoHttp({
   autoLogging: {
     ignore: (req) => SILENT_PATHS.has(req.url?.split('?')[0] ?? ''),
   },
+  // pino-http types req as a bare IncomingMessage, but it runs as Express
+  // middleware after checkJwt, so the Express request type is the true one.
   customProps: (req) => ({
-    userId: (req as any).auth?.payload?.sub ?? undefined,
+    userId: (req as Request).auth?.payload.sub,
   }),
   customSuccessMessage: (req, res) => {
     const duration = res.getHeader('x-response-time');

@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const { getTokenAndCalId, getValidAccessToken } = require("./googleToken");
+const { getTokenAndCalId, getValidAccessToken, GoogleNotConnectedError } = require("./googleToken");
 const db = require("./db");
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -82,9 +82,10 @@ async function createGoogleEvent(userId, event, calId) {
     const result = await getTokenAndCalId(userId);
     token = result.token;
     resolvedCalId = calId ?? result.calId;
-  } catch {
-    // user is not connected, nothing to do
-    return null;
+  } catch (err) {
+    // not connected (or the connection was just revoked): nothing to push
+    if (err instanceof GoogleNotConnectedError) return null;
+    throw err;
   }
 
   const res = await fetch(`${calBase(resolvedCalId)}/events`, {
@@ -123,8 +124,9 @@ async function updateGoogleEvent(userId, googleEventId, fields, calId) {
     const result = await getTokenAndCalId(userId);
     token = result.token;
     resolvedCalId = calId ?? result.calId;
-  } catch {
-    return;
+  } catch (err) {
+    if (err instanceof GoogleNotConnectedError) return;
+    throw err;
   }
 
   const res = await fetch(`${calBase(resolvedCalId)}/events/${googleEventId}`, {
@@ -159,8 +161,9 @@ async function deleteGoogleEvent(userId, googleEventId, calId) {
     const result = await getTokenAndCalId(userId);
     token = result.token;
     resolvedCalId = calId ?? result.calId;
-  } catch {
-    return;
+  } catch (err) {
+    if (err instanceof GoogleNotConnectedError) return;
+    throw err;
   }
 
   const res = await fetch(`${calBase(resolvedCalId)}/events/${googleEventId}`, {

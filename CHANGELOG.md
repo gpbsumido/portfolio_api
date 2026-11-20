@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-11-19 - version 6.4.2
+
+- **`GET /api/med-journal/` returns the signed-in user's id.** It read `req.auth.sub`, but the JWT middleware puts claims on `req.auth.payload`, so `userId` was always missing from the response. An `any` cast hid it from the compiler.
+- **Every controller reads the user through one typed helper.** 67 `(req as any).auth.payload.sub` reads across 14 controllers and the rate limiter and request logger are now `requireUserSub(req)` (throws 401 when there's no sub) or `optionalUserSub(req)`. A wrong claim path is a type error now instead of a silent `undefined`.
+- Calendar's member list still passes `req.auth.payload.email` as the requestor's email, now through a `typeof` check instead of a cast. Auth0 only puts email on the access token under a namespaced claim, so this is probably always `null`. I've left the behavior as it was and noted it to look at separately.
+- The OpenAPI document's `info.version` says 6.4.2.
+
+## 2026-11-19 - version 6.4.1
+
+- **Calendar's database connection uses the shared TLS settings.** It was the one module that built its own: `ssl: { rejectUnauthorized: false }` in production, which ignored `DB_CA_CERT` and never checked who it was talking to. Its Knex instance now takes `connectionString` and `ssl` from `config/pool.js`, so setting a CA verifies calendar's connections too.
+- **Calendar holds no connections open until it's used.** Its pool was `min: 2, max: 10` on top of the shared pool's 20. It's `min: 0, max: 5` now. Knex can't share the pg `Pool` object itself, so this is two pools with one config rather than one pool.
+- **`utils/db.js` went from 1,452 lines to about 400.** The gallery, feedback, event card, countdown, user, member and calendar CRUD copies had no callers left, because the TypeScript modules replaced them. What remains is what Google Calendar sync calls. Moving that into a typed `google-auth/repository.ts` waits until `utils/googleToken.js` and `utils/googleCalendar.js` are converted, since both still `require` it.
+- The OpenAPI document's `info.version` says 6.4.1.
+
+## 2026-11-19 - version 6.4.0
+
+- **Forum posts and map markers are gone.** `GET`/`POST /api/postforum` and `GET`/`POST /api/markers` had no live caller (the only client was the archived paul-portfolio), and `GET /markers` read the whole `locations` table with no limit. Routes, controller, repository, schemas and the OpenAPI entries are deleted. The `postforum` and `locations` tables stay until a migration drops them.
+- **The two anonymous writes are rate-limited.** `POST /api/vitals` and `POST /api/zeroproof/track` take 120 requests a minute per IP. A real page session sends a handful, so this only stops a flood. `/track` was already capped at 100 events a batch, but nothing capped the batches.
+- **Clearing the F1 cache is admin-only.** `DELETE /api/f1/cache` only checked for a signed-in user, so anyone with an account could wipe the FastF1 cache and push every visitor onto cold Python fetches.
+- **`src/middleware/cache.ts` is deleted.** Its four exports were re-exported from `middleware/index.ts` and never used.
+- The limiter tests run against one server bound to `127.0.0.1` and listening before the first request. With `request(app)` per call, a parallel run occasionally had one of the 121 answered without any `RateLimit` headers, so the 121st came back 202.
+- The OpenAPI document's `info.version` says 6.4.0.
+
+## 2026-11-19 - version 6.3.1
+
+- **Caller mistakes get a 4xx instead of a 500.** Malformed JSON is now a 400 and a body over the limit is a 413. A value Postgres can't parse as an id (`22P02`) and a reference to a row that doesn't exist (`23503`) are 400s, and a duplicate (`23505`) is a 409. All of them used to come back as 500s and get logged as unhandled errors. The Postgres codes are read off the error itself (pg, Knex) or off its `cause`, because Drizzle wraps driver errors in `DrizzleQueryError`. The client gets a sentence of ours, never Postgres's text, which names tables and constraints.
+- **The NBA roster fails loudly when stats.nba.com renames a column.** Columns were looked up inside each row's `try`, so a missing one made every row `null` and the endpoint answered 200 with an empty roster. They're resolved once before parsing now, and a missing one throws `Column 'X' not found`.
+- The audit flagged the Redis rate-limit fallback as silent. That was a misread: `createRateLimitStore` already logs when it falls back to memory, so nothing changed there.
+- The OpenAPI document's `info.version` says 6.3.1.
+
+## 2026-11-19 - version 6.3.0
+
+- **Connecting Google now has to be confirmed by the account that started it.** The OAuth state only signed `{userId, origin}`, and the callback stored tokens under that `userId` for whoever consented. So anyone could mint an auth URL, get someone else to open it, and end up holding that person's Google calendar. The callback no longer exchanges the code. It sends it back to `/settings?gcal=confirm&code=…&state=…`, and the new `POST /api/google/auth/confirm` (signed in, body `{ code, state }`) only redeems it when the state was minted for the caller. Anyone else gets a 403. paul-explore needs the matching settings change live before this deploys.
+- **The state expires after ten minutes.** It used to be good forever. A state signed before this release has no expiry and is refused, so a connect that was mid-flight during the deploy has to start again.
+- **The Google webhook saves its sync token after applying the changes, not before.** One failing item used to lose the rest of the batch for good, because the next push started from the new token. Replaying a batch is safe, since an imported event is found by its Google id the second time.
+- **A revoked Google connection says so.** A refresh rejected with 400 or 401 deletes the stored tokens, so `GET /api/google/auth/status` reports not connected and the user can reconnect. Before, every push was skipped without a word while status kept saying connected. Other token failures, a network error or a Google 5xx, now fail the push and get logged instead of being treated as "not connected".
+- **One list of allowed frontends**, in `src/config/allowedOrigins.ts`, for CORS and the OAuth redirect. The Google copy let `http://localhost:3000` through in production. It doesn't any more, so connecting Google from a local frontend works against a local API only.
+- The OpenAPI document's `info.version` says 6.3.0.
+
+## 2026-11-19 - version 6.2.2
+
+- **Concurrent bets can't overdraw a ZeroProof wallet any more.** `placeBet` read the ledger, checked the balance and inserted, with nothing stopping a second request from reading the same balance in between. Against a real Postgres, ten simultaneous 1000-cent bets on a 1000-cent wallet all went through. It now locks the wallet row first, so bets on one wallet take turns and each sees the ones before it. Different wallets don't wait on each other.
+- **Settling a bet or refunding a wallet twice pays once.** Both used to update by id alone and then write the payout, so an overlapping cron run or a retry paid out again. They now only touch an open bet or an unrefunded wallet, and write no ledger lines when nothing matched.
+- **The money paths are tested against Postgres.** `money.db.test.ts` runs in CI's throwaway database and only where `ALLOW_DB_WRITE_TESTS` is set, because a laptop's `DATABASE_URL` often points at the deployed one.
+- **CI's test job has a database now**, so the vitals and operator sql-smoke files run on every push instead of skipping.
+- The OpenAPI document's `info.version` says 6.2.2.
+
+## 2026-11-19 - version 6.2.1
+
+- **Two-way Google sync works again.** It had been off since the calendar module moved to TypeScript in July. The controller built the service without the Google helpers, so `POST /api/calendar/calendars/:id/connect-google` returned 500 and every event create, update and delete skipped the push to Google without a log line. Deleting a calendar also skipped the ACL cleanup and the watch-channel stop, and removing a member never revoked their access to the Google calendar.
+- The Google helpers are picked up in one place now, `src/modules/calendar/google.ts`, and the service can't be built without them, so sync can't quietly switch itself off again.
+- The OpenAPI document's `info.version` says 6.2.1.
+
 ## 2026-11-04 - version 6.2.0
 
 - **Interview-prep progress is stored per user**, so the LeetCode playbook in paul-explore 9.1.0 follows a signed-in person between devices instead of living in one browser. `GET /api/practice/reviews` returns the caller's reviews, and `PUT /api/practice/reviews/:kind/:itemId` stores one. `kind` is `problem` (a LeetCode problem re-solved on a spaced ladder) or `drill` (a recognition card), and `itemId` is the LeetCode slug.

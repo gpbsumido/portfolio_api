@@ -74,14 +74,6 @@ export async function updateSyncToken(userId: string, syncToken: string) {
   return db.updateSyncToken(userId, syncToken);
 }
 
-const ALLOWED_ORIGINS = new Set([
-  'https://paulsumido.com',
-  'https://develop.paulsumido.com',
-  'http://localhost:3000',
-]);
-
-export { ALLOWED_ORIGINS };
-
 const GOOGLE_COLOR_TO_HEX: Record<string, string> = {
   '7': '#3b82f6',
   '10': '#10b981',
@@ -102,8 +94,12 @@ export function signState(payload: string): string {
     .digest('hex');
 }
 
+/** Long enough to sign in to Google and consent, short enough that a leaked link goes stale. */
+const STATE_LIFETIME_MS = 10 * 60 * 1000;
+
 export function buildState(userId: string, origin: string): string {
-  const payload = Buffer.from(JSON.stringify({ userId, origin })).toString('base64url');
+  const state: OAuthState = { userId, origin, expiresAt: Date.now() + STATE_LIFETIME_MS };
+  const payload = Buffer.from(JSON.stringify(state)).toString('base64url');
   const sig = signState(payload);
   return `${payload}.${sig}`;
 }
@@ -121,11 +117,15 @@ export function verifyState(state: string | undefined): OAuthState | null {
   } catch {
     return null;
   }
+  let parsed: OAuthState;
   try {
-    return JSON.parse(Buffer.from(payload, 'base64url').toString()) as OAuthState;
+    parsed = JSON.parse(Buffer.from(payload, 'base64url').toString()) as OAuthState;
   } catch {
     return null;
   }
+  // A state signed before expiry existed has no expiresAt, and is refused too.
+  if (typeof parsed.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) return null;
+  return parsed;
 }
 
 export function fromGoogleEvent(item: GoogleCalendarItem): WebhookEventFields {

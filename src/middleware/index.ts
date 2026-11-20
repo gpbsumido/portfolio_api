@@ -6,10 +6,4 @@ export {
   createUserLimiter,
   nbaIpLimiter,
 } from './rateLimiter.js';
-export {
-  cacheMiddleware,
-  invalidateCacheByPrefix,
-  invalidateResponseCacheByTag,
-  clearResponseCache,
-} from './cache.js';
 export { requestLogger } from './requestLogger.js';

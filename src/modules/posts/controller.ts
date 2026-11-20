@@ -2,6 +2,7 @@
 // Posts module — Express controller
 // ---------------------------------------------------------------------------
 
+import { optionalUserSub, requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { VIDEO_UPLOAD_LIMITS } from '../../shared/upload/limits.js';
@@ -103,7 +104,7 @@ export class PostsController {
     }
     const validated = parseResult.data;
 
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     const { type } = validated;
 
     // ── text post ──────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ export class PostsController {
     // ── photo post ─────────────────────────────────────────────────────────
     if (type === 'photo') {
       const caption = validated.caption?.trim() || null;
-      const files = (req as any).files as Express.Multer.File[] | undefined;
+      const files = req.files as Express.Multer.File[] | undefined;
       if (!files || files.length === 0) {
         throw new ValidationError('At least one file is required for a media post');
       }
@@ -152,8 +153,7 @@ export class PostsController {
     const username = param(req.params.username);
     const cursor = req.query.cursor as string | undefined;
     const LIMIT = 20;
-    const viewerSub =
-      (req as any).auth?.payload?.sub ?? null;
+    const viewerSub = optionalUserSub(req);
 
     let cursorDate: string | null = null;
     if (cursor) {
@@ -232,7 +232,7 @@ export class PostsController {
   /** GET /api/posts/:id */
   async getById(req: Request, res: Response, next: NextFunction) {
     const id = param(req.params.id);
-    const viewerSub = (req as any).auth?.payload?.sub ?? null;
+    const viewerSub = optionalUserSub(req);
     try {
       const postRow = await repo.getPostById(id);
       if (!postRow) {
@@ -261,7 +261,7 @@ export class PostsController {
 
   /** DELETE /api/posts/:id */
   async deleteById(req: Request, res: Response, next: NextFunction) {
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     const id = param(req.params.id);
 
     try {

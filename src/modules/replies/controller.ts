@@ -2,6 +2,7 @@
 // Replies module — Express controller
 // ---------------------------------------------------------------------------
 
+import { optionalUserSub, requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as service from './service.js';
@@ -23,7 +24,7 @@ export class RepliesController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const content = (req.body as { content: string }).content;
       const reply = await service.createReply(userSub, postId, content);
       res.status(201).json(reply);
@@ -36,7 +37,7 @@ export class RepliesController {
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const postId = idSchema.parse(first(req.params.postId));
-      const viewerSub = (req as any).auth?.payload?.sub ?? null;
+      const viewerSub = optionalUserSub(req);
       // A thread is exactly as private as the post it hangs off. Without this
       // the replies route served content the post route would have refused.
       if (!(await canViewPost(postId, viewerSub))) {
