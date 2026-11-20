@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { F1Controller } from './controller.js';
 import { checkJwt } from '../../config/auth.js';
+import { requireAdmin } from '../../shared/auth/adminEmail.js';
 
 const router = Router();
 const ctrl = new F1Controller();
@@ -60,8 +61,9 @@ router.get('/constructor-points-per-race/:year/:round', (req, res, next) =>
   ctrl.getConstructorPointsPerRace(req, res, next),
 );
 
-// Cache management (auth required)
-router.delete('/cache', checkJwt, (req, res, next) => ctrl.clearCache(req, res, next));
+// Cache management. Admin only: wiping it forces every visitor onto cold
+// Python fetches, so "signed in" isn't enough.
+router.delete('/cache', checkJwt, requireAdmin, (req, res, next) => ctrl.clearCache(req, res, next));
 
 // Queue status
 router.get('/queue-status', (req, res) => ctrl.getQueueStatus(req, res));
