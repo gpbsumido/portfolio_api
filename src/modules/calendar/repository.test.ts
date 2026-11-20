@@ -89,7 +89,7 @@ describe('CalendarRepository card updates', () => {
     const { default: realKnex } = await vi.importActual<{ default: (config: Knex.Config) => Knex }>('knex');
     const compiler = realKnex({ client: 'pg' });
     const db = (knexFactory as unknown as () => { raw: Mock })();
-    db.raw.mockImplementationOnce(async (sql: string, bindings: readonly unknown[]) => {
+    db.raw.mockImplementationOnce(async (sql: string, bindings: readonly Knex.RawBinding[]) => {
       compiler.raw(sql, bindings).toSQL();
       return { rows: [cardRow] };
     });
