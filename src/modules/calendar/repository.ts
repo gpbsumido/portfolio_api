@@ -422,7 +422,8 @@ export class CalendarRepository {
       })
       .returning('*');
 
-    return toCalendar(row);
+    // A returned row has no role column. The caller just created it, so they own it.
+    return toCalendar({ ...row, role: 'owner' });
   }
 
   async updateCalendar(
@@ -457,7 +458,8 @@ export class CalendarRepository {
       .update(updates)
       .returning('*');
 
-    return row ? toCalendar(row) : null;
+    // The where clause is user_sub, so only the owner reaches this and gets a row back.
+    return row ? toCalendar({ ...row, role: 'owner' }) : null;
   }
 
   async deleteCalendar(

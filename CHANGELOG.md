@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-20 - version 6.4.3
+
+- **Creating or editing a calendar now answers with a `role`.** `POST /api/calendar/calendars` and `PUT /api/calendar/calendars/:id` returned the calendar straight from `.returning('*')`, and the `calendars` table has no role column, so the response had none. paul-explore validates every response body and requires one, so it threw after the write had committed: the person saw "Couldn't save" for a calendar that existed, and a retry made a duplicate. Both writes are filtered on `user_sub`, so only the owner can reach them, and they now answer `role: 'owner'`. The Google connect and disconnect writes go through the same update and get it too.
+- The OpenAPI document's `info.version` says 6.4.3.
+
 ## 2026-11-19 - version 6.4.2
 
 - **`GET /api/med-journal/` returns the signed-in user's id.** It read `req.auth.sub`, but the JWT middleware puts claims on `req.auth.payload`, so `userId` was always missing from the response. An `any` cast hid it from the compiler.
