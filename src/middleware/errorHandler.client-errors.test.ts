@@ -60,6 +60,16 @@ describe('errorHandler and client mistakes', () => {
     expect(res.status).toBe(409);
   });
 
+  test('a duplicate that Drizzle wrapped in DrizzleQueryError is still a 409', async () => {
+    const wrapped = Object.assign(new Error('Failed query: insert into ...\nparams: ...'), {
+      cause: postgresError('23505'),
+    });
+
+    const res = await request(appThrowing(wrapped)).get('/throws');
+
+    expect(res.status).toBe(409);
+  });
+
   test('the Postgres message never reaches the client', async () => {
     const res = await request(appThrowing(postgresError('23505'))).get('/throws');
 
