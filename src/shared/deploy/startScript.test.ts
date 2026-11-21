@@ -18,10 +18,13 @@ let sandbox: string;
 
 function run(env: Record<string, string> = {}) {
   const log = path.join(sandbox, 'calls.log');
+  // Each test decides whether there is a database. CI's test job has a real
+  // DATABASE_URL, and inheriting it made "no DATABASE_URL" impossible to test.
+  const { DATABASE_URL: _inheritedDatabaseUrl, ...inheritedEnv } = process.env;
   const result = spawnSync('bash', [script], {
     cwd: repoRoot,
     env: {
-      ...process.env,
+      ...inheritedEnv,
       PATH: `${path.join(sandbox, 'bin')}:${process.env.PATH}`,
       CMD_LOG: log,
       ...env,

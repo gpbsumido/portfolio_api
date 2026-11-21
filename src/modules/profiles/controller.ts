@@ -2,6 +2,7 @@
 // Profiles module — Express controller
 // ---------------------------------------------------------------------------
 
+import { optionalUserSub, requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { createModuleLogger } from '../../shared/utils/logger.js';
@@ -113,10 +114,10 @@ export class ProfilesController {
       });
     });
 
-    const file = (req as any).file as Express.Multer.File | undefined;
+    const file = req.file;
     if (!file) throw new ValidationError('No file provided');
 
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
 
     const detected = await fileTypeFromBuffer(file.buffer).catch(() => null);
     if (!detected || !ALLOWED_MIME.has(detected.mime)) {
@@ -162,7 +163,7 @@ export class ProfilesController {
 
   /** GET /api/profiles/me */
   async getMe(req: Request, res: Response, next: NextFunction) {
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     try {
       const profile = await repo.getOwnProfile(sub);
       if (!profile)
@@ -184,7 +185,7 @@ export class ProfilesController {
       throw new ValidationError('Validation failed', details);
     }
 
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     const { display_name, bio, avatar_url, is_public } = parseResult.data;
 
     try {
@@ -223,7 +224,7 @@ export class ProfilesController {
       throw new ValidationError('Validation failed', details);
     }
 
-    const sub = (req as any).auth.payload.sub as string;
+    const sub = requireUserSub(req);
     const { username, display_name, bio, avatar_url } = parseResult.data;
 
     try {
@@ -272,8 +273,7 @@ export class ProfilesController {
       throw new ValidationError('Invalid username format');
     }
 
-    const viewerSub =
-      (req as any).auth?.payload?.sub ?? null;
+    const viewerSub = optionalUserSub(req);
 
     try {
       const profile = await repo.getPublicProfile(username, viewerSub);

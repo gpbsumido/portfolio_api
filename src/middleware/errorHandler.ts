@@ -39,6 +39,42 @@ function body(
   return payload;
 }
 
+/**
+ * SQLSTATE codes that mean the request was wrong rather than the server. The
+ * message is ours on purpose: Postgres's own text names tables and constraints.
+ */
+const POSTGRES_CLIENT_ERRORS = new Map([
+  [
+    '22P02',
+    {
+      status: 400,
+      code: 'ValidationError',
+      message: 'One of the ids or values in that request is not in a valid format.',
+    },
+  ],
+  [
+    '23503',
+    {
+      status: 400,
+      code: 'ValidationError',
+      message: 'That refers to something that does not exist.',
+    },
+  ],
+  ['23505', { status: 409, code: 'ConflictError', message: 'That already exists.' }],
+]);
+
+/** Reads a string property off something thrown, without trusting its shape. */
+function stringField(thrown: unknown, key: string): string | undefined {
+  if (typeof thrown !== 'object' || thrown === null) return undefined;
+  const field: unknown = Reflect.get(thrown, key);
+  return typeof field === 'string' ? field : undefined;
+}
+
+/** The error this one wraps, if it wraps one. */
+function causeOf(thrown: unknown): unknown {
+  return thrown instanceof Error ? thrown.cause : undefined;
+}
+
 export function errorHandler(
   err: unknown,
   _req: Request,
@@ -88,6 +124,35 @@ export function errorHandler(
           status,
         ),
       );
+    return;
+  }
+
+  // Body-parser tags bad JSON and oversized bodies with a `type`. Both are the
+  // caller's mistake and used to fall through to the 500 below.
+  const bodyParserType = stringField(err, 'type');
+  if (bodyParserType === 'entity.too.large') {
+    res
+      .status(413)
+      .json(body('That request is too large.', 'PayloadTooLarge', 413));
+    return;
+  }
+  if (bodyParserType === 'entity.parse.failed') {
+    res
+      .status(400)
+      .json(body('That request body is not valid JSON.', 'BadRequest', 400));
+    return;
+  }
+
+  // Postgres rejecting what the caller sent. pg and Knex throw the driver error
+  // as is; Drizzle wraps it in DrizzleQueryError and keeps it on `cause`.
+  const postgresError =
+    POSTGRES_CLIENT_ERRORS.get(stringField(err, 'code') ?? '') ??
+    POSTGRES_CLIENT_ERRORS.get(stringField(causeOf(err), 'code') ?? '');
+  if (postgresError) {
+    log.warn({ err }, 'postgres rejected the request');
+    res
+      .status(postgresError.status)
+      .json(body(postgresError.message, postgresError.code, postgresError.status));
     return;
   }
 

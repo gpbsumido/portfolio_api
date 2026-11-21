@@ -1,3 +1,4 @@
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { NbaService } from './service.js';
 import { ValidationError, UnauthorizedError } from '../../shared/errors/index.js';
@@ -70,7 +71,7 @@ export class NbaController {
   async getPicks(req: Request, res: Response, next: NextFunction) {
     try {
       const season = parseSeason(req.params.season);
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       const picks = await service.getPicks(userSub, season);
       res.json({ picks });
     } catch (err) {
@@ -100,7 +101,7 @@ export class NbaController {
       if (!isPlainObject(picks)) {
         throw new ValidationError('picks must be a plain object');
       }
-      const userSub = (req as any).auth.payload.sub as string;
+      const userSub = requireUserSub(req);
       await service.savePicks(userSub, season, picks, displayName);
       res.json({ ok: true });
     } catch (err) {

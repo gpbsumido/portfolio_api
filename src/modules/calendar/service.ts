@@ -31,10 +31,9 @@ import type {
   User,
 } from './types.js';
 
-// Google Calendar utils are not yet migrated to TypeScript.
-// Typed stubs are declared below so service methods can call them;
-// the actual implementations will be imported once that migration lands.
-// For now callers pass these in or the controller wires them up.
+// The Google helpers are still CommonJS, so their shapes are declared here.
+// The controller hands the real ones in from ./google.ts. The service used to
+// default this to null, which turned two-way sync off without anyone noticing.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type CreateGoogleEventFn = (userSub: string, event: CalendarEvent, calendarId: string) => Promise<string>;
@@ -63,11 +62,7 @@ export interface GoogleCalendarUtils {
 const repo = new CalendarRepository();
 
 export class CalendarService {
-  private google: GoogleCalendarUtils | null;
-
-  constructor(googleUtils: GoogleCalendarUtils | null = null) {
-    this.google = googleUtils;
-  }
+  constructor(private readonly google: GoogleCalendarUtils) {}
 
   // -----------------------------------------------------------------------
   // Calendar Events
@@ -100,7 +95,7 @@ export class CalendarService {
     const event = await repo.createCalendarEvent(input, userSub);
 
     // Push to Google after the DB write (non-fatal)
-    if (this.google && event.calendarId) {
+    if (event.calendarId) {
       try {
         const calendar = await repo.getCalendarForMutation(
           event.calendarId,
@@ -148,7 +143,7 @@ export class CalendarService {
     if (!event) throw new NotFoundError('Event not found');
 
     // Sync the change to Google (non-fatal)
-    if (this.google && event.calendarId) {
+    if (event.calendarId) {
       try {
         const calendar = await repo.getCalendarForMutation(
           event.calendarId,
@@ -188,7 +183,7 @@ export class CalendarService {
     await repo.deleteCalendarEvent(id, userSub);
 
     // Clean up Google after the DB row is gone (non-fatal)
-    if (this.google && existing.calendarId) {
+    if (existing.calendarId) {
       try {
         const calendar = await repo.getCalendarForMutation(
           existing.calendarId,
@@ -264,14 +259,13 @@ export class CalendarService {
 
     // remove all member ACL entries from Google before deleting
     if (
-      this.google &&
       calendar.syncMode === 'two_way' &&
       calendar.googleCalId
     ) {
       const members = await repo.getCalendarMembers(id);
       await Promise.allSettled(
         members.map((m) =>
-          this.google!.removeCalendarAclEntry(
+          this.google.removeCalendarAclEntry(
             userSub,
             calendar.googleCalId!,
             m.email!,
@@ -281,7 +275,7 @@ export class CalendarService {
     }
 
     // stop the watch channel before deleting
-    if (this.google && calendar.googleCalId) {
+    if (calendar.googleCalId) {
       try {
         await this.google.stopWatchByCalId(userSub, calendar.googleCalId);
       } catch (watchErr) {
@@ -296,10 +290,6 @@ export class CalendarService {
     id: string,
     userSub: string,
   ): Promise<Calendar> {
-    if (!this.google) {
-      throw new Error('Google Calendar utils not configured');
-    }
-
     const calendar = await repo.getCalendarForMutation(id, userSub, 'owner');
     if (!calendar) throw new ForbiddenError('Not authorized');
 
@@ -335,7 +325,7 @@ export class CalendarService {
     const calendar = await repo.getCalendarForMutation(id, userSub, 'owner');
     if (!calendar) throw new ForbiddenError('Not authorized');
 
-    if (this.google && calendar.googleCalId) {
+    if (calendar.googleCalId) {
       try {
         await this.google.stopWatchByCalId(userSub, calendar.googleCalId);
       } catch (watchErr) {
@@ -417,7 +407,6 @@ export class CalendarService {
 
     // fire-and-forget Google ACL
     if (
-      this.google &&
       cal.syncMode === 'two_way' &&
       cal.googleCalId
     ) {
@@ -475,7 +464,6 @@ export class CalendarService {
       try {
         const calInfo = await repo.getCalendarOwnerInfo(calendarId);
         if (
-          this.google &&
           calInfo?.syncMode === 'two_way' &&
           calInfo.googleCalId
         ) {
@@ -509,7 +497,6 @@ export class CalendarService {
     try {
       const memberUser = await repo.getUserBySub(memberSub);
       if (
-        this.google &&
         cal.syncMode === 'two_way' &&
         cal.googleCalId &&
         memberUser?.email

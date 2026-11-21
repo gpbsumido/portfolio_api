@@ -295,14 +295,21 @@ export type PlaceBetResult =
   | { ok: false; availableCents: number };
 
 /**
- * Debit the stake and record the bet in one transaction. The available-balance
- * floor is checked here, against the live derived balance, so two concurrent
- * bets can't both spend the same cents. Returns ok:false (with the balance) when
- * the wallet can't cover it, so the caller answers 402 rather than record a bet
- * nobody paid for.
+ * Debit the stake and record the bet in one transaction. The wallet row is
+ * locked first, so a second bet on the same wallet waits until this one commits
+ * and then reads a balance that includes it. Without the lock both read the same
+ * balance and both pass. Returns ok:false (with the balance) when the wallet
+ * can't cover it, so the caller answers 402 rather than record a bet nobody paid
+ * for.
  */
 export async function placeBet(input: PlaceBetInput): Promise<PlaceBetResult> {
   return db.transaction(async (tx) => {
+    await tx
+      .select({ id: zeroproofWallets.id })
+      .from(zeroproofWallets)
+      .where(eq(zeroproofWallets.id, input.walletId))
+      .for('update');
+
     const entries = await tx
       .select({ account: zeroproofLedgerEntries.account, amountCents: zeroproofLedgerEntries.amountCents })
       .from(zeroproofLedgerEntries)
@@ -533,12 +540,13 @@ interface SettleBetInput {
 /**
  * Settle one bet: stamp its grade, closing line and CLV, and write the payout
  * ledger — all in one transaction, so a bet is never marked graded without its
- * money moving.
+ * money moving. Only an open bet is settled, so a second run (an overlapping
+ * cron, a retry) finds nothing to update and pays nothing.
  */
 export async function settleBet(input: SettleBetInput): Promise<void> {
   const { bet, grade, closingOdds, clv } = input;
   await db.transaction(async (tx) => {
-    await tx
+    const settled = await tx
       .update(zeroproofBets)
       .set({
         status: grade,
@@ -546,7 +554,9 @@ export async function settleBet(input: SettleBetInput): Promise<void> {
         closingOddsAmerican: closingOdds,
         clv: clv != null ? String(clv) : null,
       })
-      .where(eq(zeroproofBets.id, bet.id));
+      .where(and(eq(zeroproofBets.id, bet.id), eq(zeroproofBets.status, 'open')))
+      .returning({ id: zeroproofBets.id });
+    if (settled.length === 0) return;
 
     await tx.insert(zeroproofLedgerEntries).values(
       settlementLines(grade, bet.stakeCents, bet.oddsAmerican).map((line) => ({
@@ -593,9 +603,20 @@ export async function getMaturedWallets(
     );
 }
 
-/** Refund the principal and close the wallet — the ledger pair and the status flip share one transaction. */
+/**
+ * Refund the principal and close the wallet — the ledger pair and the status
+ * flip share one transaction. The flip goes first and only matches a wallet
+ * that hasn't been refunded, so a second run writes no second refund.
+ */
 export async function refundWallet(walletId: string, principalCents: number): Promise<void> {
   await db.transaction(async (tx) => {
+    const closed = await tx
+      .update(zeroproofWallets)
+      .set({ status: 'refunded' })
+      .where(and(eq(zeroproofWallets.id, walletId), inArray(zeroproofWallets.status, ['active', 'busted'])))
+      .returning({ id: zeroproofWallets.id });
+    if (closed.length === 0) return;
+
     await tx.insert(zeroproofLedgerEntries).values(
       refundPrincipalLines(principalCents).map((line) => ({
         walletId,
@@ -604,7 +625,6 @@ export async function refundWallet(walletId: string, principalCents: number): Pr
         amountCents: line.amountCents,
       })),
     );
-    await tx.update(zeroproofWallets).set({ status: 'refunded' }).where(eq(zeroproofWallets.id, walletId));
   });
 }
 

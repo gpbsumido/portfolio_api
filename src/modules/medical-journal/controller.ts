@@ -1,3 +1,4 @@
+import { requireUserSub } from '../../shared/auth/requestUser.js';
 import type { Request, Response, NextFunction } from 'express';
 import { MedJournalRepository } from './repository.js';
 import { createModuleLogger } from '../../shared/utils/logger.js';
@@ -15,7 +16,7 @@ const repo = new MedJournalRepository();
 export class MedJournalController {
   async saveEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     const entry = req.body;
-    const userSub = (req as any).auth.payload.sub as string;
+    const userSub = requireUserSub(req);
 
     try {
       if (entry.feedbackText) {
@@ -31,7 +32,7 @@ export class MedJournalController {
 
   async deleteEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     const id = param(req.params.id);
-    const userSub = (req as any).auth.payload.sub as string;
+    const userSub = requireUserSub(req);
 
     try {
       await repo.delete(id, userSub);
@@ -44,7 +45,7 @@ export class MedJournalController {
 
   async getEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     const id = param(req.params.id);
-    const userSub = (req as any).auth.payload.sub as string;
+    const userSub = requireUserSub(req);
 
     try {
       const entry = await repo.findById(id, userSub);
@@ -59,7 +60,7 @@ export class MedJournalController {
 
   async listEntries(req: Request, res: Response, next: NextFunction): Promise<void> {
     const { page = '1', limit = '10', searchTerm, rotation } = req.query as Record<string, string>;
-    const userSub = (req as any).auth.payload.sub as string;
+    const userSub = requireUserSub(req);
 
     try {
       const entries = await repo.findWithPagination(
@@ -78,7 +79,7 @@ export class MedJournalController {
 
   async index(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as any).auth.sub as string;
+      const userId = requireUserSub(req);
       res.json({
         message: 'Authenticated successfully!',
         userId,

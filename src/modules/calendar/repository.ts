@@ -4,7 +4,7 @@
 
 import knex, { type Knex } from 'knex';
 import { v4 as uuidv4 } from 'uuid';
-import { env } from '../../config/env.js';
+import { connectionString, ssl } from '../../../config/pool.js';
 import type {
   CalendarEvent,
   CalendarEventRow,
@@ -32,20 +32,15 @@ import type {
 } from './types.js';
 
 // ---------------------------------------------------------------------------
-// Knex instance — uses the same DATABASE_URL as the pg Pool
+// Knex instance. It can't share the pg Pool object, so it takes the pool's
+// connection string and TLS settings instead: one place decides how we talk to
+// Postgres. min 0 so it holds nothing open until calendar is actually used.
 // ---------------------------------------------------------------------------
-
-const connectionString =
-  env.DATABASE_URL ||
-  `postgresql://${env.DB_USER}:${env.DB_PASSWORD}@${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`;
 
 export const db: Knex = knex({
   client: 'pg',
-  connection: {
-    connectionString,
-    ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  },
-  pool: { min: 2, max: 10 },
+  connection: { connectionString, ssl },
+  pool: { min: 0, max: 5 },
 });
 
 // ---------------------------------------------------------------------------
@@ -427,7 +422,8 @@ export class CalendarRepository {
       })
       .returning('*');
 
-    return toCalendar(row);
+    // A returned row has no role column. The caller just created it, so they own it.
+    return toCalendar({ ...row, role: 'owner' });
   }
 
   async updateCalendar(
@@ -462,7 +458,8 @@ export class CalendarRepository {
       .update(updates)
       .returning('*');
 
-    return row ? toCalendar(row) : null;
+    // The where clause is user_sub, so only the owner reaches this and gets a row back.
+    return row ? toCalendar({ ...row, role: 'owner' }) : null;
   }
 
   async deleteCalendar(
@@ -641,14 +638,14 @@ export class CalendarRepository {
 
     const rows = await db.raw<{ rows: EventCardRow[] }>(
       `UPDATE event_cards ec
-       SET ${Object.entries(updates)
-         .map(([col], i) => `${col} = $${i + 1}`)
+       SET ${Object.keys(updates)
+         .map((col) => `${col} = ?`)
          .join(', ')}
        FROM calendar_events ce
-       WHERE ec.id = $${Object.keys(updates).length + 1}
-         AND ec.event_id = $${Object.keys(updates).length + 2}
+       WHERE ec.id = ?
+         AND ec.event_id = ?
          AND ec.event_id = ce.id
-         AND ce.user_sub = $${Object.keys(updates).length + 3}
+         AND ce.user_sub = ?
        RETURNING ec.*`,
       [...Object.values(updates), entryId, eventId, userSub] as readonly string[],
     );
