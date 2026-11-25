@@ -31,4 +31,13 @@ describe('simulateFieldOps', () => {
       expect(tracks.map((track) => track.id)).toContain(alert.trackId);
     }
   });
+
+  it('keeps every heading within 0 to 360 degrees however late the clock is', () => {
+    for (const nowMs of [1_000_000, 1_795_583_641_480]) {
+      for (const track of simulateFieldOps(nowMs).tracks) {
+        expect(track.headingDegrees).toBeGreaterThanOrEqual(0);
+        expect(track.headingDegrees).toBeLessThan(360);
+      }
+    }
+  });
 });

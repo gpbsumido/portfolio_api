@@ -49,7 +49,8 @@ describe('GET /api/field-ops/stream', () => {
 
   test('sends a reconnect hint and an update straight away, so the console never starts blank', async () => {
     const { response, stop } = await openStream();
-    const { value } = await response.body!.getReader().read();
+    if (!response.body) throw new Error('stream has no body');
+    const { value } = await response.body.getReader().read();
     const firstChunk = new TextDecoder().decode(value);
     expect(firstChunk).toContain('retry:');
     expect(firstChunk).toContain('event: update');

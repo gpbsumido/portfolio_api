@@ -80,7 +80,7 @@ function trackAt(plan: TrackPlan, reportedAtMs: number, lastReportedAtMs: number
     eastMeters: plan.centerEastMeters + plan.radiusMeters * Math.cos(angleRadians),
     northMeters: plan.centerNorthMeters + plan.radiusMeters * Math.sin(angleRadians),
     altitudeMeters: plan.altitudeMeters,
-    headingDegrees: (90 - (headingRadians * 180) / Math.PI + 720) % 360,
+    headingDegrees: ((((90 - (headingRadians * 180) / Math.PI) % 360) + 360) % 360),
     speedMetersPerSecond,
     lastReportedAtMs,
   };
