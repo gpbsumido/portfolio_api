@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 - version 6.6.0
+
+- **Field ops also goes out over a WebSocket, with replay.** `/api/field-ops/socket` sends `{ sequence, snapshot }` once a second (`?rate=low` for one every 5s), where the sequence is the whole second of the clock. A client that reconnects with `?since=<last sequence>` is sent the seconds it missed first, at most 60. The simulation is a pure function of the clock, so replay just computes those frames again and there's nothing to buffer or store.
+- The handshake is refused with a 403 unless the `Origin` is on the same allowlist CORS uses. On SIGTERM the sockets close with 1001 so clients reconnect to the next instance instead of holding the drain open for 30s. The SSE stream stays until the console has moved over.
+
 ## 2026-11-25 - version 6.5.0
 
 - **New public `/api/field-ops` module, the backend for paul-explore's simulated field console.** `GET /snapshot` returns six fake tracks and the latest alerts as JSON, and `GET /stream` sends the same picture as server-sent events, one a second, or one every 5s with `?rate=low` for a thin link. All of it is made up.
