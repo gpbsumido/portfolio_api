@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-25 - version 6.6.0
+
+- **Field ops also goes out over a WebSocket, with replay.** `/api/field-ops/socket` sends `{ sequence, snapshot }` once a second (`?rate=low` for one every 5s), where the sequence is the whole second of the clock. A client that reconnects with `?since=<last sequence>` is sent the seconds it missed first, at most 60. The simulation is a pure function of the clock, so replay just computes those frames again and there's nothing to buffer or store.
+- The handshake is refused with a 403 unless the `Origin` is on the same allowlist CORS uses. On SIGTERM the sockets close with 1001 so clients reconnect to the next instance instead of holding the drain open for 30s. The SSE stream stays until the console has moved over.
+
+## 2026-11-25 - version 6.5.0
+
+- **New public `/api/field-ops` module, the backend for paul-explore's simulated field console.** `GET /snapshot` returns six fake tracks and the latest alerts as JSON, and `GET /stream` sends the same picture as server-sent events, one a second, or one every 5s with `?rate=low` for a thin link. All of it is made up.
+- The simulation is a pure function of the clock, so every instance gives the same answer and there's no table, no state and no migration. One track goes quiet for 20s of every minute on purpose, so the console has stale data to handle. The stream closes itself at 55s and sends a `retry:` hint, which lets EventSource reconnect without any code on the client. It sets `Cache-Control: no-transform` so the compression middleware doesn't buffer it.
+
 ## 2026-11-20 - version 6.4.4
 
 - **Editing a card on a calendar event works.** `PUT /api/calendar/events/:id/cards/:entryId` built its update with `db.raw` and `$1..$n` placeholders, and knex only binds `?`, so every quantity or note edit threw "Expected 5 bindings, saw 0" and answered 500. It uses `?` now, the same as the card delete next to it. The repository tests mock knex and took any SQL, so the new test compiles the statement with the real knex.

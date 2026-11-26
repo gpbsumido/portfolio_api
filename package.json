@@ -1,6 +1,6 @@
 {
   "name": "portfolio_api",
-  "version": "6.4.4",
+  "version": "6.6.0",
   "description": "Portfolio API with Node.js and Python",
   "main": "dist/index.js",
   "scripts": {
@@ -54,6 +54,7 @@
     "sharp": "^0.35.3",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^9.0.0",
+    "ws": "^8.23.0",
     "xml2js": "^0.6.2",
     "zod": "^3.25.76"
   },
@@ -70,6 +71,7 @@
     "@types/supertest": "^7.2.1",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.2",
     "@types/xml2js": "^0.4.14",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
